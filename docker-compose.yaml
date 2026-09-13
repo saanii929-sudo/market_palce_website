@@ -34,10 +34,13 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-sporttech}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sporttech}
       REDIS_URL: redis://redis:6379/0
-    ports:
-      # Coolify auto-detects/proxies this; keep it if you also want to run
-      # `docker compose up` standalone and hit the app directly on :8000.
-      - "8000:8000"
+    expose:
+      # Container-only - no host port bind, so this can't collide with
+      # Coolify's own proxy or another app already using :8000 on the host.
+      # Coolify's Traefik proxy reaches this over the internal docker network
+      # and handles the public domain/SSL side separately (set that up in
+      # the Coolify UI for this service).
+      - "8000"
     volumes:
       - media_data:/app/media
     depends_on:
