@@ -1,0 +1,49 @@
+{% comment %}
+Bottom tab bar shown only below the md breakpoint, mirroring the native-app
+navigation pattern (Home/Categories/Cart/Wishlist/Profile). Included from
+_site_footer.html and account_base.html so it reaches every customer-facing
+page without touching each template individually.
+{% endcomment %}
+{% include "web/_icons.html" %}
+<nav class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200 flex" style="padding-bottom: env(safe-area-inset-bottom)">
+  {% with active=request.resolver_match.url_name %}
+  <a href="{% url 'web-home' %}" class="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 relative {% if active == 'web-home' %}text-brand{% else %}text-gray-400{% endif %}">
+    {% if active == 'web-home' %}<span class="absolute top-1 w-1 h-1 rounded-full bg-brand"></span>{% endif %}
+    <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-home"/></svg>
+    <span class="text-[10px] font-bold">Home</span>
+  </a>
+  <a href="{% url 'web-category-list' %}" class="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 relative {% if active == 'web-category-list' or active == 'web-category-detail' %}text-brand{% else %}text-gray-400{% endif %}">
+    {% if active == 'web-category-list' or active == 'web-category-detail' %}<span class="absolute top-1 w-1 h-1 rounded-full bg-brand"></span>{% endif %}
+    <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-grid"/></svg>
+    <span class="text-[10px] font-bold">Categories</span>
+  </a>
+  <a href="{% url 'web-cart' %}" class="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 relative {% if active == 'web-cart' %}text-brand{% else %}text-gray-400{% endif %}">
+    {% if active == 'web-cart' %}<span class="absolute top-1 w-1 h-1 rounded-full bg-brand"></span>{% endif %}
+    <span class="relative">
+      <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-bag"/></svg>
+      {% if cart_count %}<span class="absolute -top-1.5 -right-2 bg-brand text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{{ cart_count }}</span>{% endif %}
+    </span>
+    <span class="text-[10px] font-bold">Cart</span>
+  </a>
+  <a href="{% url 'web-wishlist' %}" class="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 relative {% if active == 'web-wishlist' %}text-brand{% else %}text-gray-400{% endif %}">
+    {% if active == 'web-wishlist' %}<span class="absolute top-1 w-1 h-1 rounded-full bg-brand"></span>{% endif %}
+    <span class="relative">
+      <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-heart"/></svg>
+      {% if wishlist_count %}<span class="absolute -top-1.5 -right-2 bg-brand text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{{ wishlist_count }}</span>{% endif %}
+    </span>
+    <span class="text-[10px] font-bold">Wishlist</span>
+  </a>
+  {% if request.user.is_authenticated %}
+    <a href="{% url 'web-account-overview' %}" class="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 relative {% if active|slice:':12' == 'web-account-' or active == 'web-account-overview' %}text-brand{% else %}text-gray-400{% endif %}">
+      {% if active|slice:':12' == 'web-account-' %}<span class="absolute top-1 w-1 h-1 rounded-full bg-brand"></span>{% endif %}
+      <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-user"/></svg>
+      <span class="text-[10px] font-bold">Profile</span>
+    </a>
+  {% else %}
+    <a href="{% url 'web-login' %}" class="flex-1 flex flex-col items-center justify-center gap-1 py-2.5 {% if active == 'web-login' %}text-brand{% else %}text-gray-400{% endif %}">
+      <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-user"/></svg>
+      <span class="text-[10px] font-bold">Profile</span>
+    </a>
+  {% endif %}
+  {% endwith %}
+</nav>

@@ -1,0 +1,77 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Seller applications{% endblock %}
+{% block console_subtitle %}Review and approve new sellers{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-seller-applications-export' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Export report</a>
+{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="p-5 flex items-center gap-2 flex-wrap border-b border-gray-100">
+    <a href="?status=pending" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'pending' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Pending</a>
+    <a href="?status=approved" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'approved' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Approved</a>
+    <a href="?status=rejected" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'rejected' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Rejected</a>
+    <a href="?status=all" class="text-xs font-bold px-4 py-2 rounded-full ml-auto {% if active_tab == 'all' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">All</a>
+  </div>
+
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Business</th>
+          <th class="px-5 py-3">Category</th>
+          <th class="px-5 py-3">Phone</th>
+          <th class="px-5 py-3">Documents</th>
+          <th class="px-5 py-3">Submitted</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for application in applications %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ application.business_name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ application.category.name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ application.phone }}</td>
+            <td class="px-5 py-4">
+              <div class="flex flex-col gap-1 text-xs">
+                {% if application.id_document %}<a href="{{ application.id_document.url }}" target="_blank" class="text-brand font-bold hover:underline">View ID</a>{% endif %}
+                {% if application.business_certificate %}<a href="{{ application.business_certificate.url }}" target="_blank" class="text-brand font-bold hover:underline">View certificate</a>{% endif %}
+                {% if not application.id_document and not application.business_certificate %}<span class="text-gray-400">None</span>{% endif %}
+              </div>
+            </td>
+            <td class="px-5 py-4 text-gray-500">{{ application.submitted_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4">
+              {% if application.status == 'pending' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Pending</span>
+              {% elif application.status == 'approved' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Approved</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Rejected</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4">
+              {% if application.status == 'pending' %}
+                <div class="flex gap-2 justify-end">
+                  <form method="post" action="{% url 'web-console-seller-application-approve' application.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-lg border border-green-200 text-green-700 font-bold text-xs px-4 py-2 hover:bg-green-50 transition-colors">Approve</button>
+                  </form>
+                  <form method="post" action="{% url 'web-console-seller-application-reject' application.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Reject</button>
+                  </form>
+                </div>
+              {% elif application.reviewer_note %}
+                <span class="text-xs text-gray-400">{{ application.reviewer_note|truncatechars:40 }}</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="px-5 py-10 text-center text-gray-400">No applications in this view.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

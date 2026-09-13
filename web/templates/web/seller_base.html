@@ -1,0 +1,198 @@
+{% extends "web/base.html" %}
+{% load web_extras %}
+{% block content %}
+{% include "web/_icons.html" %}
+<div class="min-h-screen flex flex-col lg:flex-row">
+
+  <!-- Mobile top bar -->
+  <div class="lg:hidden print:hidden flex items-center justify-between px-4 py-4 bg-ink text-white">
+    <a href="{% url 'web-seller-overview' %}" class="flex items-center gap-2.5">
+      <span class="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0">
+        <span class="block w-4 h-1 rounded-full bg-brand"></span>
+      </span>
+      <span class="display text-base truncate">{{ seller.business_name|default:"Seller"|truncatechars:16 }}</span>
+    </a>
+    <button type="button" id="sidebar-open-btn" aria-label="Open menu" class="w-9 h-9 rounded-lg border border-white/20 flex items-center justify-center shrink-0">
+      <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-menu"/></svg>
+    </button>
+  </div>
+
+  <!-- Backdrop -->
+  <div id="sidebar-backdrop" class="hidden lg:hidden fixed inset-0 bg-black/50 z-40"></div>
+
+  <!-- Seller sidebar -->
+  <aside id="dashboard-sidebar" class="print:hidden bg-ink text-white w-72 lg:w-64 shrink-0 flex flex-col justify-between px-6 py-8
+              fixed inset-y-0 left-0 z-50 -translate-x-full transition-transform duration-300 ease-in-out overflow-y-auto
+              lg:static lg:translate-x-0 lg:min-h-screen">
+    <div>
+      <div class="flex items-center justify-between">
+        <a href="{% url 'web-seller-overview' %}" class="flex items-center gap-2.5 min-w-0">
+          <span class="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0">
+            <span class="block w-4 h-1 rounded-full bg-brand"></span>
+          </span>
+          <span class="display text-lg leading-none truncate">{{ seller.business_name|default:"Seller"|truncatechars:12 }}<br><span class="text-brand text-sm">Seller</span></span>
+        </a>
+        <button type="button" id="sidebar-close-btn" aria-label="Close menu" class="lg:hidden w-8 h-8 rounded-lg border border-white/20 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-x"/></svg>
+        </button>
+      </div>
+
+      <div class="h-px bg-white/10 my-6"></div>
+
+      <div class="lg:max-h-[calc(100vh-11rem)] lg:overflow-y-auto no-scrollbar pr-1">
+      {% with active=active_nav %}
+      <p class="text-xs font-bold tracking-widest text-white/40 uppercase mb-3">Store</p>
+      <nav class="space-y-1 text-sm font-semibold">
+        <a href="{% url 'web-seller-overview' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'overview' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-home"/></svg>Overview
+        </a>
+        <a href="{% url 'web-seller-products' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'products' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-grid"/></svg>Products</span>
+          {% if products_count %}<span class="text-xs font-bold bg-white/15 rounded-full w-5 h-5 flex items-center justify-center {% if active == 'products' %}bg-white/25{% endif %}">{{ products_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'web-seller-orders' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'orders' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-bag"/></svg>Orders</span>
+          {% if orders_count %}<span class="text-xs font-bold bg-white/15 rounded-full w-5 h-5 flex items-center justify-center {% if active == 'orders' %}bg-white/25{% endif %}">{{ orders_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'web-seller-order-returns' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'order-returns' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-arrow-left"/></svg>Return requests
+        </a>
+        <a href="{% url 'web-seller-payouts' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'payouts' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-card"/></svg>Payouts
+        </a>
+        <a href="{% url 'web-seller-settings' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'settings' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-settings"/></svg>Store settings
+        </a>
+      </nav>
+
+      <p class="text-xs font-bold tracking-widest text-white/40 uppercase mb-3 mt-6">Point of sale</p>
+      <nav class="space-y-1 text-sm font-semibold">
+        <a href="{% url 'web-pos-terminal' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'pos' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-barcode"/></svg>POS terminal
+        </a>
+        <a href="{% url 'web-pos-sales' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'pos-sales' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-bag"/></svg>Sales history
+        </a>
+        <a href="{% url 'web-seller-returns' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'pos-returns' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-arrow-left"/></svg>Returns
+        </a>
+        <a href="{% url 'web-seller-discounts' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'discounts' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-check"/></svg>Discounts
+        </a>
+        <a href="{% url 'web-seller-invoices' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'invoices' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-download"/></svg>Invoices
+        </a>
+      </nav>
+
+      <p class="text-xs font-bold tracking-widest text-white/40 uppercase mb-3 mt-6">Inventory</p>
+      <nav class="space-y-1 text-sm font-semibold">
+        <a href="{% url 'web-seller-inventory' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'inventory' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-grid"/></svg>Stock &amp; expiry
+        </a>
+        <a href="{% url 'web-seller-purchase-orders' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'purchase-orders' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-download"/></svg>Purchase orders
+        </a>
+        <a href="{% url 'web-seller-suppliers' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'suppliers' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-users"/></svg>Suppliers
+        </a>
+      </nav>
+
+      <p class="text-xs font-bold tracking-widest text-white/40 uppercase mb-3 mt-6">People</p>
+      <nav class="space-y-1 text-sm font-semibold">
+        <a href="{% url 'web-seller-employees' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'employees' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-users"/></svg>Employees
+        </a>
+        <a href="{% url 'web-seller-payroll' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'payroll' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-card"/></svg>Payroll
+        </a>
+        <a href="{% url 'web-seller-customers' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'customers' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-user"/></svg>Customers
+        </a>
+        <a href="{% url 'web-seller-expenses' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'expenses' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-x"/></svg>Expenses
+        </a>
+      </nav>
+
+      <p class="text-xs font-bold tracking-widest text-white/40 uppercase mb-3 mt-6">Reports</p>
+      <nav class="space-y-1 text-sm font-semibold">
+        <a href="{% url 'web-seller-reports' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'reports' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-chart"/></svg>Reports &amp; P&amp;L
+        </a>
+        <a href="{% url 'web-pos-reports' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'pos-reports' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-barcode"/></svg>Sales reports
+        </a>
+      </nav>
+      {% endwith %}
+      </div>
+    </div>
+
+    <div class="pt-6 mt-6 border-t border-white/10">
+      <div class="flex items-center gap-3">
+        {% if seller.resolved_logo_url %}
+          <span class="w-9 h-9 rounded-full overflow-hidden shrink-0">
+            <img src="{{ seller.resolved_logo_url }}" alt="{{ seller.business_name }}" class="w-full h-full object-cover">
+          </span>
+        {% else %}
+          <span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center shrink-0 font-bold text-sm">
+            {{ seller.business_name|initial }}
+          </span>
+        {% endif %}
+        <div class="text-sm min-w-0">
+          <p class="font-bold truncate">{{ seller.business_name }}</p>
+          {% if seller.is_verified %}
+            <p class="text-white/40 text-xs flex items-center gap-1"><span class="text-green-400">✓</span> Verified seller</p>
+          {% else %}
+            <p class="text-white/40 text-xs">Seller</p>
+          {% endif %}
+        </div>
+      </div>
+      <a href="{% url 'web-logout' %}" class="mt-4 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-white/70 hover:bg-white/5 hover:text-white">
+        <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-x"/></svg>Log out
+      </a>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <div class="flex-1 min-w-0">
+    <div class="bg-white border-b border-gray-200 px-6 sm:px-10 py-6 flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h1 class="display text-2xl">{% block seller_title %}{% endblock %}</h1>
+        <p class="text-sm text-gray-400 mt-1">{% block seller_subtitle %}{% endblock %}</p>
+      </div>
+      <div class="flex items-center gap-3 shrink-0 print:hidden">
+        {% block seller_actions %}
+          <a href="{% url 'web-seller-export' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Export report</a>
+          <a href="{% url 'web-seller-product-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">+ Add product</a>
+        {% endblock %}
+      </div>
+    </div>
+
+    <div class="px-6 sm:px-10 py-8">
+      {% block seller_content %}{% endblock %}
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const sidebar = document.getElementById('dashboard-sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    const openBtn = document.getElementById('sidebar-open-btn');
+    const closeBtn = document.getElementById('sidebar-close-btn');
+    if (!sidebar) return;
+
+    function openSidebar() {
+      sidebar.classList.remove('-translate-x-full');
+      backdrop.classList.remove('hidden');
+    }
+    function closeSidebar() {
+      sidebar.classList.add('-translate-x-full');
+      backdrop.classList.add('hidden');
+    }
+
+    openBtn && openBtn.addEventListener('click', openSidebar);
+    closeBtn && closeBtn.addEventListener('click', closeSidebar);
+    backdrop && backdrop.addEventListener('click', closeSidebar);
+  })();
+</script>
+{% endblock %}

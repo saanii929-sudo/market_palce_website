@@ -1,0 +1,46 @@
+{% extends "web/base.html" %}
+{% block title %}Help &amp; Support · SportTech{% endblock %}
+{% block content %}
+{% include "web/_site_header.html" %}
+<main class="max-w-3xl mx-auto px-4 sm:px-6 py-10">
+  <h1 class="display text-3xl mb-6">Help &amp; Support</h1>
+
+  <div class="flex flex-wrap gap-2 mb-8">
+    <a href="{% url 'web-support' %}" class="px-4 py-2 rounded-full text-sm font-semibold {% if not active_topic %}bg-ink text-white{% else %}bg-gray-100{% endif %}">All</a>
+    {% for value, label in topics %}
+      <a href="?topic={{ value }}" class="px-4 py-2 rounded-full text-sm font-semibold {% if active_topic == value %}bg-ink text-white{% else %}bg-gray-100{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="space-y-3 mb-14">
+    {% for faq in faqs %}
+      <details class="rounded-xl border border-gray-200 p-4">
+        <summary class="font-semibold text-sm cursor-pointer">{{ faq.question }}</summary>
+        <p class="text-sm text-gray-500 mt-2">{{ faq.answer }}</p>
+      </details>
+    {% empty %}
+      <p class="text-sm text-gray-400">No FAQs in this topic yet.</p>
+    {% endfor %}
+  </div>
+
+  <section>
+    <h2 class="display text-2xl mb-4">Still need help?</h2>
+    {% if request.user.is_authenticated %}
+      <form method="post" class="space-y-4 max-w-lg">
+        {% csrf_token %}
+        <select name="channel" class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm">
+          <option value="email">Email</option>
+          <option value="chat">Chat</option>
+          <option value="call">Call</option>
+        </select>
+        <input name="subject" placeholder="Subject" required class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm">
+        <textarea name="message" placeholder="How can we help?" required rows="4" class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm"></textarea>
+        <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Submit request</button>
+      </form>
+    {% else %}
+      <p class="text-sm text-gray-500"><a href="{% url 'web-login' %}" class="font-semibold text-brand">Log in</a> to contact support.</p>
+    {% endif %}
+  </section>
+</main>
+{% include "web/_site_footer.html" %}
+{% endblock %}

@@ -1,0 +1,139 @@
+{% extends "web/base.html" %}
+{% load web_extras %}
+{% block title %}SportTech — Shop. Train. Perform.{% endblock %}
+{% block content %}
+{% include "web/_site_header.html" %}
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-14">
+
+  <!-- Hero -->
+  {% with banner=banners.0 %}
+  <section class="relative rounded-3xl overflow-hidden bg-ink text-white h-[320px] sm:h-[380px] flex items-center"
+           style="{% if banner.resolved_image_url %}background-image: url('{{ banner.resolved_image_url }}'); background-size: cover; background-position: center;{% endif %}">
+    <div class="absolute inset-0 opacity-40" style="background: radial-gradient(circle at 75% 30%, #374151, #14161c 65%)"></div>
+    <div class="relative z-10 px-8 sm:px-14 max-w-lg">
+      <p class="text-brand text-xs font-bold tracking-widest uppercase">New season kits</p>
+      <h1 class="display text-4xl sm:text-5xl mt-3 leading-[1.05]">{{ banner.title|default:"Fresh kits. New colours." }}</h1>
+      <p class="mt-4 text-white/60 text-sm">{{ banner.subtitle|default:"The latest club and training jerseys just landed." }}</p>
+      <a href="{{ banner.cta_link|default:'' }}{% if not banner.cta_link %}{% url 'web-deals' %}{% endif %}" class="inline-block mt-6 bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 rounded-xl transition-colors">{{ banner.cta_label|default:"Shop now" }}</a>
+    </div>
+    {% if banners|length > 1 %}
+      <div class="absolute bottom-5 right-6 flex gap-1.5">
+        {% for b in banners %}
+          <span class="w-1.5 h-1.5 rounded-full {% if forloop.first %}bg-brand w-5{% else %}bg-white/30{% endif %}"></span>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+  {% endwith %}
+
+  <!-- Categories -->
+  <section>
+    <h2 class="display text-2xl">Shop by category</h2>
+    <div class="mt-5 flex gap-6 overflow-x-auto no-scrollbar pb-2">
+      {% for category in categories %}
+        <a href="{% url 'web-category-detail' category.slug %}" class="flex flex-col items-center gap-2 shrink-0 w-20 text-center">
+          {% if category.resolved_icon_url %}
+            <span class="w-16 h-16 rounded-full overflow-hidden">
+              <img src="{{ category.resolved_icon_url }}" alt="{{ category.name }}" class="w-full h-full object-cover">
+            </span>
+          {% else %}
+            <span class="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold display" style="background: {{ category|placeholder_gradient }}">
+              {{ category.name|initial }}
+            </span>
+          {% endif %}
+          <span class="text-xs font-semibold leading-tight">{{ category.name }}</span>
+        </a>
+      {% empty %}
+        <p class="text-sm text-gray-400">Categories will show up here once they're added in the admin.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Flash deals -->
+  {% if flash_deals %}
+  <section>
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="display text-2xl">Flash deals</h2>
+        <p class="text-sm text-gray-400 mt-1">Limited stock, limited time</p>
+      </div>
+      <span class="bg-ink text-white text-xs font-bold px-3.5 py-2 rounded-full" data-flash-countdown data-ends="{{ flash_deals.0.ends_at|date:'c' }}">Ends in --:--:--</span>
+    </div>
+    <div class="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+      {% for deal in flash_deals %}
+        {% include "web/_flash_deal_card.html" with product=deal.product deal=deal %}
+      {% endfor %}
+    </div>
+  </section>
+  <script>
+    (function () {
+      const el = document.querySelector('[data-flash-countdown]');
+      if (!el) return;
+      const end = new Date(el.dataset.ends).getTime();
+      const tick = () => {
+        const diff = Math.max(0, end - Date.now());
+        const h = String(Math.floor(diff / 3600000)).padStart(2, '0');
+        const m = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
+        const s = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
+        el.textContent = `Ends in ${h}:${m}:${s}`;
+      };
+      tick();
+      setInterval(tick, 1000);
+    })();
+  </script>
+  {% endif %}
+
+  <!-- Trending -->
+  {% if trending_products %}
+  <section>
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="display text-2xl">Trending now</h2>
+        <p class="text-sm text-gray-400 mt-1">What players are buying this week</p>
+      </div>
+      <a href="{% url 'web-deals' %}" class="text-sm font-bold text-brand hover:text-brand-dark">See all →</a>
+    </div>
+    <div class="mt-5 flex gap-5 overflow-x-auto no-scrollbar pb-2">
+      {% for product in trending_products %}
+        <div class="w-52 shrink-0">{% include "web/_product_card.html" %}</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- Collections -->
+  {% if collections %}
+  <section>
+    <h2 class="display text-2xl">Sports collections</h2>
+    <div class="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {% for collection in collections %}
+        <a href="{% url 'web-collection-detail' collection.slug %}" class="relative rounded-2xl overflow-hidden h-32 flex items-end p-4"
+           style="{% if collection.resolved_banner_url %}background-image: url('{{ collection.resolved_banner_url }}'); background-size: cover; background-position: center;{% else %}background: {{ collection|placeholder_gradient }}{% endif %}">
+          <span class="absolute inset-0 bg-black/20"></span>
+          <span class="relative z-10 text-white font-bold">
+            {{ collection.title }}
+            <span class="block text-xs font-semibold text-white/80 mt-0.5">Shop now</span>
+          </span>
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- Brands -->
+  {% if brands %}
+  <section>
+    <h2 class="display text-2xl">Shop by brand</h2>
+    <div class="mt-5 flex flex-wrap gap-3">
+      {% for brand in brands %}
+        <a href="{% url 'web-brand-detail' brand.slug %}" class="px-5 py-2.5 rounded-full border border-gray-200 bg-white font-bold text-sm hover:border-ink transition-colors">{{ brand.name }}</a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+</main>
+
+{% include "web/_site_footer.html" %}
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "web/seller_base.html" %}
+{% load web_extras %}
+{% block seller_title %}Employees{% endblock %}
+{% block seller_subtitle %}{{ employees|length }} team member{{ employees|length|pluralize }}{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-employee-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">+ Add employee</a>
+{% endblock %}
+
+{% block seller_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Name</th>
+          <th class="px-5 py-3">Role</th>
+          <th class="px-5 py-3">Contact</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for employee in employees %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4">
+              <div class="flex items-center gap-3">
+                <span class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style="background: {{ employee|placeholder_gradient }}">{{ employee.full_name|initial }}</span>
+                <span class="font-bold">{{ employee.full_name }}</span>
+              </div>
+            </td>
+            <td class="px-5 py-4 text-gray-500">{{ employee.get_role_display }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ employee.phone|default:employee.email|default:"—" }}</td>
+            <td class="px-5 py-4">
+              <form method="post" action="{% url 'web-seller-employee-toggle' employee.id %}">
+                {% csrf_token %}
+                <button type="submit" aria-label="Toggle active" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors {% if employee.is_active %}bg-green-500{% else %}bg-gray-200{% endif %}">
+                  <span class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform {% if employee.is_active %}translate-x-5{% else %}translate-x-0.5{% endif %}"></span>
+                </button>
+              </form>
+            </td>
+            <td class="px-5 py-4">
+              <div class="flex items-center gap-2 justify-end">
+                <a href="{% url 'web-seller-employee-edit' employee.id %}" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">Edit</a>
+                <form method="post" action="{% url 'web-seller-employee-delete' employee.id %}" onsubmit="return confirm('Remove this employee?');">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Remove</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No employees yet — add your first cashier to start using the POS terminal.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

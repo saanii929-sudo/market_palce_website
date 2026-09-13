@@ -1,0 +1,60 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Payroll{% endblock %}
+{% block seller_subtitle %}Run pay periods for your team{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-payroll-export' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Download CSV</a>
+{% endblock %}
+
+{% block seller_content %}
+<div class="grid lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 rounded-2xl bg-white border border-gray-200 overflow-hidden h-fit">
+    <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+            <th class="px-5 py-3">Period</th>
+            <th class="px-5 py-3">Employees</th>
+            <th class="px-5 py-3">Total net pay</th>
+            <th class="px-5 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pay_run in pay_runs %}
+            <tr class="border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50" onclick="window.location='{% url 'web-seller-payroll-detail' pay_run.id %}'">
+              <td class="px-5 py-4 font-bold">{{ pay_run.period_start|date:"M d" }} – {{ pay_run.period_end|date:"M d, Y" }}</td>
+              <td class="px-5 py-4 text-gray-500">{{ pay_run.payslips.count }}</td>
+              <td class="px-5 py-4 font-bold">GH₵{{ pay_run.total_net_pay }}</td>
+              <td class="px-5 py-4">
+                {% if pay_run.status == 'paid' %}
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Paid</span>
+                {% else %}
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Draft</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="px-5 py-10 text-center text-gray-400">No pay runs yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-gray-200 p-6 h-fit">
+    <h2 class="display text-lg mb-4">Run payroll</h2>
+    <form method="post" action="{% url 'web-seller-payroll-run' %}" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-sm font-bold mb-2">Period start</label>
+        <input type="date" name="period_start" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <div>
+        <label class="block text-sm font-bold mb-2">Period end</label>
+        <input type="date" name="period_end" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <p class="text-xs text-gray-400">Generates a payslip for every active employee using their base salary. You can add bonuses/deductions before marking it paid.</p>
+      <button type="submit" class="w-full rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-3 transition-colors">Create pay run</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

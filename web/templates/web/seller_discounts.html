@@ -1,0 +1,83 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Discounts{% endblock %}
+{% block seller_subtitle %}Reusable discounts your cashiers can apply at checkout{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-discounts-export' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Download CSV</a>
+{% endblock %}
+
+{% block seller_content %}
+<div class="grid lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 rounded-2xl bg-white border border-gray-200 overflow-hidden h-fit">
+    <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+            <th class="px-5 py-3">Name</th>
+            <th class="px-5 py-3">Value</th>
+            <th class="px-5 py-3">Status</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for discount in discounts %}
+            <tr class="border-b border-gray-50 last:border-0">
+              <td class="px-5 py-4 font-bold">{{ discount.name }}{% if discount.code %} <span class="text-gray-400 font-normal">({{ discount.code }})</span>{% endif %}</td>
+              <td class="px-5 py-4 text-gray-500">{% if discount.discount_type == 'percentage' %}{{ discount.value }}%{% else %}GH₵{{ discount.value }}{% endif %}</td>
+              <td class="px-5 py-4">
+                {% if discount.is_active %}
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Active</span>
+                {% else %}
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="px-5 py-4">
+                <div class="flex gap-2 justify-end">
+                  <form method="post" action="{% url 'web-seller-discount-toggle' discount.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">{% if discount.is_active %}Deactivate{% else %}Activate{% endif %}</button>
+                  </form>
+                  <form method="post" action="{% url 'web-seller-discount-delete' discount.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="px-5 py-10 text-center text-gray-400">No discounts yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-gray-200 p-6 h-fit">
+    <h2 class="display text-lg mb-4">New discount</h2>
+    <form method="post" action="{% url 'web-seller-discount-add' %}" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-sm font-bold mb-2">Name</label>
+        <input type="text" name="name" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <div>
+        <label class="block text-sm font-bold mb-2">Code <span class="text-gray-400 font-normal">(optional)</span></label>
+        <input type="text" name="code" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-bold mb-2">Type</label>
+          <select name="discount_type" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+            <option value="percentage">Percent</option>
+            <option value="fixed">Fixed</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-bold mb-2">Value</label>
+          <input type="number" step="0.01" min="0.01" name="value" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+        </div>
+      </div>
+      <button type="submit" class="w-full rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-3 transition-colors">Add discount</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

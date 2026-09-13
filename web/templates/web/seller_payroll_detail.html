@@ -1,0 +1,71 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Pay run: {{ pay_run.period_start|date:"M d" }} – {{ pay_run.period_end|date:"M d, Y" }}{% endblock %}
+{% block seller_subtitle %}{% if pay_run.status == 'paid' %}Paid on {{ pay_run.paid_at|date:"M d, Y" }}{% else %}Draft — review before paying{% endif %}{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-payroll' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to payroll</a>
+  {% if pay_run.status == 'draft' %}
+    <form method="post" action="{% url 'web-seller-payroll-mark-paid' pay_run.id %}" onsubmit="return confirm('Mark this pay run as paid? This logs a payroll expense.');">
+      {% csrf_token %}
+      <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">Mark as paid</button>
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block seller_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Employee</th>
+          <th class="px-5 py-3">Base salary</th>
+          <th class="px-5 py-3">Bonus</th>
+          <th class="px-5 py-3">Deductions</th>
+          <th class="px-5 py-3">Net pay</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for slip in payslips %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ slip.employee.full_name }}</td>
+            <td class="px-5 py-4 text-gray-500">GH₵{{ slip.base_salary }}</td>
+            <td class="px-5 py-4">
+              {% if pay_run.status == 'draft' %}
+                <form method="post" action="{% url 'web-seller-payslip-update' slip.id %}" class="flex gap-1">
+                  {% csrf_token %}
+                  <input type="number" step="0.01" name="bonus" value="{{ slip.bonus }}" class="w-24 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:border-ink">
+                  <input type="hidden" name="deductions" value="{{ slip.deductions }}">
+                  <button type="submit" class="text-xs font-bold text-brand">Save</button>
+                </form>
+              {% else %}
+                GH₵{{ slip.bonus }}
+              {% endif %}
+            </td>
+            <td class="px-5 py-4">
+              {% if pay_run.status == 'draft' %}
+                <form method="post" action="{% url 'web-seller-payslip-update' slip.id %}" class="flex gap-1">
+                  {% csrf_token %}
+                  <input type="hidden" name="bonus" value="{{ slip.bonus }}">
+                  <input type="number" step="0.01" name="deductions" value="{{ slip.deductions }}" class="w-24 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:border-ink">
+                  <button type="submit" class="text-xs font-bold text-brand">Save</button>
+                </form>
+              {% else %}
+                GH₵{{ slip.deductions }}
+              {% endif %}
+            </td>
+            <td class="px-5 py-4 font-bold">GH₵{{ slip.net_pay }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No active employees to pay.</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="border-t border-gray-200">
+          <td colspan="4" class="px-5 py-4 font-bold text-right">Total</td>
+          <td class="px-5 py-4 font-bold">GH₵{{ pay_run.total_net_pay }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{% endblock %}

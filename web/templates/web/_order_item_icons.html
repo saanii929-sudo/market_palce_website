@@ -1,0 +1,14 @@
+{% load web_extras %}
+<div class="flex -space-x-1">
+  {% for item in order.items.all|slice:":2" %}
+    <span class="w-8 h-8 rounded-lg border-2 border-white flex items-center justify-center text-xs font-bold text-white/90"
+          style="background: {{ item.product|placeholder_gradient }}">
+      {{ item.product.name|initial }}
+    </span>
+  {% endfor %}
+  {% if order.items.count > 2 %}
+    <span class="w-8 h-8 rounded-lg border-2 border-white bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-500">
+      +{{ order.items.count|add:"-2" }}
+    </span>
+  {% endif %}
+</div>

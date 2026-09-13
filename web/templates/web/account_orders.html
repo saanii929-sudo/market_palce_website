@@ -1,0 +1,53 @@
+{% extends "web/account_base.html" %}
+{% load web_extras %}
+{% block title %}My orders · SportTech{% endblock %}
+{% block account_title %}My orders{% endblock %}
+{% block account_title_mobile %}My orders{% endblock %}
+{% block account_subtitle %}{{ orders_count }} order{{ orders_count|pluralize }} placed{% endblock %}
+{% block account_content %}
+
+<div class="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+  <div class="p-4 flex flex-wrap gap-2 border-b border-gray-100">
+    <a href="?" class="px-4 py-2 rounded-full text-sm font-bold {% if not active_tab %}bg-ink text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">All orders</a>
+    <a href="?status=processing" class="px-4 py-2 rounded-full text-sm font-bold {% if active_tab == 'processing' %}bg-ink text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Processing</a>
+    <a href="?status=in-transit" class="px-4 py-2 rounded-full text-sm font-bold {% if active_tab == 'in-transit' %}bg-ink text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">In Transit</a>
+    <a href="?status=delivered" class="px-4 py-2 rounded-full text-sm font-bold {% if active_tab == 'delivered' %}bg-ink text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Delivered</a>
+    <a href="?status=cancelled" class="px-4 py-2 rounded-full text-sm font-bold {% if active_tab == 'cancelled' %}bg-ink text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">Cancelled</a>
+  </div>
+
+  {% if orders %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm min-w-[640px]">
+        <thead>
+          <tr class="text-left text-gray-400 text-xs font-bold uppercase tracking-wide">
+            <th class="px-6 py-4">Order</th>
+            <th class="px-6 py-4">Items</th>
+            <th class="px-6 py-4">Date</th>
+            <th class="px-6 py-4">Status</th>
+            <th class="px-6 py-4">Total</th>
+            <th class="px-6 py-4"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order in orders %}
+            <tr class="border-t border-gray-100">
+              <td class="px-6 py-4 font-bold">{{ order.order_number }}</td>
+              <td class="px-6 py-4">{% include "web/_order_item_icons.html" %}</td>
+              <td class="px-6 py-4 text-gray-500">{{ order.placed_at|date:"M d, Y" }}</td>
+              <td class="px-6 py-4">
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full {{ order.status|order_status_badge }}">{{ order.status|order_display_status }}</span>
+              </td>
+              <td class="px-6 py-4 font-bold">GH₵{{ order.total }}</td>
+              <td class="px-6 py-4 text-right">
+                <a href="{% url 'web-order-confirmation' order.order_number %}" class="inline-block rounded-lg border border-gray-200 font-bold text-sm px-4 py-1.5 hover:border-ink transition-colors">View</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="text-sm text-gray-400 p-6">No orders in this category yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

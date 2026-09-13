@@ -1,0 +1,27 @@
+{% extends "web/account_base.html" %}
+{% block title %}Edit profile · SportTech{% endblock %}
+{% block account_title %}Edit profile{% endblock %}
+{% block account_title_mobile %}Edit profile{% endblock %}
+{% block account_subtitle %}Update your name and phone number{% endblock %}
+{% block account_content %}
+<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-md space-y-5">
+  {% csrf_token %}
+  <div>
+    <label class="block text-sm font-bold mb-2">Full name</label>
+    <input type="text" name="full_name" value="{{ request.user.full_name }}" required
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+  <div>
+    <label class="block text-sm font-bold mb-2">Phone</label>
+    <input type="text" name="phone" value="{{ request.user.phone|default:'' }}" placeholder="+233201234567"
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+  <div>
+    <label class="block text-sm font-bold mb-2">Email</label>
+    <input type="email" value="{{ request.user.email|default:'' }}" disabled
+           class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-400">
+    <p class="text-xs text-gray-400 mt-1.5">Contact support to change your email.</p>
+  </div>
+  <button type="submit" class="w-full rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-3 transition-colors">Save changes</button>
+</form>
+{% endblock %}

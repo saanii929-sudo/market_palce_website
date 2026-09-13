@@ -1,0 +1,97 @@
+{% extends "web/base.html" %}
+{% block title %}Become a seller · SportTech{% endblock %}
+{% block content %}
+{% include "web/_site_header.html" %}
+
+<main class="max-w-3xl mx-auto px-4 sm:px-6 py-12">
+  <div class="text-center mb-10">
+    <p class="text-brand text-xs font-bold tracking-widest uppercase">Sell on SportTech</p>
+    <h1 class="display text-3xl sm:text-4xl mt-3">Open your own storefront</h1>
+    <p class="mt-3 text-sm text-gray-500 max-w-lg mx-auto">
+      Reach thousands of shoppers, manage your own products and orders, and run a full point-of-sale
+      for your physical shop — all from one seller dashboard.
+    </p>
+  </div>
+
+  {% if application and not can_apply %}
+    <div class="rounded-2xl bg-white border border-gray-200 p-8 text-center">
+      {% if application.status == 'pending' %}
+        <span class="inline-flex w-14 h-14 rounded-full bg-amber-100 items-center justify-center text-amber-600 mb-4">
+          <svg viewBox="0 0 24 24" class="w-6 h-6"><use href="#icon-bell"/></svg>
+        </span>
+        <h2 class="display text-xl">Application under review</h2>
+        <p class="mt-2 text-sm text-gray-500 max-w-md mx-auto">
+          Thanks for applying, {{ application.business_name }}! Our team is reviewing your documents and
+          will notify you as soon as a decision is made. Submitted on {{ application.submitted_at|date:"M d, Y" }}.
+        </p>
+      {% elif application.status == 'approved' %}
+        <span class="inline-flex w-14 h-14 rounded-full bg-green-100 items-center justify-center text-green-600 mb-4">
+          <svg viewBox="0 0 24 24" class="w-6 h-6"><use href="#icon-check"/></svg>
+        </span>
+        <h2 class="display text-xl">You're approved!</h2>
+        <p class="mt-2 text-sm text-gray-500">Your seller account is ready.</p>
+        <a href="{% url 'web-seller-overview' %}" class="inline-block mt-6 rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Go to your dashboard</a>
+      {% endif %}
+    </div>
+  {% else %}
+    {% if application and application.status == 'rejected' %}
+      <div class="rounded-2xl bg-red-50 border border-red-200 p-5 mb-6 text-sm text-red-700">
+        <p class="font-bold">Your previous application wasn't approved.</p>
+        {% if application.reviewer_note %}<p class="mt-1">{{ application.reviewer_note }}</p>{% endif %}
+        <p class="mt-2 text-red-600">You're welcome to apply again below.</p>
+      </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" class="rounded-2xl bg-white border border-gray-200 p-6 sm:p-8 space-y-5">
+      {% csrf_token %}
+
+      <div>
+        <label class="block text-sm font-bold mb-2">Business name</label>
+        <input type="text" name="business_name" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-5">
+        <div>
+          <label class="block text-sm font-bold mb-2">Primary category</label>
+          <select name="category_id" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+            <option value="">Select a category</option>
+            {% for category in categories %}
+              <option value="{{ category.id }}">{{ category.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-bold mb-2">Phone number</label>
+          <input type="text" name="phone" required placeholder="+233201234567" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+        </div>
+      </div>
+
+      <div class="h-px bg-gray-100"></div>
+
+      <div>
+        <p class="text-sm font-bold mb-1">Verification documents</p>
+        <p class="text-xs text-gray-400 mb-4">We ask for these so buyers can trust sellers on SportTech. Your documents are only visible to our review team.</p>
+
+        <div class="grid sm:grid-cols-2 gap-5">
+          <div>
+            <label class="block text-sm font-bold mb-2">Government-issued ID <span class="text-red-500">*</span></label>
+            <input type="file" name="id_document" required accept=".pdf,.jpg,.jpeg,.png"
+                   class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-xs file:font-bold focus:outline-none focus:border-ink">
+            <p class="text-xs text-gray-400 mt-1.5">National ID, passport, or driver's license.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-bold mb-2">Business certificate <span class="text-gray-400 font-normal">(optional)</span></label>
+            <input type="file" name="business_certificate" accept=".pdf,.jpg,.jpeg,.png"
+                   class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-xs file:font-bold focus:outline-none focus:border-ink">
+            <p class="text-xs text-gray-400 mt-1.5">If your business is formally registered.</p>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="w-full rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-3.5 transition-colors">Submit application</button>
+      <p class="text-xs text-gray-400 text-center">By applying you agree to our <a href="{% url 'static-page' 'terms' %}" class="underline">Terms of Service</a>.</p>
+    </form>
+  {% endif %}
+</main>
+{% include "web/_site_footer.html" %}
+{% endblock %}

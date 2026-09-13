@@ -1,0 +1,47 @@
+{% load web_extras %}
+{% with photo=product.images.first.resolved_url %}
+<div class="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col h-full">
+  <div class="relative aspect-square {% if not photo %}flex items-center justify-center{% endif %}" style="{% if photo %}background: #f3f4f6{% else %}background: {{ product|placeholder_gradient }}{% endif %}">
+    <a href="{% url 'web-product-detail' product.slug %}" class="absolute inset-0" aria-label="{{ product.name }}">
+      {% if photo %}
+        <img src="{{ photo }}" alt="{{ product.name }}" class="w-full h-full object-cover" loading="lazy">
+      {% else %}
+        <span class="absolute inset-0 flex items-center justify-center text-5xl font-black text-white/25 display">{{ product.name|initial }}</span>
+      {% endif %}
+    </a>
+    {% if product.discount_percent %}
+      <span class="absolute top-3 left-3 bg-ink text-white text-xs font-bold px-2 py-1 rounded-md pointer-events-none">-{{ product.discount_percent }}%</span>
+    {% endif %}
+    <form method="post" action="{% url 'web-wishlist-toggle' %}" class="absolute top-3 right-3">
+      {% csrf_token %}
+      <input type="hidden" name="product_id" value="{{ product.id }}">
+      <input type="hidden" name="next" value="{{ request.path }}">
+      <button type="submit" aria-label="Toggle wishlist"
+              class="w-7 h-7 rounded-full bg-white/90 flex items-center justify-center hover:text-brand {% if product.id in wishlisted_ids %}text-brand{% else %}text-ink/70{% endif %}">
+        <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-{% if product.id in wishlisted_ids %}heart-filled{% else %}heart{% endif %}"/></svg>
+      </button>
+    </form>
+  </div>
+  <div class="p-4 flex flex-col gap-1.5 flex-1">
+    <p class="text-xs text-gray-400 font-medium">{{ product.brand.name|default:product.seller.business_name }}</p>
+    <a href="{% url 'web-product-detail' product.slug %}" class="font-bold text-sm leading-snug hover:text-brand line-clamp-2">{{ product.name }}</a>
+    {% if product.review_count %}
+      <div class="flex items-center gap-1 text-xs text-amber-500">
+        <svg viewBox="0 0 24 24" class="w-3.5 h-3.5"><use href="#icon-star"/></svg>
+        <span class="text-ink font-semibold">{{ product.avg_rating }}</span>
+        <span class="text-gray-400">({{ product.review_count }})</span>
+      </div>
+    {% endif %}
+    <div class="flex items-baseline gap-2">
+      <span class="font-bold">GH₵{{ product.price }}</span>
+      {% if product.original_price %}<span class="text-xs text-gray-400 line-through">GH₵{{ product.original_price }}</span>{% endif %}
+    </div>
+    <form method="post" action="{% url 'web-cart-add' %}" class="mt-auto pt-2">
+      {% csrf_token %}
+      <input type="hidden" name="product_id" value="{{ product.id }}">
+      <input type="hidden" name="next" value="{{ request.path }}">
+      <button type="submit" class="w-full rounded-lg bg-gray-100 hover:bg-ink hover:text-white text-sm font-semibold py-2.5 transition-colors">Add to cart</button>
+    </form>
+  </div>
+</div>
+{% endwith %}

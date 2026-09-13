@@ -1,0 +1,50 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Suppliers{% endblock %}
+{% block seller_subtitle %}{{ suppliers|length }} supplier{{ suppliers|length|pluralize }} on file{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-supplier-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">+ Add supplier</a>
+{% endblock %}
+
+{% block seller_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Supplier</th>
+          <th class="px-5 py-3">Contact</th>
+          <th class="px-5 py-3">Phone</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for supplier in suppliers %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ supplier.name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ supplier.contact_name|default:"—" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ supplier.phone|default:"—" }}</td>
+            <td class="px-5 py-4">
+              {% if supplier.is_active %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Active</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4 text-right">
+              <form method="post" action="{% url 'web-seller-supplier-toggle' supplier.id %}">
+                {% csrf_token %}
+                <button type="submit" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">
+                  {% if supplier.is_active %}Deactivate{% else %}Activate{% endif %}
+                </button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No suppliers yet — add one before creating a purchase order.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Profit &amp; Loss statement{% endblock %}
+{% block seller_subtitle %}{{ start_date|date:"M d, Y" }} – {{ end_date|date:"M d, Y" }}{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-pnl-export' %}?start={{ start_date|date:'Y-m-d' }}&end={{ end_date|date:'Y-m-d' }}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors print:hidden">Download CSV</a>
+  <button onclick="window.print()" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors print:hidden">Print</button>
+{% endblock %}
+
+{% block seller_content %}
+<form method="get" class="flex flex-wrap items-end gap-3 mb-6 print:hidden">
+  <div>
+    <label class="block text-xs font-bold text-gray-500 mb-1.5">From</label>
+    <input type="date" name="start" value="{{ start_date|date:'Y-m-d' }}" class="rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-ink">
+  </div>
+  <div>
+    <label class="block text-xs font-bold text-gray-500 mb-1.5">To</label>
+    <input type="date" name="end" value="{{ end_date|date:'Y-m-d' }}" class="rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-ink">
+  </div>
+  <button type="submit" class="rounded-xl bg-ink text-white font-bold text-sm px-5 py-2.5">Update</button>
+</form>
+
+<div class="grid sm:grid-cols-3 gap-4 mb-6">
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">TOTAL REVENUE</p>
+    <p class="display text-2xl mt-2">GH₵{{ total_revenue|floatformat:0 }}</p>
+  </div>
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">GROSS PROFIT</p>
+    <p class="display text-2xl mt-2">GH₵{{ gross_profit|floatformat:0 }}</p>
+    <p class="text-xs text-gray-400 mt-1">{{ gross_margin_percent }}% margin</p>
+  </div>
+  <div class="rounded-2xl bg-white border border-gray-200 p-5 {% if net_income < 0 %}border-red-200{% endif %}">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">NET INCOME {% if net_income < 0 %}(DEFICIT){% endif %}</p>
+    <p class="display text-2xl mt-2 {% if net_income < 0 %}text-red-600{% endif %}">GH₵{{ net_income|floatformat:0 }}</p>
+  </div>
+</div>
+
+<div class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl">
+  <h2 class="display text-lg mb-5">Income statement</h2>
+  <dl class="divide-y divide-gray-100 text-sm">
+    <div class="py-2.5 flex justify-between"><dt class="text-gray-500">Online sales revenue</dt><dd class="font-semibold">GH₵{{ online_revenue }}</dd></div>
+    <div class="py-2.5 flex justify-between"><dt class="text-gray-500">In-store sales revenue (net of returns)</dt><dd class="font-semibold">GH₵{{ pos_revenue }}</dd></div>
+    {% if returns_total %}<div class="py-2.5 flex justify-between text-red-500"><dt>Less: returns &amp; refunds</dt><dd>-GH₵{{ returns_total }}</dd></div>{% endif %}
+    <div class="py-2.5 flex justify-between font-bold"><dt>Total revenue</dt><dd>GH₵{{ total_revenue }}</dd></div>
+
+    <div class="py-2.5 flex justify-between pt-4"><dt class="text-gray-500">Cost of goods sold (COGS)</dt><dd class="font-semibold">-GH₵{{ total_cogs }}</dd></div>
+    <div class="py-2.5 flex justify-between font-bold"><dt>Gross profit</dt><dd>GH₵{{ gross_profit }}</dd></div>
+
+    <div class="py-2.5 flex justify-between pt-4"><dt class="text-gray-500">Operating expenses</dt><dd class="font-semibold">-GH₵{{ total_expenses }}</dd></div>
+    {% for row in expenses_by_category %}
+      <div class="py-1.5 pl-4 flex justify-between text-xs text-gray-400"><dt>{{ row.label }}</dt><dd>GH₵{{ row.total }}</dd></div>
+    {% endfor %}
+
+    <div class="py-3 flex justify-between font-bold text-base border-t-2 border-ink {% if net_income < 0 %}text-red-600{% endif %}">
+      <dt>Net income {% if net_income < 0 %}(deficit){% endif %}</dt><dd>GH₵{{ net_income }}</dd>
+    </div>
+  </dl>
+
+  <div class="mt-6 pt-5 border-t border-dashed border-gray-200 text-sm">
+    <p class="font-bold mb-1">Estimated break-even revenue</p>
+    {% if break_even_revenue %}
+      <p class="text-gray-500">You need about <span class="font-bold text-ink">GH₵{{ break_even_revenue }}</span> in revenue this period to cover your operating expenses at your current gross margin ({{ gross_margin_percent }}%).</p>
+    {% else %}
+      <p class="text-gray-400">Not enough revenue or margin data yet to estimate a break-even point.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

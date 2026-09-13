@@ -1,0 +1,55 @@
+{% extends "web/account_base.html" %}
+{% block title %}Addresses · SportTech{% endblock %}
+{% block account_title %}Addresses{% endblock %}
+{% block account_title_mobile %}Saved addresses{% endblock %}
+{% block account_subtitle %}Where we deliver your gear{% endblock %}
+{% block account_content %}
+
+<div class="grid sm:grid-cols-2 gap-5 max-w-3xl">
+  {% for address in addresses %}
+    <div class="rounded-2xl border border-gray-200 bg-white p-5">
+      <div class="flex items-center gap-2">
+        <h3 class="font-bold">{{ address.label|default:"Address" }}</h3>
+        {% if address.is_default %}<span class="text-[10px] font-bold uppercase tracking-wide bg-ink text-white px-2 py-1 rounded-full">Default</span>{% endif %}
+      </div>
+      <p class="text-sm text-gray-500 mt-2">
+        {{ address.line1 }}{% if address.line2 %}, {{ address.line2 }}{% endif %}, {{ address.city }}{% if address.region %}, {{ address.region }}{% endif %}
+      </p>
+      <div class="flex flex-wrap gap-2 mt-4">
+        {% if not address.is_default %}
+          <form method="post" action="{% url 'web-address-set-default' address.id %}">
+            {% csrf_token %}
+            <button type="submit" class="rounded-lg border border-gray-200 font-bold text-sm px-4 py-2 hover:border-ink transition-colors">Set as default</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'web-address-edit' address.id %}" class="rounded-lg border border-gray-200 font-bold text-sm px-4 py-2 hover:border-ink transition-colors {% if address.is_default %}flex-1 text-center{% endif %}">Edit</a>
+        {% if not address.is_default %}
+          <form method="post" action="{% url 'web-address-delete' address.id %}" onsubmit="return confirm('Remove this address?');">
+            {% csrf_token %}
+            <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-sm px-4 py-2 hover:bg-red-50 transition-colors">Delete</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+
+  <details class="rounded-2xl border border-dashed border-gray-300 bg-transparent">
+    <summary class="p-5 text-center text-sm font-bold text-gray-400 cursor-pointer hover:text-ink">+ Add new address</summary>
+    <form method="post" action="{% url 'web-address-add' %}" class="p-5 pt-0 grid gap-3">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{% url 'web-account-addresses' %}">
+      <input name="label" placeholder="Label (e.g. Home, Work)" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+      <input name="recipient_name" placeholder="Recipient name" required class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+      <input name="phone" placeholder="Phone number" required class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+      <input name="line1" placeholder="Address line 1" required class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+      <input name="line2" placeholder="Address line 2 (optional)" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+      <div class="grid grid-cols-2 gap-3">
+        <input name="city" placeholder="City" required class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+        <input name="region" placeholder="Region (optional)" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+      </div>
+      <input name="country" placeholder="Country" value="Ghana" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+      <button type="submit" class="rounded-lg bg-ink text-white text-sm font-bold py-2.5">Save address</button>
+    </form>
+  </details>
+</div>
+{% endblock %}

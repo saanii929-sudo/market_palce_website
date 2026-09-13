@@ -1,0 +1,25 @@
+{% extends "web/account_base.html" %}
+{% block title %}Edit address · SportTech{% endblock %}
+{% block account_title %}Edit address{% endblock %}
+{% block account_title_mobile %}Edit address{% endblock %}
+{% block account_subtitle %}Update where this address delivers to{% endblock %}
+{% block account_content %}
+
+<form method="post" class="max-w-lg grid gap-3">
+  {% csrf_token %}
+  <input name="label" placeholder="Label (e.g. Home, Work)" value="{{ address.label }}" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+  <input name="recipient_name" placeholder="Recipient name" value="{{ address.recipient_name }}" required class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+  <input name="phone" placeholder="Phone number" value="{{ address.phone }}" required class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+  <input name="line1" placeholder="Address line 1" value="{{ address.line1 }}" required class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+  <input name="line2" placeholder="Address line 2 (optional)" value="{{ address.line2 }}" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+  <div class="grid grid-cols-2 gap-3">
+    <input name="city" placeholder="City" value="{{ address.city }}" required class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+    <input name="region" placeholder="Region (optional)" value="{{ address.region }}" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+  </div>
+  <input name="country" placeholder="Country" value="{{ address.country }}" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+  <div class="flex gap-3 mt-2">
+    <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Save changes</button>
+    <a href="{% url 'web-account-addresses' %}" class="rounded-xl border border-gray-200 font-bold px-6 py-3 hover:border-ink transition-colors">Cancel</a>
+  </div>
+</form>
+{% endblock %}

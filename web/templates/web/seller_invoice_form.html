@@ -1,0 +1,145 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}New invoice{% endblock %}
+{% block seller_subtitle %}{% if linked_sale %}Prefilled from sale {{ linked_sale.receipt_number }}{% else %}Bill a customer for products or services{% endif %}{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-invoices' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to invoices</a>
+{% endblock %}
+
+{% block seller_content %}
+<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-4xl space-y-6">
+  {% csrf_token %}
+  {% if linked_sale %}<input type="hidden" name="linked_pos_sale_id" value="{{ linked_sale.id }}">{% endif %}
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Existing customer <span class="text-gray-400 font-normal">(optional)</span></label>
+      <select name="customer_id" id="customer-select" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+        <option value="">— Manual entry below —</option>
+        {% for customer in customers %}
+          <option value="{{ customer.id }}" data-name="{{ customer.full_name }}" data-phone="{{ customer.phone }}" data-email="{{ customer.email }}"
+                  {% if prefill_customer and prefill_customer.id == customer.id %}selected{% endif %}>{{ customer.full_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Customer name</label>
+      <input type="text" name="customer_name" id="customer-name" required value="{{ prefill_customer.full_name|default:'' }}"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+
+  <div class="grid sm:grid-cols-3 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Phone</label>
+      <input type="text" name="customer_phone" id="customer-phone" value="{{ prefill_customer.phone|default:'' }}" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Email <span class="text-gray-400 font-normal">(needed to send)</span></label>
+      <input type="email" name="customer_email" id="customer-email" value="{{ prefill_customer.email|default:'' }}" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Address</label>
+      <input type="text" name="customer_address" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+
+  <div class="grid sm:grid-cols-4 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Issue date</label>
+      <input type="date" name="issue_date" value="{% now 'Y-m-d' %}" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Due date</label>
+      <input type="date" name="due_date" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Tax rate (%)</label>
+      <input type="number" step="0.01" min="0" name="tax_rate" value="0" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Discount (GH₵)</label>
+      <input type="number" step="0.01" min="0" name="discount_amount" value="0" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Line items</label>
+    <div id="invoice-lines" class="space-y-3"></div>
+    <button type="button" id="add-invoice-line" class="mt-3 text-sm font-bold text-brand hover:text-brand-dark">+ Add line item</button>
+  </div>
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Notes <span class="text-gray-400 font-normal">(shown on the invoice)</span></label>
+      <textarea name="notes" rows="3" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink"></textarea>
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Terms</label>
+      <textarea name="terms" rows="3" placeholder="e.g. Payment due within 14 days" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink"></textarea>
+    </div>
+  </div>
+
+  <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Create invoice</button>
+</form>
+
+{{ prefill_items_json|json_script:"prefill-items-data" }}
+
+<template id="invoice-line-template">
+  <div class="grid grid-cols-12 gap-2 items-end invoice-line">
+    <input type="hidden" name="product_id" value="">
+    <div class="col-span-6">
+      <label class="block text-xs font-bold text-gray-500 mb-1">Description</label>
+      <input type="text" name="description" required class="w-full rounded-lg border border-gray-200 px-2 py-2 text-xs focus:outline-none focus:border-ink">
+    </div>
+    <div class="col-span-2">
+      <label class="block text-xs font-bold text-gray-500 mb-1">Qty</label>
+      <input type="number" step="0.01" min="0.01" name="qty" value="1" required class="w-full rounded-lg border border-gray-200 px-2 py-2 text-xs focus:outline-none focus:border-ink">
+    </div>
+    <div class="col-span-3">
+      <label class="block text-xs font-bold text-gray-500 mb-1">Unit price</label>
+      <input type="number" step="0.01" min="0" name="unit_price" required class="w-full rounded-lg border border-gray-200 px-2 py-2 text-xs focus:outline-none focus:border-ink">
+    </div>
+    <div class="col-span-1">
+      <button type="button" class="remove-invoice-line w-full text-red-500 text-xs font-bold py-2">✕</button>
+    </div>
+  </div>
+</template>
+
+<script>
+  (function () {
+    const container = document.getElementById('invoice-lines');
+    const template = document.getElementById('invoice-line-template');
+    const prefill = JSON.parse(document.getElementById('prefill-items-data').textContent);
+
+    function addLine(data) {
+      const clone = template.content.cloneNode(true);
+      if (data) {
+        clone.querySelector('[name="product_id"]').value = data.product_id || '';
+        clone.querySelector('[name="description"]').value = data.description || '';
+        clone.querySelector('[name="qty"]').value = data.qty || 1;
+        clone.querySelector('[name="unit_price"]').value = data.unit_price || '';
+      }
+      clone.querySelector('.remove-invoice-line').addEventListener('click', e => e.target.closest('.invoice-line').remove());
+      container.appendChild(clone);
+    }
+
+    document.getElementById('add-invoice-line').addEventListener('click', () => addLine());
+
+    if (prefill.length) {
+      prefill.forEach(addLine);
+    } else {
+      addLine();
+    }
+
+    const customerSelect = document.getElementById('customer-select');
+    if (customerSelect) {
+      customerSelect.addEventListener('change', () => {
+        const opt = customerSelect.options[customerSelect.selectedIndex];
+        document.getElementById('customer-name').value = opt.dataset.name || '';
+        document.getElementById('customer-phone').value = opt.dataset.phone || '';
+        document.getElementById('customer-email').value = opt.dataset.email || '';
+      });
+    }
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "web/auth_base.html" %}
+{% block title %}Verify it's you · SportTech{% endblock %}
+{% block form_content %}
+<a href="{% url 'web-register' %}" class="inline-flex items-center gap-2 text-sm font-semibold text-ink/80 hover:text-ink">
+  <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-arrow-left"/></svg>Back
+</a>
+
+<h2 class="display text-3xl sm:text-4xl mt-6">Verify it's you</h2>
+<p class="mt-2 text-sm text-gray-500">We've sent a 6-digit code to <span class="font-semibold text-ink">{{ destination }}</span></p>
+
+<form method="post" class="mt-8 space-y-6">
+  {% csrf_token %}
+  <div class="flex gap-3" data-otp-group>
+    {% for i in "123456" %}
+      <input type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code"
+             class="otp-digit w-full aspect-square text-center text-lg font-bold rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+    {% endfor %}
+  </div>
+  <input type="hidden" name="code" data-otp-hidden>
+
+  {% if errors %}
+    <p class="text-sm text-red-600">{{ errors }}</p>
+  {% endif %}
+
+  <div class="flex items-center justify-between text-sm">
+    <span class="text-gray-400" data-countdown data-seconds="30">Resend code in <span data-countdown-value>0:30</span></span>
+    <button type="submit" name="action" value="resend" class="font-semibold text-gray-300 pointer-events-none" data-resend-btn>Resend code</button>
+  </div>
+
+  <button type="submit" name="action" value="verify" class="w-full rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-3.5 transition-colors">
+    Verify
+  </button>
+</form>
+
+<script>
+  const digits = document.querySelectorAll('.otp-digit');
+  const hidden = document.querySelector('[data-otp-hidden]');
+  const syncHidden = () => hidden.value = Array.from(digits).map(d => d.value).join('');
+  digits.forEach((input, idx) => {
+    input.addEventListener('input', () => {
+      input.value = input.value.replace(/\D/g, '').slice(0, 1);
+      if (input.value && digits[idx + 1]) digits[idx + 1].focus();
+      syncHidden();
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && !input.value && digits[idx - 1]) digits[idx - 1].focus();
+    });
+    input.addEventListener('paste', (e) => {
+      const text = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+      if (!text) return;
+      e.preventDefault();
+      text.split('').forEach((ch, i) => { if (digits[i]) digits[i].value = ch; });
+      syncHidden();
+      digits[Math.min(text.length, 5)].focus();
+    });
+  });
+  if (digits[0]) digits[0].focus();
+
+  let seconds = parseInt(document.querySelector('[data-countdown]').dataset.seconds, 10);
+  const valueEl = document.querySelector('[data-countdown-value]');
+  const resendBtn = document.querySelector('[data-resend-btn]');
+  const tick = () => {
+    seconds -= 1;
+    const m = Math.floor(Math.max(seconds, 0) / 60);
+    const s = Math.max(seconds, 0) % 60;
+    valueEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
+    if (seconds <= 0) {
+      clearInterval(timer);
+      document.querySelector('[data-countdown]').classList.add('hidden');
+      resendBtn.classList.remove('text-gray-300', 'pointer-events-none');
+      resendBtn.classList.add('text-brand', 'hover:text-brand-dark');
+    }
+  };
+  const timer = setInterval(tick, 1000);
+</script>
+{% endblock %}

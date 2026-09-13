@@ -1,0 +1,91 @@
+{% extends "web/base.html" %}
+{% block content %}
+{% include "web/_icons.html" %}
+<div class="min-h-screen flex flex-col lg:flex-row">
+
+  <!-- Account sidebar (desktop only - mobile uses the bottom tab bar + back header below) -->
+  <aside class="hidden lg:flex bg-ink text-white lg:w-64 shrink-0 flex-col justify-between px-6 py-8 lg:min-h-screen">
+    <div>
+      <a href="{% url 'web-home' %}" class="flex items-center gap-2.5">
+        <span class="w-8 h-8 rounded-lg bg-white flex items-center justify-center">
+          <span class="block w-4 h-1 rounded-full bg-brand"></span>
+        </span>
+        <span class="display text-lg">Sport<span class="text-brand">Tech</span></span>
+      </a>
+
+      <div class="h-px bg-white/10 my-6"></div>
+
+      <p class="text-xs font-bold tracking-widest text-white/40 uppercase mb-3">My account</p>
+      <nav class="space-y-1 text-sm font-semibold">
+        {% with active=active_nav %}
+        <a href="{% url 'web-account-overview' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'overview' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-home"/></svg>Overview
+        </a>
+        <a href="{% url 'web-account-orders' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'orders' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-bag"/></svg>My orders</span>
+          {% if orders_count %}<span class="text-xs font-bold bg-white/15 rounded-full w-5 h-5 flex items-center justify-center {% if active == 'orders' %}bg-white/25{% endif %}">{{ orders_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'web-account-addresses' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'addresses' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-pin"/></svg>Addresses
+        </a>
+        <a href="{% url 'web-account-payment-methods' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'payment-methods' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-card"/></svg>Payment methods
+        </a>
+        <a href="{% url 'web-wishlist' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'wishlist' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-heart"/></svg>Wishlist</span>
+          {% if wishlist_count %}<span class="text-xs font-bold bg-white/15 rounded-full w-5 h-5 flex items-center justify-center {% if active == 'wishlist' %}bg-white/25{% endif %}">{{ wishlist_count }}</span>{% endif %}
+        </a>
+        {% endwith %}
+      </nav>
+    </div>
+
+    <div class="pt-6 mt-6 border-t border-white/10">
+      {% if request.user.is_authenticated %}
+        <div class="flex items-center gap-3">
+          <span class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+            <svg viewBox="0 0 24 24" class="w-4 h-4 text-white/70"><use href="#icon-user"/></svg>
+          </span>
+          <div class="text-sm min-w-0">
+            <p class="font-bold truncate">{{ request.user.full_name|default:request.user.email|default:request.user.phone }}</p>
+            <p class="text-white/40 text-xs">{{ request.user.get_role_display }}</p>
+          </div>
+        </div>
+        <a href="{% url 'web-logout' %}" class="mt-4 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-white/70 hover:bg-white/5 hover:text-white">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-x"/></svg>Log out
+        </a>
+      {% else %}
+        <a href="{% url 'web-login' %}" class="text-sm font-bold text-white/70 hover:text-white">Log in to sync your account</a>
+      {% endif %}
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <div class="flex-1 min-w-0">
+    <!-- Mobile back header -->
+    <div class="lg:hidden flex items-center gap-3 px-4 py-4 border-b border-gray-200 bg-white sticky top-0 z-30">
+      <a href="{% if active_nav == 'overview' %}{% url 'web-home' %}{% else %}{% url 'web-account-overview' %}{% endif %}"
+         class="w-9 h-9 rounded-full border border-gray-200 flex items-center justify-center shrink-0">
+        <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-arrow-left"/></svg>
+      </a>
+      <h1 class="font-bold text-lg">{% block account_title_mobile %}{% endblock %}</h1>
+    </div>
+
+    <!-- Desktop header -->
+    <div class="hidden lg:flex bg-white border-b border-gray-200 px-6 sm:px-10 py-6 items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h1 class="display text-2xl">{% block account_title %}{% endblock %}</h1>
+        <p class="text-sm text-gray-400 mt-1">{% block account_subtitle %}{% endblock %}</p>
+      </div>
+      <div class="flex items-center gap-3 shrink-0">
+        <a href="{% url 'web-account-orders' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">View orders</a>
+        <a href="{% url 'web-home' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">Continue shopping</a>
+      </div>
+    </div>
+
+    <div class="px-4 sm:px-6 lg:px-10 py-6 lg:py-8">
+      {% block account_content %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% include "web/_mobile_tabbar.html" %}
+{% endblock %}

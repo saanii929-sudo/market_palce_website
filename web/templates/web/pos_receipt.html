@@ -1,0 +1,42 @@
+{% extends "web/base.html" %}
+{% block title %}Receipt {{ sale.receipt_number }} · SportTech{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto py-10 px-4">
+  <div class="rounded-2xl bg-white border border-gray-200 p-6" id="receipt">
+    <div class="text-center mb-5">
+      <p class="display text-xl">{{ seller.business_name }}</p>
+      {% if seller.support_phone %}<p class="text-xs text-gray-400 mt-1">{{ seller.support_phone }}</p>{% endif %}
+    </div>
+    <div class="text-xs text-gray-500 flex justify-between border-b border-dashed border-gray-200 pb-3 mb-3">
+      <span>{{ sale.receipt_number }}</span>
+      <span>{{ sale.sold_at|date:"M d, Y H:i" }}</span>
+    </div>
+    {% if sale.customer_name %}<p class="text-xs text-gray-500 mb-3">Customer: {{ sale.customer_name }}</p>{% endif %}
+    {% if sale.employee %}<p class="text-xs text-gray-500 mb-3">Served by: {{ sale.employee.full_name }}</p>{% endif %}
+
+    <div class="space-y-2 border-b border-dashed border-gray-200 pb-3 mb-3">
+      {% for item in sale.items.all %}
+        <div class="flex justify-between text-sm">
+          <span>{{ item.qty }} × {{ item.product.name }}</span>
+          <span class="font-semibold">GH₵{{ item.line_total }}</span>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="space-y-1.5 text-sm">
+      <div class="flex justify-between text-gray-500"><span>Subtotal</span><span>GH₵{{ sale.subtotal }}</span></div>
+      {% if sale.discount_amount %}<div class="flex justify-between text-gray-500"><span>Discount</span><span>-GH₵{{ sale.discount_amount }}</span></div>{% endif %}
+      <div class="flex justify-between text-base font-bold pt-1"><span>Total</span><span>GH₵{{ sale.total }}</span></div>
+      <div class="flex justify-between text-gray-500 text-xs pt-1"><span>Paid via</span><span>{{ sale.get_payment_method_display }}</span></div>
+      {% if sale.change_due %}<div class="flex justify-between text-gray-500 text-xs"><span>Change</span><span>GH₵{{ sale.change_due }}</span></div>{% endif %}
+    </div>
+
+    <p class="text-center text-xs text-gray-400 mt-6">Thank you for shopping with us!</p>
+  </div>
+
+  <div class="flex gap-3 mt-5 print:hidden">
+    <button onclick="window.print()" class="flex-1 rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-3 transition-colors">Print receipt</button>
+    <a href="{% url 'web-pos-terminal' %}" class="flex-1 text-center rounded-xl border border-gray-200 font-bold py-3 hover:border-ink transition-colors">New sale</a>
+  </div>
+</div>
+{% endblock %}

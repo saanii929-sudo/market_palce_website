@@ -1,0 +1,144 @@
+{% extends "web/base.html" %}
+{% block title %}Checkout · SportTech{% endblock %}
+{% block content %}
+{% include "web/_site_header.html" %}
+<main class="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+  <h1 class="display text-3xl mb-6">Checkout</h1>
+
+  <!-- Step indicator (this is a single-page checkout - purely a progress cue, not separate routes) -->
+  <div class="flex items-center gap-3 mb-10 text-sm font-semibold overflow-x-auto no-scrollbar" data-step-indicator>
+    <span class="flex items-center gap-2 text-green-600 shrink-0">
+      <span class="w-6 h-6 rounded-full bg-green-600 text-white flex items-center justify-center text-xs">✓</span>Cart
+    </span>
+    <span class="h-px w-8 bg-gray-200 shrink-0"></span>
+    <span class="flex items-center gap-2 text-brand shrink-0">
+      <span class="w-6 h-6 rounded-full bg-brand text-white flex items-center justify-center text-xs">2</span>Address &amp; delivery
+    </span>
+    <span class="h-px w-8 bg-gray-200 shrink-0"></span>
+    <span class="flex items-center gap-2 text-gray-300 shrink-0">
+      <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-xs">3</span>Payment
+    </span>
+    <span class="h-px w-8 bg-gray-200 shrink-0"></span>
+    <span class="flex items-center gap-2 text-gray-300 shrink-0">
+      <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-xs">4</span>Review
+    </span>
+  </div>
+
+  <form method="post" class="grid lg:grid-cols-3 gap-10">
+    {% csrf_token %}
+
+    <div class="lg:col-span-2 space-y-8">
+      <section>
+        <h2 class="font-bold text-lg mb-3">Delivery address</h2>
+        {% if addresses %}
+          <div class="space-y-2">
+            {% for address in addresses %}
+              <label class="flex items-start gap-3 rounded-xl border border-gray-200 p-4 cursor-pointer has-[:checked]:border-ink">
+                <input type="radio" name="address_id" value="{{ address.id }}" {% if address.is_default %}checked{% endif %} class="mt-1 text-brand focus:ring-brand/40">
+                <span class="text-sm">
+                  <span class="font-bold">{{ address.label|default:"Address" }}</span>
+                  <span class="block text-gray-500 mt-0.5">{{ address.line1 }}{% if address.line2 %}, {{ address.line2 }}{% endif %}, {{ address.city }}</span>
+                </span>
+              </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-sm text-gray-400 mb-3">You don't have a saved address yet.</p>
+        {% endif %}
+
+        <details class="mt-3" {% if not addresses %}open{% endif %}>
+          <summary class="text-sm font-semibold text-brand cursor-pointer">+ Add a new address</summary>
+          {% comment %}
+          These inputs deliberately aren't wrapped in their own <form> - a
+          <form> can't legally nest inside the page's main checkout <form>
+          (browsers silently truncate the outer one if it tries). Instead the
+          submit button below overrides the action/method for just this
+          click via formaction/formmethod, while staying part of the same
+          outer form as everything else on the page.
+          {% endcomment %}
+          <div class="mt-3 grid sm:grid-cols-2 gap-3 rounded-xl border border-gray-200 p-4">
+            <input name="label" placeholder="Label (e.g. Home, Work)" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm sm:col-span-2">
+            <input name="recipient_name" placeholder="Recipient name" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm sm:col-span-2">
+            <input name="phone" placeholder="Phone number" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+            <input name="city" placeholder="City" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+            <input name="line1" placeholder="Address line 1" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm sm:col-span-2">
+            <input name="line2" placeholder="Address line 2 (optional)" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm sm:col-span-2">
+            <input name="region" placeholder="Region (optional)" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+            <input name="country" placeholder="Country" value="Ghana" class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+            <button type="submit" formaction="{% url 'web-address-add' %}" formmethod="post" formnovalidate
+                    class="sm:col-span-2 rounded-lg bg-ink text-white text-sm font-semibold py-2.5">
+              Save address
+            </button>
+          </div>
+        </details>
+      </section>
+
+      <section>
+        <h2 class="font-bold text-lg mb-3">Delivery method</h2>
+        <div class="space-y-2">
+          {% for method in delivery_methods %}
+            <label class="flex items-center justify-between rounded-xl border border-gray-200 p-4 cursor-pointer has-[:checked]:border-ink">
+              <span class="flex items-center gap-3 text-sm">
+                <input type="radio" name="delivery_method_id" value="{{ method.id }}" {% if forloop.first %}checked{% endif %} class="text-brand focus:ring-brand/40">
+                <span>
+                  <span class="font-semibold">{{ method.name }} delivery</span>
+                  <span class="block text-gray-400 text-xs">{{ method.eta_days_min }}–{{ method.eta_days_max }} business days</span>
+                </span>
+              </span>
+              <span class="font-semibold text-sm">{% if method.price %}GH₵{{ method.price }}{% else %}Free{% endif %}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section>
+        <h2 class="font-bold text-lg mb-3">Payment method</h2>
+        <div class="space-y-2">
+          {% for token in payment_tokens %}
+            <label class="flex items-center justify-between rounded-xl border border-gray-200 p-4 cursor-pointer has-[:checked]:border-ink">
+              <span class="flex items-center gap-3 text-sm">
+                <input type="radio" name="payment_token_id" value="{{ token.id }}" {% if forloop.first %}checked{% endif %} class="text-brand focus:ring-brand/40">
+                <span>
+                  <span class="font-bold uppercase">{{ token.brand }} •••• {{ token.last4 }}</span>
+                  {% if token.expiry_month %}<span class="block text-gray-400 text-xs">Expires {{ token.expiry_month }}/{{ token.expiry_year }}</span>{% endif %}
+                </span>
+              </span>
+            </label>
+          {% endfor %}
+          {% if payment_tokens and cod_method %}
+            <label class="flex items-center gap-3 rounded-xl border border-gray-200 p-4 cursor-pointer has-[:checked]:border-ink text-sm">
+              <input type="radio" name="payment_token_id" value=""
+                     onclick="document.querySelector('[name=payment_method_id]').value='{{ cod_method.id }}'"
+                     class="text-brand focus:ring-brand/40">
+              <span class="font-semibold">{{ cod_method.name }}</span>
+            </label>
+            <input type="hidden" name="payment_method_id" value="">
+          {% endif %}
+          {% for method in payment_methods %}
+            <label class="flex items-center gap-3 rounded-xl border border-gray-200 p-4 cursor-pointer has-[:checked]:border-ink text-sm">
+              <input type="radio" name="payment_method_id" value="{{ method.id }}" {% if forloop.first %}checked{% endif %} class="text-brand focus:ring-brand/40">
+              <span class="font-semibold">{{ method.name }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+
+    <div class="rounded-2xl border border-gray-200 bg-white p-6 h-fit space-y-3">
+      <h2 class="font-bold text-lg mb-2">Order summary</h2>
+      <div class="flex justify-between text-sm"><span class="text-gray-500">Subtotal</span><span class="font-semibold">GH₵{{ totals.subtotal }}</span></div>
+      {% if totals.discount_amount %}
+        <div class="flex justify-between text-sm"><span class="text-gray-500">Discount</span><span class="font-semibold text-green-600">-GH₵{{ totals.discount_amount }}</span></div>
+      {% endif %}
+      <div class="flex justify-between text-sm"><span class="text-gray-500">Delivery</span><span class="font-semibold">{% if totals.delivery_fee %}GH₵{{ totals.delivery_fee }}{% else %}Free{% endif %}</span></div>
+      <div class="h-px bg-gray-100 my-2"></div>
+      <div class="flex justify-between font-bold"><span>Total</span><span>GH₵{{ totals.total }}</span></div>
+      <button type="submit" {% if not addresses %}disabled{% endif %}
+              class="w-full mt-4 rounded-xl bg-brand hover:bg-brand-dark disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-3.5 transition-colors">
+        Place order
+      </button>
+    </div>
+  </form>
+</main>
+{% include "web/_site_footer.html" %}
+{% endblock %}

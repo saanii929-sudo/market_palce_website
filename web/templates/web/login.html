@@ -1,0 +1,93 @@
+{% extends "web/auth_base.html" %}
+{% block title %}Log in · SportTech{% endblock %}
+{% block form_content %}
+<h2 class="display text-3xl sm:text-4xl">Welcome back</h2>
+<p class="mt-2 text-sm text-gray-500">Log in to pick up your gear where you left off.</p>
+
+<form method="post" class="mt-8 space-y-5">
+  {% csrf_token %}
+  <input type="hidden" name="channel" value="{{ channel|default:'email' }}" data-channel-input>
+
+  <div class="grid grid-cols-2 rounded-xl bg-gray-100 p-1 text-sm font-semibold" data-tabs>
+    <button type="button" data-tab="email" class="tab-btn rounded-lg py-2.5 bg-white shadow-sm">Email</button>
+    <button type="button" data-tab="phone" class="tab-btn rounded-lg py-2.5 text-gray-400">Phone</button>
+  </div>
+
+  <div data-panel="email">
+    <label class="block text-sm font-semibold mb-1.5" for="id_email">Email address</label>
+    <input id="id_email" name="identifier" type="email" placeholder="you@example.com"
+           value="{% if channel == 'email' %}{{ identifier|default:'' }}{% endif %}"
+           class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+  </div>
+  <div data-panel="phone" class="hidden">
+    <label class="block text-sm font-semibold mb-1.5" for="id_phone">Phone number</label>
+    <input id="id_phone" name="identifier_phone" type="tel" placeholder="+233 20 123 4567"
+           value="{% if channel == 'phone' %}{{ identifier|default:'' }}{% endif %}"
+           class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+  </div>
+
+  <div>
+    <label class="block text-sm font-semibold mb-1.5" for="id_password">Password</label>
+    <div class="relative">
+      <input id="id_password" name="password" type="password" placeholder="••••••••"
+             class="w-full rounded-xl border border-gray-200 px-4 py-3 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+      <button type="button" data-toggle-password="id_password" class="absolute inset-y-0 right-0 px-3.5 text-gray-400 hover:text-gray-600">
+        <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-eye"/></svg>
+      </button>
+    </div>
+  </div>
+
+  {% if errors %}
+    <p class="text-sm text-red-600">{{ errors }}</p>
+  {% endif %}
+
+  <div class="text-right -mt-2">
+    <a href="{% url 'web-forgot-password' %}" class="text-sm font-semibold text-brand hover:text-brand-dark">Forgot password?</a>
+  </div>
+
+  <button type="submit" class="w-full rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-3.5 transition-colors">
+    Log in
+  </button>
+
+  <div class="flex items-center gap-3 py-1">
+    <span class="h-px flex-1 bg-gray-200"></span>
+    <span class="text-xs text-gray-400">or continue with</span>
+    <span class="h-px flex-1 bg-gray-200"></span>
+  </div>
+
+  <div class="grid grid-cols-2 gap-3">
+    <a href="{% url 'web-social-login' 'google' %}" class="flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-3 text-sm font-semibold hover:bg-gray-50">
+      <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-google"/></svg>Google
+    </a>
+    <a href="{% url 'web-social-login' 'apple' %}" class="flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-3 text-sm font-semibold hover:bg-gray-50">
+      <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-apple"/></svg>Apple
+    </a>
+  </div>
+
+  <p class="text-center text-sm text-gray-500">
+    New to SportTech? <a href="{% url 'web-register' %}" class="font-bold text-brand hover:text-brand-dark">Create an account</a>
+  </p>
+</form>
+
+<script>
+  document.querySelectorAll('[data-tabs] .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-tabs] .tab-btn').forEach(b => b.classList.remove('bg-white', 'shadow-sm'));
+      document.querySelectorAll('[data-tabs] .tab-btn').forEach(b => b.classList.add('text-gray-400'));
+      btn.classList.add('bg-white', 'shadow-sm');
+      btn.classList.remove('text-gray-400');
+      document.querySelectorAll('[data-panel]').forEach(p => p.classList.add('hidden'));
+      document.querySelector(`[data-panel="${btn.dataset.tab}"]`).classList.remove('hidden');
+      document.querySelector('[data-channel-input]').value = btn.dataset.tab;
+    });
+  });
+  document.querySelectorAll('[data-toggle-password]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.togglePassword);
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      btn.innerHTML = `<svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-${showing ? 'eye' : 'eye-off'}"/></svg>`;
+    });
+  });
+</script>
+{% endblock %}

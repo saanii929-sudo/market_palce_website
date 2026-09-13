@@ -1,0 +1,82 @@
+{% extends "web/seller_base.html" %}
+{% load web_extras %}
+{% block seller_title %}Products{% endblock %}
+{% block seller_subtitle %}{{ products_count }} product{{ products_count|pluralize }} listed{% endblock %}
+
+{% block seller_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="p-5 flex items-center justify-between gap-4 flex-wrap border-b border-gray-100">
+    <form method="get" class="flex-1 min-w-[220px] max-w-sm">
+      <label class="relative block">
+        <svg viewBox="0 0 24 24" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"><use href="#icon-search"/></svg>
+        <input type="text" name="q" value="{{ query }}" placeholder="Search your products"
+               class="w-full rounded-xl border border-gray-200 bg-gray-50 pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </label>
+    </form>
+    <a href="{% url 'web-seller-product-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors shrink-0">+ Add product</a>
+  </div>
+
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Product</th>
+          <th class="px-5 py-3">Category</th>
+          <th class="px-5 py-3">Price</th>
+          <th class="px-5 py-3">Stock</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for product in products %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4">
+              <div class="flex items-center gap-3">
+                {% with photo=product.images.first.resolved_url %}
+                  {% if photo %}
+                    <span class="w-10 h-10 rounded-lg overflow-hidden shrink-0"><img src="{{ photo }}" class="w-full h-full object-cover" alt="{{ product.name }}"></span>
+                  {% else %}
+                    <span class="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0" style="background: {{ product|placeholder_gradient }}">{{ product.name|initial }}</span>
+                  {% endif %}
+                {% endwith %}
+                <span class="font-bold">{{ product.name }}</span>
+              </div>
+            </td>
+            <td class="px-5 py-4 text-gray-500">{{ product.category.name }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ product.price }}</td>
+            <td class="px-5 py-4">
+              {% if product.stock_qty == 0 %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Out of stock</span>
+              {% else %}
+                {{ product.stock_qty }}
+              {% endif %}
+            </td>
+            <td class="px-5 py-4">
+              <form method="post" action="{% url 'web-seller-product-toggle' product.id %}">
+                {% csrf_token %}
+                <button type="submit" aria-label="Toggle status" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors {% if product.is_active %}bg-green-500{% else %}bg-gray-200{% endif %}">
+                  <span class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform {% if product.is_active %}translate-x-5{% else %}translate-x-0.5{% endif %}"></span>
+                </button>
+              </form>
+            </td>
+            <td class="px-5 py-4">
+              <div class="flex items-center gap-2 justify-end">
+                <a href="{% url 'web-seller-product-edit' product.id %}" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">Edit</a>
+                <form method="post" action="{% url 'web-seller-product-delete' product.id %}" onsubmit="return confirm('Delete this product?');">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">
+            {% if query %}No products match "{{ query }}".{% else %}You haven't listed any products yet.{% endif %}
+          </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

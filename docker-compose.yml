@@ -1,0 +1,90 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sporttech}
+      POSTGRES_USER: ${POSTGRES_USER:-sporttech}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sporttech} -d ${POSTGRES_DB:-sporttech}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    restart: unless-stopped
+    command: gunicorn sports_shop.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 60
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-sporttech}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sporttech}
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      # Coolify auto-detects/proxies this; keep it if you also want to run
+      # `docker compose up` standalone and hit the app directly on :8000.
+      - "8000:8000"
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: celery -A sports_shop worker --loglevel=info
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-sporttech}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sporttech}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+  beat:
+    build: .
+    restart: unless-stopped
+    command: celery -A sports_shop beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-sporttech}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sporttech}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_data:

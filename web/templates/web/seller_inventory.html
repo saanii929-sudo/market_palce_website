@@ -1,0 +1,102 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Inventory{% endblock %}
+{% block seller_subtitle %}{% if view == 'expiry' %}Batches nearing or past their expiry date{% else %}Stock levels and value across your store{% endif %}{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-inventory-export' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Download CSV</a>
+  <a href="{% url 'web-seller-purchase-order-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">+ Restock</a>
+{% endblock %}
+
+{% block seller_content %}
+<div class="flex items-center gap-2 mb-5">
+  <a href="?view=stock" class="text-xs font-bold px-4 py-2 rounded-full {% if view != 'expiry' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Stock levels</a>
+  <a href="?view=expiry" class="text-xs font-bold px-4 py-2 rounded-full {% if view == 'expiry' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Expiry tracking</a>
+</div>
+
+{% if view == 'expiry' %}
+  <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+    <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+            <th class="px-5 py-3">Product</th>
+            <th class="px-5 py-3">Batch</th>
+            <th class="px-5 py-3">Qty remaining</th>
+            <th class="px-5 py-3">Expiry date</th>
+            <th class="px-5 py-3">Status</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for batch in batches %}
+            <tr class="border-b border-gray-50 last:border-0">
+              <td class="px-5 py-4 font-bold">{{ batch.product.name }}</td>
+              <td class="px-5 py-4 text-gray-500">{{ batch.batch_code }}</td>
+              <td class="px-5 py-4">{{ batch.qty_remaining }}</td>
+              <td class="px-5 py-4 text-gray-500">{{ batch.expiry_date|date:"M d, Y"|default:"—" }}</td>
+              <td class="px-5 py-4">
+                {% if batch.is_expired %}
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Expired</span>
+                {% elif batch.is_expiring_soon %}
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Expiring soon</span>
+                {% else %}
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Fresh</span>
+                {% endif %}
+              </td>
+              <td class="px-5 py-4 text-right">
+                {% if batch.is_expired or batch.is_expiring_soon %}
+                  <form method="post" action="{% url 'web-seller-batch-write-off' batch.id %}" onsubmit="return confirm('Write off this batch? Remaining stock will be removed and logged as an expense.');">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Write off</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">No batches with expiry dates on file yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% else %}
+  <div class="rounded-2xl bg-white border border-gray-200 p-5 mb-5 max-w-xs">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">TOTAL INVENTORY VALUE</p>
+    <p class="display text-2xl mt-2">GH₵{{ inventory_value|floatformat:0 }}</p>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+    <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+            <th class="px-5 py-3">Product</th>
+            <th class="px-5 py-3">Category</th>
+            <th class="px-5 py-3">Stock</th>
+            <th class="px-5 py-3">Unit cost</th>
+            <th class="px-5 py-3">Stock value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for product in products %}
+            <tr class="border-b border-gray-50 last:border-0">
+              <td class="px-5 py-4 font-bold">{{ product.name }}</td>
+              <td class="px-5 py-4 text-gray-500">{{ product.category.name }}</td>
+              <td class="px-5 py-4">
+                {% if product.stock_qty <= low_stock_threshold %}
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">{{ product.stock_qty }} low</span>
+                {% else %}
+                  {{ product.stock_qty }}
+                {% endif %}
+              </td>
+              <td class="px-5 py-4 text-gray-500">GH₵{{ product.cost_price }}</td>
+              <td class="px-5 py-4 font-bold">GH₵{{ product.stock_value|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No products yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

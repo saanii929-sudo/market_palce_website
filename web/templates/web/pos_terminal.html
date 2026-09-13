@@ -1,0 +1,378 @@
+{% extends "web/seller_base.html" %}
+{% load web_extras %}
+{% block seller_title %}POS terminal{% endblock %}
+{% block seller_subtitle %}{% if employee %}Clocked in as {{ employee.full_name }}{% else %}Clock in to start selling{% endif %}{% endblock %}
+{% block seller_actions %}
+  {% if employee %}
+    <form method="post" action="{% url 'web-pos-clock-out' %}">
+      {% csrf_token %}
+      <button type="submit" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Clock out</button>
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block seller_content %}
+{% if not employee %}
+  <!-- PIN pad / employee picker -->
+  <div class="max-w-md mx-auto rounded-2xl bg-white border border-gray-200 p-6">
+    <h2 class="display text-xl mb-4">Who's ringing up sales?</h2>
+    <form method="post" action="{% url 'web-pos-clock-in' %}" class="space-y-5">
+      {% csrf_token %}
+      <div class="grid grid-cols-3 gap-3">
+        {% for emp in employees %}
+          <label class="cursor-pointer">
+            <input type="radio" name="employee_id" value="{{ emp.id }}" class="peer sr-only" {% if forloop.first %}checked{% endif %}>
+            <span class="flex flex-col items-center gap-2 rounded-xl border-2 border-gray-200 peer-checked:border-brand peer-checked:bg-brand/5 px-3 py-4">
+              <span class="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white" style="background: {{ emp|placeholder_gradient }}">{{ emp.full_name|initial }}</span>
+              <span class="text-xs font-bold text-center leading-tight">{{ emp.full_name }}</span>
+            </span>
+          </label>
+        {% empty %}
+          <p class="col-span-3 text-sm text-gray-400">No active employees yet. <a href="{% url 'web-seller-employee-add' %}" class="text-brand font-bold">Add one</a> to use the till.</p>
+        {% endfor %}
+      </div>
+
+      {% if employees %}
+        <div>
+          <label class="block text-sm font-bold mb-2">PIN</label>
+          <input type="password" name="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autofocus
+                 class="w-full rounded-xl border border-gray-200 px-4 py-3 text-center text-2xl tracking-[0.5em] focus:outline-none focus:border-ink">
+        </div>
+        <button type="submit" class="w-full rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-3 transition-colors">Clock in</button>
+      {% endif %}
+    </form>
+  </div>
+
+{% else %}
+  <!-- Till -->
+  <div class="grid lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-5">
+      <div class="rounded-2xl bg-white border border-gray-200 p-5">
+        <label class="block text-sm font-bold mb-2">Scan or enter barcode / SKU</label>
+        <div class="flex gap-2">
+          <input type="text" id="barcode-input" placeholder="Scan with a USB scanner, or type and press Enter" autofocus
+                 class="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-ink">
+          <button type="button" id="camera-scan-btn" class="rounded-xl border border-gray-200 px-4 hover:border-ink transition-colors" title="Scan with camera">
+            <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-barcode"/></svg>
+          </button>
+        </div>
+        <p id="scan-feedback" class="text-xs mt-2 h-4"></p>
+        <video id="camera-preview" class="w-full rounded-xl mt-3 hidden" autoplay muted playsinline></video>
+      </div>
+
+      <div class="rounded-2xl bg-white border border-gray-200 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="display text-lg">Quick add</h2>
+          <input type="text" id="product-search" placeholder="Search products..."
+                 class="rounded-xl border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:border-ink w-40">
+        </div>
+        <div id="product-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {% for product in recent_products %}
+            <button type="button" class="pos-add-tile text-left rounded-xl border border-gray-200 p-3 hover:border-ink transition-colors"
+                    data-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.price }}"
+                    data-stock="{{ product.stock_qty }}" data-image="{{ product.images.first.resolved_url|default:'' }}">
+              {% with photo=product.images.first.resolved_url %}
+                {% if photo %}
+                  <span class="block w-full aspect-square rounded-lg overflow-hidden mb-2"><img src="{{ photo }}" class="w-full h-full object-cover" alt=""></span>
+                {% else %}
+                  <span class="flex w-full aspect-square rounded-lg items-center justify-center text-white font-bold mb-2" style="background: {{ product|placeholder_gradient }}">{{ product.name|initial }}</span>
+                {% endif %}
+              {% endwith %}
+              <span class="block text-xs font-bold truncate">{{ product.name }}</span>
+              <span class="block text-xs text-gray-400">GH₵{{ product.price }}</span>
+            </button>
+          {% empty %}
+            <p class="col-span-3 text-sm text-gray-400">No products yet.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Cart / checkout -->
+    <div class="rounded-2xl bg-white border border-gray-200 p-5 h-fit lg:sticky lg:top-6">
+      <h2 class="display text-lg mb-4">Current sale</h2>
+      <div id="cart-lines" class="space-y-3 max-h-72 overflow-y-auto mb-4">
+        <p id="cart-empty" class="text-sm text-gray-400">Cart is empty — scan or tap a product.</p>
+      </div>
+
+      <form method="post" action="{% url 'web-pos-checkout' %}" id="checkout-form">
+        {% csrf_token %}
+        <div id="hidden-cart-inputs"></div>
+
+        <div class="space-y-3 border-t border-gray-100 pt-4">
+          <div class="flex justify-between text-sm"><span class="text-gray-400">Subtotal</span><span id="subtotal-display" class="font-bold">GH₵0.00</span></div>
+          <div class="flex justify-between items-center text-sm">
+            <span class="text-gray-400">Discount (GH₵)</span>
+            <input type="number" step="0.01" min="0" name="discount_amount" id="discount-input" value="0"
+                   class="w-24 rounded-lg border border-gray-200 px-2 py-1 text-right text-sm focus:outline-none focus:border-ink">
+          </div>
+          <div class="flex justify-between text-base font-bold"><span>Total</span><span id="total-display">GH₵0.00</span></div>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          {% if discounts %}
+            <div>
+              <label class="block text-xs font-bold text-gray-500 mb-1.5">Apply discount</label>
+              <select id="discount-select" name="discount_id" class="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-ink">
+                <option value="">No discount</option>
+                {% for discount in discounts %}
+                  <option value="{{ discount.id }}" data-type="{{ discount.discount_type }}" data-value="{{ discount.value }}">
+                    {{ discount.name }}{% if discount.discount_type == 'percentage' %} (-{{ discount.value }}%){% else %} (-GH₵{{ discount.value }}){% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          {% endif %}
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1.5">Payment method</label>
+            <select name="payment_method" id="payment-method" class="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-ink">
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="mobile_money">Mobile Money</option>
+            </select>
+          </div>
+          <div id="cash-tendered-row">
+            <label class="block text-xs font-bold text-gray-500 mb-1.5">Amount tendered (GH₵)</label>
+            <input type="number" step="0.01" min="0" name="amount_tendered" id="tendered-input"
+                   class="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-ink">
+            <p id="change-display" class="text-xs text-gray-400 mt-1.5"></p>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1.5">Customer (optional)</label>
+            <select name="customer_id" class="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-ink mb-2">
+              <option value="">Walk-in customer</option>
+              {% for customer in customers %}
+                <option value="{{ customer.id }}">{{ customer.full_name }}{% if customer.phone %} — {{ customer.phone }}{% endif %}</option>
+              {% endfor %}
+            </select>
+            <input type="text" name="customer_name" placeholder="Or type a name for a walk-in"
+                   class="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-ink">
+          </div>
+        </div>
+
+        <button type="submit" id="checkout-btn" disabled
+                class="w-full mt-4 rounded-xl bg-brand hover:bg-brand-dark disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-3.5 transition-colors">
+          Charge
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const cart = [];
+      const lookupUrl = "{% url 'web-pos-lookup' %}";
+      const barcodeInput = document.getElementById('barcode-input');
+      const feedback = document.getElementById('scan-feedback');
+      const cartLines = document.getElementById('cart-lines');
+      const cartEmpty = document.getElementById('cart-empty');
+      const hiddenInputs = document.getElementById('hidden-cart-inputs');
+      const subtotalDisplay = document.getElementById('subtotal-display');
+      const totalDisplay = document.getElementById('total-display');
+      const discountInput = document.getElementById('discount-input');
+      const checkoutBtn = document.getElementById('checkout-btn');
+      const paymentMethod = document.getElementById('payment-method');
+      const cashRow = document.getElementById('cash-tendered-row');
+      const tenderedInput = document.getElementById('tendered-input');
+      const changeDisplay = document.getElementById('change-display');
+      const discountSelect = document.getElementById('discount-select');
+
+      function money(n) { return 'GH₵' + n.toFixed(2); }
+
+      function addToCart(product) {
+        const existing = cart.find(l => l.id === product.id);
+        const stock = parseInt(product.stock_qty, 10);
+        if (existing) {
+          if (existing.qty < stock) existing.qty += 1;
+        } else {
+          cart.push({ id: product.id, name: product.name, price: parseFloat(product.price), qty: 1, stock: stock });
+        }
+        render();
+      }
+
+      function removeLine(id) {
+        const idx = cart.findIndex(l => l.id === id);
+        if (idx > -1) cart.splice(idx, 1);
+        render();
+      }
+
+      function changeQty(id, delta) {
+        const line = cart.find(l => l.id === id);
+        if (!line) return;
+        line.qty = Math.max(1, Math.min(line.stock, line.qty + delta));
+        render();
+      }
+
+      function render() {
+        cartLines.innerHTML = '';
+        hiddenInputs.innerHTML = '';
+        if (cart.length === 0) {
+          cartLines.appendChild(cartEmpty);
+        } else {
+          cart.forEach(line => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center justify-between gap-2 text-sm';
+            row.innerHTML = `
+              <div class="min-w-0 flex-1">
+                <p class="font-bold truncate">${line.name}</p>
+                <p class="text-xs text-gray-400">${money(line.price)} each</p>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button type="button" data-dec class="w-6 h-6 rounded border border-gray-200 font-bold text-xs">−</button>
+                <span class="w-5 text-center text-xs font-bold">${line.qty}</span>
+                <button type="button" data-inc class="w-6 h-6 rounded border border-gray-200 font-bold text-xs">+</button>
+                <button type="button" data-rm class="w-6 h-6 rounded text-red-500 text-xs" aria-label="Remove">✕</button>
+              </div>`;
+            row.querySelector('[data-dec]').addEventListener('click', () => changeQty(line.id, -1));
+            row.querySelector('[data-inc]').addEventListener('click', () => changeQty(line.id, 1));
+            row.querySelector('[data-rm]').addEventListener('click', () => removeLine(line.id));
+            cartLines.appendChild(row);
+
+            const pidInput = document.createElement('input');
+            pidInput.type = 'hidden'; pidInput.name = 'product_id'; pidInput.value = line.id;
+            const qtyInput = document.createElement('input');
+            qtyInput.type = 'hidden'; qtyInput.name = 'qty'; qtyInput.value = line.qty;
+            hiddenInputs.appendChild(pidInput);
+            hiddenInputs.appendChild(qtyInput);
+          });
+        }
+        recompute();
+      }
+
+      function recompute() {
+        const subtotal = cart.reduce((sum, l) => sum + l.price * l.qty, 0);
+
+        if (discountSelect && discountSelect.value) {
+          const opt = discountSelect.options[discountSelect.selectedIndex];
+          const value = parseFloat(opt.dataset.value || '0') || 0;
+          const computed = opt.dataset.type === 'percentage' ? subtotal * value / 100 : value;
+          discountInput.value = Math.min(subtotal, computed).toFixed(2);
+          discountInput.readOnly = true;
+        } else if (discountSelect) {
+          discountInput.readOnly = false;
+        }
+
+        const discount = parseFloat(discountInput.value || '0') || 0;
+        const total = Math.max(0, subtotal - discount);
+        subtotalDisplay.textContent = money(subtotal);
+        totalDisplay.textContent = money(total);
+        checkoutBtn.disabled = cart.length === 0;
+        updateChange(total);
+      }
+
+      function updateChange(total) {
+        if (paymentMethod.value !== 'cash') { changeDisplay.textContent = ''; return; }
+        const tendered = parseFloat(tenderedInput.value || '0') || 0;
+        changeDisplay.textContent = tendered > 0 ? `Change due: ${money(Math.max(0, tendered - total))}` : '';
+      }
+
+      discountInput.addEventListener('input', recompute);
+      if (discountSelect) discountSelect.addEventListener('change', recompute);
+      tenderedInput.addEventListener('input', () => recompute());
+      paymentMethod.addEventListener('change', () => {
+        cashRow.classList.toggle('hidden', paymentMethod.value !== 'cash');
+        recompute();
+      });
+
+      function lookupCode(code) {
+        fetch(`${lookupUrl}?code=${encodeURIComponent(code)}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.found) {
+              addToCart(data.product);
+              feedback.textContent = `Added "${data.product.name}".`;
+              feedback.className = 'text-xs mt-2 h-4 text-green-600';
+            } else {
+              feedback.textContent = 'No product found for that code.';
+              feedback.className = 'text-xs mt-2 h-4 text-red-500';
+            }
+          });
+      }
+
+      barcodeInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const code = barcodeInput.value.trim();
+          if (code) lookupCode(code);
+          barcodeInput.value = '';
+        }
+      });
+
+      document.querySelectorAll('.pos-add-tile').forEach(tile => {
+        tile.addEventListener('click', () => {
+          addToCart({
+            id: parseInt(tile.dataset.id, 10), name: tile.dataset.name,
+            price: tile.dataset.price, stock_qty: tile.dataset.stock,
+          });
+        });
+      });
+
+      const productGrid = document.getElementById('product-grid');
+      const productSearch = document.getElementById('product-search');
+      let searchTimer;
+      productSearch.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          const q = productSearch.value.trim();
+          if (!q) return;
+          fetch(`${lookupUrl}?q=${encodeURIComponent(q)}`).then(r => r.json()).then(data => {
+            productGrid.innerHTML = '';
+            (data.results || []).forEach(p => {
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'pos-add-tile text-left rounded-xl border border-gray-200 p-3 hover:border-ink transition-colors';
+              btn.innerHTML = `<span class="block text-xs font-bold truncate">${p.name}</span><span class="block text-xs text-gray-400">GH₵${p.price}</span>`;
+              btn.addEventListener('click', () => addToCart({ id: p.id, name: p.name, price: p.price, stock_qty: p.stock_qty }));
+              productGrid.appendChild(btn);
+            });
+          });
+        }, 300);
+      });
+
+      const cameraBtn = document.getElementById('camera-scan-btn');
+      const cameraPreview = document.getElementById('camera-preview');
+      let cameraStream = null;
+
+      cameraBtn.addEventListener('click', async () => {
+        if (!('BarcodeDetector' in window)) {
+          feedback.textContent = 'Camera scanning isn\'t supported in this browser — use the input field with a USB scanner instead.';
+          feedback.className = 'text-xs mt-2 h-4 text-amber-600';
+          return;
+        }
+        if (cameraStream) {
+          cameraStream.getTracks().forEach(t => t.stop());
+          cameraStream = null;
+          cameraPreview.classList.add('hidden');
+          return;
+        }
+        try {
+          cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          cameraPreview.srcObject = cameraStream;
+          cameraPreview.classList.remove('hidden');
+          const detector = new BarcodeDetector();
+          const scanLoop = async () => {
+            if (!cameraStream) return;
+            try {
+              const codes = await detector.detect(cameraPreview);
+              if (codes.length > 0) {
+                lookupCode(codes[0].rawValue);
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+                cameraPreview.classList.add('hidden');
+                return;
+              }
+            } catch (err) { /* keep trying */ }
+            requestAnimationFrame(scanLoop);
+          };
+          requestAnimationFrame(scanLoop);
+        } catch (err) {
+          feedback.textContent = 'Could not access the camera.';
+          feedback.className = 'text-xs mt-2 h-4 text-red-500';
+        }
+      });
+
+      render();
+    })();
+  </script>
+{% endif %}
+{% endblock %}

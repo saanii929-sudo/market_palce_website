@@ -1,0 +1,24 @@
+Django==6.1.1
+djangorestframework==3.18.1
+djangorestframework-simplejwt==5.5.1
+drf-spectacular==0.30.0
+django-environ==0.14.0
+django-filter==26.1
+Pillow==12.3.0
+celery==5.6.3
+redis==8.1.0
+google-auth==2.58.0
+requests
+PyJWT==2.14.0
+cryptography==50.0.1
+python-dotenv==1.2.3
+
+# Production deployment (Docker/Coolify)
+gunicorn==23.0.0
+whitenoise==6.11.0
+psycopg[binary]==3.2.10
+
+pytest==9.1.1
+pytest-django==4.14.0
+factory_boy==3.3.3
+Faker==40.38.0

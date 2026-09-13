@@ -1,0 +1,96 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Returns{% endblock %}
+{% block seller_subtitle %}Process refunds and restock returned items{% endblock %}
+{% block seller_actions %}{% endblock %}
+
+{% block seller_content %}
+<div class="rounded-2xl bg-white border border-gray-200 p-6 mb-6">
+  <h2 class="display text-lg mb-4">Find a sale</h2>
+  <form method="get" class="flex gap-2 max-w-md">
+    <input type="text" name="receipt" value="{{ receipt_query }}" placeholder="Receipt number, e.g. POS-100004"
+           class="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    <button type="submit" class="rounded-xl bg-ink text-white font-bold text-sm px-5 py-2.5">Find</button>
+  </form>
+
+  {% if sale %}
+    <form method="post" action="{% url 'web-seller-return-process' %}" class="mt-6 space-y-4">
+      {% csrf_token %}
+      <input type="hidden" name="sale_id" value="{{ sale.id }}">
+      <p class="text-sm text-gray-500">Receipt <span class="font-bold text-ink">{{ sale.receipt_number }}</span> · {{ sale.sold_at|date:"M d, Y" }} · Total GH₵{{ sale.total }}</p>
+
+      <div class="rounded-xl border border-gray-200 overflow-hidden">
+        <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100 bg-gray-50">
+                <th class="px-4 py-2.5">Item</th>
+                <th class="px-4 py-2.5">Sold qty</th>
+                <th class="px-4 py-2.5">Already returned</th>
+                <th class="px-4 py-2.5">Return qty</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in sale.items.all %}
+                <tr class="border-b border-gray-50 last:border-0">
+                  <td class="px-4 py-2.5 font-semibold">{{ item.product.name }}</td>
+                  <td class="px-4 py-2.5">{{ item.qty }}</td>
+                  <td class="px-4 py-2.5 text-gray-400">{{ item.returned_qty }}</td>
+                  <td class="px-4 py-2.5">
+                    {% if item.returnable_qty > 0 %}
+                      <input type="hidden" name="sale_item_id" value="{{ item.id }}">
+                      <input type="number" name="return_qty" min="0" max="{{ item.returnable_qty }}" value="0"
+                             class="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:border-ink">
+                    {% else %}
+                      <span class="text-xs text-gray-400">Fully returned</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-bold mb-2">Reason</label>
+        <input type="text" name="reason" class="w-full max-w-md rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <label class="flex items-center gap-2 text-sm font-semibold">
+        <input type="checkbox" name="restock" value="1" checked class="rounded border-gray-300">
+        Return items to stock
+      </label>
+      <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Process return</button>
+    </form>
+  {% endif %}
+</div>
+
+<h2 class="display text-xl mb-4">Recent returns</h2>
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Receipt</th>
+          <th class="px-5 py-3">Reason</th>
+          <th class="px-5 py-3">Processed by</th>
+          <th class="px-5 py-3">Date</th>
+          <th class="px-5 py-3">Refund</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pos_return in returns %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ pos_return.sale.receipt_number }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ pos_return.reason|default:"—" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ pos_return.processed_by.full_name|default:"—" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ pos_return.created_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ pos_return.refund_amount }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No returns processed yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

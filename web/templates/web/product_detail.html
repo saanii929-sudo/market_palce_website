@@ -1,0 +1,213 @@
+{% extends "web/base.html" %}
+{% load web_extras %}
+{% block title %}{{ product.name }} · SportTech{% endblock %}
+{% block content %}
+{% include "web/_site_header.html" %}
+{% include "web/_breadcrumbs.html" %}
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+  <div class="grid md:grid-cols-2 gap-10">
+    {% with photos=product.images.all %}
+    <div>
+      <div class="relative aspect-square rounded-3xl overflow-hidden" style="background: {% if photos.0.resolved_url %}#f3f4f6{% else %}{{ product|placeholder_gradient }}{% endif %}" data-main-image>
+        {% if photos.0.resolved_url %}
+          <img src="{{ photos.0.resolved_url }}" alt="{{ product.name }}" class="w-full h-full object-cover">
+        {% else %}
+          <span class="absolute inset-0 flex items-center justify-center text-8xl font-black text-white/25 display">{{ product.name|initial }}</span>
+        {% endif %}
+        {% if product.discount_percent %}
+          <span class="absolute top-4 left-4 bg-ink text-white text-sm font-bold px-3 py-1.5 rounded-md">-{{ product.discount_percent }}%</span>
+        {% endif %}
+      </div>
+      {% if photos|length > 1 %}
+        <div class="grid grid-cols-3 gap-3 mt-3">
+          {% for photo in photos %}
+            <button type="button" data-thumb="{{ photo.resolved_url }}" class="aspect-square rounded-xl overflow-hidden border-2 border-transparent hover:border-ink">
+              <img src="{{ photo.resolved_url }}" alt="{{ product.name }}" class="w-full h-full object-cover">
+            </button>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+    {% endwith %}
+
+    <div>
+      <p class="text-sm font-bold text-gray-400 uppercase tracking-wide">{{ product.brand.name|default:product.seller.business_name }}</p>
+      <h1 class="display text-3xl mt-1">{{ product.name }}</h1>
+
+      {% if product.review_count %}
+        <div class="flex items-center gap-1.5 mt-3 text-sm">
+          <div class="flex text-amber-500">
+            {% for _ in product.avg_rating|stars %}<svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-star"/></svg>{% endfor %}
+          </div>
+          <span class="font-semibold">{{ product.avg_rating }}</span>
+          <span class="text-gray-400">({{ product.review_count }})</span>
+        </div>
+      {% endif %}
+
+      <div class="flex items-center gap-3 mt-4">
+        <span class="text-2xl font-bold">GH₵{{ product.price }}</span>
+        {% if product.original_price %}<span class="text-gray-400 line-through">GH₵{{ product.original_price }}</span>{% endif %}
+        {% if product.discount_percent %}<span class="text-xs font-bold text-brand bg-brand/10 px-2 py-1 rounded-full">-{{ product.discount_percent }}%</span>{% endif %}
+      </div>
+
+      <form method="post" action="{% url 'web-cart-add' %}" class="mt-6 space-y-5" data-product-form>
+        {% csrf_token %}
+        <input type="hidden" name="product_id" value="{{ product.id }}">
+        <input type="hidden" name="next" value="{{ request.path }}">
+
+        {% if variants %}
+          <div>
+            <label class="block text-sm font-bold mb-2">Size</label>
+            <div class="flex flex-wrap gap-2" data-variant-group>
+              {% for variant in variants %}
+                <label class="cursor-pointer">
+                  <input type="radio" name="variant_id" value="{{ variant.id }}" class="peer sr-only"
+                         {% if forloop.first %}checked{% endif %} {% if not variant.in_stock %}disabled{% endif %}>
+                  <span class="block px-4 py-2 rounded-lg border border-gray-200 text-sm font-bold
+                               peer-checked:bg-ink peer-checked:text-white peer-checked:border-ink
+                               peer-disabled:opacity-30 peer-disabled:line-through">
+                    {{ variant.size }}{% if variant.color %} {{ variant.color }}{% endif %}
+                  </span>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+
+        <div>
+          <label class="block text-sm font-bold mb-2">Quantity</label>
+          <div class="inline-flex items-center rounded-lg border border-gray-200">
+            <button type="button" data-qty-decrement class="w-10 h-10 font-bold hover:bg-gray-50">−</button>
+            <input type="number" name="qty" value="1" min="1" data-qty-input class="w-14 h-10 text-center border-x border-gray-200 focus:outline-none">
+            <button type="button" data-qty-increment class="w-10 h-10 font-bold hover:bg-gray-50">+</button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          {% comment %}
+          Submits to the wishlist toggle endpoint instead of cart-add via
+          formaction/formmethod - reuses this form's product_id/next inputs
+          rather than needing its own nested <form> (illegal inside another).
+          {% endcomment %}
+          <button type="submit" formaction="{% url 'web-wishlist-toggle' %}" formmethod="post" formnovalidate
+                  aria-label="Toggle wishlist"
+                  class="w-12 h-12 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-brand/5 shrink-0 {% if is_wishlisted %}text-brand border-brand/40{% else %}text-brand{% endif %}">
+            <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-{% if is_wishlisted %}heart-filled{% else %}heart{% endif %}"/></svg>
+          </button>
+          <button type="submit" {% if not product.in_stock %}disabled{% endif %}
+                  class="flex-1 rounded-xl bg-brand hover:bg-brand-dark disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-3.5 transition-colors">
+            Add to cart
+          </button>
+          <button type="submit" name="buy_now" value="1" {% if not product.in_stock %}disabled{% endif %}
+                  class="flex-1 rounded-xl border-2 border-ink disabled:border-gray-200 disabled:text-gray-400 font-bold py-3.5 hover:bg-ink hover:text-white transition-colors">
+            Buy now
+          </button>
+        </div>
+      </form>
+
+      <p class="mt-5 text-sm text-gray-500">
+        🚚 Delivery in 2–5 business days · Free over GH₵500
+      </p>
+      <p class="mt-1.5 text-sm text-gray-500">
+        {% if product.is_returnable %}
+          ↩️ Returnable within {{ product.return_window_days }} day{{ product.return_window_days|pluralize }} of delivery
+        {% else %}
+          ↩️ This item is not eligible for returns
+        {% endif %}
+      </p>
+
+      {% if product.seller %}
+        <a href="{% url 'web-seller-detail' product.seller.slug %}" class="mt-5 flex items-center justify-between rounded-xl border border-gray-200 p-4 hover:border-ink transition-colors">
+          <span class="flex items-center gap-3">
+            <span class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+              <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-check"/></svg>
+            </span>
+            <span class="text-sm">
+              <span class="font-bold flex items-center gap-1">{{ product.seller.business_name }}{% if product.seller.is_verified %}<span class="text-green-600">✓</span>{% endif %}</span>
+              <span class="block text-gray-400">★ {{ product.seller.rating }} · {% if product.seller.is_verified %}Verified seller{% else %}Seller{% endif %}</span>
+            </span>
+          </span>
+          <span class="text-sm font-bold border border-gray-200 rounded-lg px-4 py-2">Visit store</span>
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <section class="mt-14" data-tabs-root>
+    <div class="flex gap-8 border-b border-gray-200">
+      <button type="button" data-tab-btn="description" class="pb-3 text-sm font-bold border-b-2 border-ink">Description</button>
+      <button type="button" data-tab-btn="specifications" class="pb-3 text-sm font-bold border-b-2 border-transparent text-gray-400">Specifications</button>
+      <button type="button" data-tab-btn="reviews" class="pb-3 text-sm font-bold border-b-2 border-transparent text-gray-400">Reviews ({{ product.review_count }})</button>
+    </div>
+
+    <div data-tab-panel="description" class="pt-6 max-w-2xl text-sm text-gray-500 leading-relaxed">
+      {{ product.description|linebreaks }}
+    </div>
+
+    <div data-tab-panel="specifications" class="hidden pt-6 max-w-2xl">
+      <dl class="divide-y divide-gray-100 text-sm">
+        <div class="py-3 flex justify-between"><dt class="text-gray-400">SKU</dt><dd class="font-semibold">{{ product.sku }}</dd></div>
+        <div class="py-3 flex justify-between"><dt class="text-gray-400">Category</dt><dd class="font-semibold">{{ product.category.name }}</dd></div>
+        {% if product.brand %}<div class="py-3 flex justify-between"><dt class="text-gray-400">Brand</dt><dd class="font-semibold">{{ product.brand.name }}</dd></div>{% endif %}
+        <div class="py-3 flex justify-between"><dt class="text-gray-400">Stock</dt><dd class="font-semibold">{{ product.stock_qty }} available</dd></div>
+      </dl>
+    </div>
+
+    <div data-tab-panel="reviews" class="hidden pt-6 max-w-2xl space-y-5">
+      {% for review in reviews %}
+        <div class="border-b border-gray-100 pb-5">
+          <div class="flex items-center gap-2">
+            <div class="flex text-amber-500">
+              {% for _ in review.rating|stars %}<svg viewBox="0 0 24 24" class="w-3.5 h-3.5"><use href="#icon-star"/></svg>{% endfor %}
+            </div>
+            <span class="text-sm font-semibold">{{ review.user.full_name|default:"SportTech shopper" }}</span>
+          </div>
+          {% if review.comment %}<p class="text-sm text-gray-500 mt-1.5">{{ review.comment }}</p>{% endif %}
+        </div>
+      {% empty %}
+        <p class="text-sm text-gray-400">No reviews yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if related_products %}
+    <section class="mt-14">
+      <h2 class="display text-2xl mb-5">You may also like</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
+        {% for product in related_products %}{% include "web/_product_card.html" %}{% endfor %}
+      </div>
+    </section>
+  {% endif %}
+</main>
+{% include "web/_site_footer.html" %}
+
+<script>
+  document.querySelectorAll('[data-tab-btn]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-tab-btn]').forEach(b => {
+        b.classList.remove('border-ink');
+        b.classList.add('border-transparent', 'text-gray-400');
+      });
+      btn.classList.remove('border-transparent', 'text-gray-400');
+      btn.classList.add('border-ink');
+      document.querySelectorAll('[data-tab-panel]').forEach(p => p.classList.add('hidden'));
+      document.querySelector(`[data-tab-panel="${btn.dataset.tabBtn}"]`).classList.remove('hidden');
+    });
+  });
+
+  const qtyInput = document.querySelector('[data-qty-input]');
+  document.querySelector('[data-qty-increment]')?.addEventListener('click', () => qtyInput.value = parseInt(qtyInput.value || 1) + 1);
+  document.querySelector('[data-qty-decrement]')?.addEventListener('click', () => qtyInput.value = Math.max(1, parseInt(qtyInput.value || 1) - 1));
+
+  document.querySelectorAll('[data-thumb]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const url = btn.dataset.thumb;
+      if (!url) return;
+      const mainImg = document.querySelector('[data-main-image] img');
+      if (mainImg) mainImg.src = url;
+    });
+  });
+</script>
+{% endblock %}

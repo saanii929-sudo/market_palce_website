@@ -1,0 +1,62 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Reports{% endblock %}
+{% block seller_subtitle %}Every report your store keeps — view, print or download{% endblock %}
+{% block seller_actions %}{% endblock %}
+
+{% block seller_content %}
+<div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  <a href="{% url 'web-seller-pnl' %}" class="rounded-2xl bg-white border border-gray-200 p-6 hover:border-ink transition-colors">
+    <h3 class="display text-lg">Profit &amp; Loss statement</h3>
+    <p class="text-sm text-gray-400 mt-2">Revenue, COGS, gross profit, net income and break-even — the full income statement.</p>
+    <span class="text-brand text-xs font-bold mt-3 inline-block">View report →</span>
+  </a>
+
+  <a href="{% url 'web-pos-reports' %}" class="rounded-2xl bg-white border border-gray-200 p-6 hover:border-ink transition-colors">
+    <h3 class="display text-lg">Sales reports</h3>
+    <p class="text-sm text-gray-400 mt-2">Daily, monthly and yearly in-store sales, payment method mix and top sellers.</p>
+    <span class="text-brand text-xs font-bold mt-3 inline-block">View report →</span>
+  </a>
+
+  <a href="{% url 'web-seller-invoices' %}" class="rounded-2xl bg-white border border-gray-200 p-6 hover:border-ink transition-colors">
+    <h3 class="display text-lg">Invoices</h3>
+    <p class="text-sm text-gray-400 mt-2">Every invoice, its status, and outstanding balance — view, print or download each one.</p>
+    <span class="text-brand text-xs font-bold mt-3 inline-block">View invoices →</span>
+  </a>
+
+  <a href="{% url 'web-seller-inventory-export' %}" class="rounded-2xl bg-white border border-gray-200 p-6 hover:border-ink transition-colors">
+    <h3 class="display text-lg">Inventory report</h3>
+    <p class="text-sm text-gray-400 mt-2">Stock on hand, unit cost and total stock value per product.</p>
+    <span class="text-brand text-xs font-bold mt-3 inline-block">Download CSV ↓</span>
+  </a>
+
+  <a href="{% url 'web-seller-payroll-export' %}" class="rounded-2xl bg-white border border-gray-200 p-6 hover:border-ink transition-colors">
+    <h3 class="display text-lg">Payroll report</h3>
+    <p class="text-sm text-gray-400 mt-2">Every pay run, per-employee base pay, bonuses, deductions and net pay.</p>
+    <span class="text-brand text-xs font-bold mt-3 inline-block">Download CSV ↓</span>
+  </a>
+
+  <a href="{% url 'web-seller-customers-export' %}" class="rounded-2xl bg-white border border-gray-200 p-6 hover:border-ink transition-colors">
+    <h3 class="display text-lg">Customer report</h3>
+    <p class="text-sm text-gray-400 mt-2">Every customer's purchase count and lifetime spend.</p>
+    <span class="text-brand text-xs font-bold mt-3 inline-block">Download CSV ↓</span>
+  </a>
+
+  <a href="{% url 'web-seller-discounts-export' %}" class="rounded-2xl bg-white border border-gray-200 p-6 hover:border-ink transition-colors">
+    <h3 class="display text-lg">Discounts report</h3>
+    <p class="text-sm text-gray-400 mt-2">Usage and total value given away per discount.</p>
+    <span class="text-brand text-xs font-bold mt-3 inline-block">Download CSV ↓</span>
+  </a>
+
+  <a href="{% url 'web-seller-suppliers-export' %}" class="rounded-2xl bg-white border border-gray-200 p-6 hover:border-ink transition-colors">
+    <h3 class="display text-lg">Purchases &amp; suppliers report</h3>
+    <p class="text-sm text-gray-400 mt-2">Every purchase order line, cost and supplier.</p>
+    <span class="text-brand text-xs font-bold mt-3 inline-block">Download CSV ↓</span>
+  </a>
+
+  <a href="{% url 'web-seller-export' %}" class="rounded-2xl bg-white border border-gray-200 p-6 hover:border-ink transition-colors">
+    <h3 class="display text-lg">Online orders report</h3>
+    <p class="text-sm text-gray-400 mt-2">Every online order and what it's worth to your store.</p>
+    <span class="text-brand text-xs font-bold mt-3 inline-block">Download CSV ↓</span>
+  </a>
+</div>
+{% endblock %}

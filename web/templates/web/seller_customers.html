@@ -1,0 +1,63 @@
+{% extends "web/seller_base.html" %}
+{% load web_extras %}
+{% block seller_title %}Customers{% endblock %}
+{% block seller_subtitle %}{{ customers|length }} customer{{ customers|length|pluralize }} on file{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-customers-export' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Download CSV</a>
+{% endblock %}
+
+{% block seller_content %}
+<div class="grid lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 rounded-2xl bg-white border border-gray-200 overflow-hidden h-fit">
+    <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+            <th class="px-5 py-3">Customer</th>
+            <th class="px-5 py-3">Phone</th>
+            <th class="px-5 py-3">Purchases</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for customer in customers %}
+            <tr class="border-b border-gray-50 last:border-0">
+              <td class="px-5 py-4">
+                <div class="flex items-center gap-3">
+                  <span class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style="background: {{ customer|placeholder_gradient }}">{{ customer.full_name|initial }}</span>
+                  <span class="font-bold">{{ customer.full_name }}</span>
+                </div>
+              </td>
+              <td class="px-5 py-4 text-gray-500">{{ customer.phone|default:"—" }}</td>
+              <td class="px-5 py-4 text-gray-500">{{ customer.pos_sales.count }}</td>
+              <td class="px-5 py-4 text-right"><a href="{% url 'web-seller-customer-detail' customer.id %}" class="text-brand font-bold text-xs">View →</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="px-5 py-10 text-center text-gray-400">No customers yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-gray-200 p-6 h-fit">
+    <h2 class="display text-lg mb-4">Add customer</h2>
+    <form method="post" action="{% url 'web-seller-customer-add' %}" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-sm font-bold mb-2">Full name</label>
+        <input type="text" name="full_name" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <div>
+        <label class="block text-sm font-bold mb-2">Phone</label>
+        <input type="text" name="phone" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <div>
+        <label class="block text-sm font-bold mb-2">Email</label>
+        <input type="email" name="email" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <button type="submit" class="w-full rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-3 transition-colors">Add customer</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

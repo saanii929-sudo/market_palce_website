@@ -1,0 +1,70 @@
+{% extends "web/seller_base.html" %}
+{% load web_extras %}
+{% block seller_title %}Sales reports{% endblock %}
+{% block seller_subtitle %}In-store performance — daily, monthly and yearly{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-pos-sales' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">View transactions</a>
+{% endblock %}
+
+{% block seller_content %}
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">TODAY</p>
+    <p class="display text-3xl mt-2">GH₵{{ today_total|floatformat:0 }}</p>
+    <p class="text-xs text-gray-400 mt-2">{{ today_count }} sale{{ today_count|pluralize }}</p>
+  </div>
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">THIS MONTH</p>
+    <p class="display text-3xl mt-2">GH₵{{ month_total|floatformat:0 }}</p>
+  </div>
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">THIS YEAR</p>
+    <p class="display text-3xl mt-2">GH₵{{ year_total|floatformat:0 }}</p>
+  </div>
+</div>
+
+<div class="grid lg:grid-cols-3 gap-6 mt-6">
+  <div class="lg:col-span-2 rounded-2xl bg-white border border-gray-200 p-6">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="display text-lg">Revenue</h2>
+      <div class="flex gap-1.5">
+        <a href="?range=week" class="text-xs font-bold px-3 py-1.5 rounded-full {% if range_param == 'week' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500{% endif %}">Daily</a>
+        <a href="?range=month" class="text-xs font-bold px-3 py-1.5 rounded-full {% if range_param == 'month' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500{% endif %}">Monthly</a>
+        <a href="?range=year" class="text-xs font-bold px-3 py-1.5 rounded-full {% if range_param == 'year' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500{% endif %}">Yearly</a>
+      </div>
+    </div>
+    <div class="flex items-end justify-between gap-3 h-48">
+      {% for point in chart %}
+        <div class="flex-1 flex flex-col items-center justify-end h-full gap-2">
+          <div class="w-full max-w-10 bg-brand rounded-md" style="height: {{ point.percent|default:2 }}%; min-height: 4px;" title="GH₵{{ point.amount }}"></div>
+          <span class="text-xs text-gray-400 font-semibold">{{ point.label }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-gray-200 p-6">
+    <h2 class="display text-lg mb-4">Payment methods</h2>
+    <div class="space-y-4">
+      {% for row in payment_breakdown %}
+        <div>
+          <div class="flex justify-between text-sm mb-1.5"><span class="font-semibold">{{ row.label }}</span><span class="text-gray-400">GH₵{{ row.amount|floatformat:0 }}</span></div>
+          <div class="h-2 rounded-full bg-gray-100 overflow-hidden"><div class="h-full bg-brand" style="width: {{ row.percent }}%"></div></div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <h2 class="display text-lg mt-6 mb-4">Top sellers</h2>
+    <div class="divide-y divide-gray-100">
+      {% for product in top_products %}
+        <div class="flex items-center justify-between py-2.5 text-sm">
+          <span class="truncate font-semibold">{{ product.name }}</span>
+          <span class="text-gray-400 shrink-0">{{ product.sold_count }} sold</span>
+        </div>
+      {% empty %}
+        <p class="text-sm text-gray-400 py-2.5">No in-store sales yet.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

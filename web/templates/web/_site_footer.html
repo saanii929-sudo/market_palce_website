@@ -1,0 +1,21 @@
+<footer class="border-t border-gray-200 mt-16">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+    <div class="flex items-center gap-2.5">
+      <span class="w-7 h-7 rounded-lg bg-ink flex items-center justify-center">
+        <span class="block w-3.5 h-1 rounded-full bg-brand"></span>
+      </span>
+      <span class="display text-base">Sport<span class="text-brand">Tech</span></span>
+    </div>
+    <nav class="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-500">
+      <a href="{% url 'static-page' 'about' %}" class="hover:text-ink">About</a>
+      <a href="{% url 'static-page' 'shipping' %}" class="hover:text-ink">Shipping</a>
+      <a href="{% url 'static-page' 'returns' %}" class="hover:text-ink">Returns</a>
+      <a href="{% url 'static-page' 'privacy' %}" class="hover:text-ink">Privacy</a>
+      <a href="{% url 'static-page' 'terms' %}" class="hover:text-ink">Terms</a>
+      <a href="{% url 'web-support' %}" class="hover:text-ink">Help &amp; Support</a>
+      <a href="{% url 'web-become-seller' %}" class="hover:text-ink font-semibold text-brand">Sell on SportTech</a>
+    </nav>
+    <p class="text-xs text-gray-400">© {% now "Y" %} SportTech. All rights reserved.</p>
+  </div>
+</footer>
+{% include "web/_mobile_tabbar.html" %}

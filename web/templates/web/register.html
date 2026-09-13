@@ -1,0 +1,96 @@
+{% extends "web/auth_base.html" %}
+{% block title %}Create account · SportTech{% endblock %}
+{% block form_content %}
+<h2 class="display text-3xl sm:text-4xl">Create your account</h2>
+<p class="mt-2 text-sm text-gray-500">Set up your profile to start shopping and tracking orders.</p>
+
+<form method="post" class="mt-8 space-y-5">
+  {% csrf_token %}
+  <input type="hidden" name="channel" value="{{ channel|default:'email' }}" data-channel-input>
+
+  <div>
+    <label class="block text-sm font-semibold mb-1.5" for="id_full_name">Full name</label>
+    <input id="id_full_name" name="full_name" type="text" placeholder="Jordan Mensah" value="{{ full_name|default:'' }}"
+           class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+  </div>
+
+  <div class="grid grid-cols-2 rounded-xl bg-gray-100 p-1 text-sm font-semibold" data-tabs>
+    <button type="button" data-tab="email" class="tab-btn rounded-lg py-2.5 bg-white shadow-sm">Email</button>
+    <button type="button" data-tab="phone" class="tab-btn rounded-lg py-2.5 text-gray-400">Phone</button>
+  </div>
+
+  <div data-panel="email">
+    <label class="block text-sm font-semibold mb-1.5" for="id_email">Email address</label>
+    <input id="id_email" name="email" type="email" placeholder="you@example.com" value="{{ email|default:'' }}"
+           class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+  </div>
+  <div data-panel="phone" class="hidden">
+    <label class="block text-sm font-semibold mb-1.5" for="id_phone">Phone number</label>
+    <input id="id_phone" name="phone" type="tel" placeholder="+233 20 123 4567" value="{{ phone|default:'' }}"
+           class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+  </div>
+
+  <div>
+    <label class="block text-sm font-semibold mb-1.5" for="id_password">Password</label>
+    <div class="relative">
+      <input id="id_password" name="password" type="password" placeholder="Create a password"
+             class="w-full rounded-xl border border-gray-200 px-4 py-3 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+      <button type="button" data-toggle-password="id_password" class="absolute inset-y-0 right-0 px-3.5 text-gray-400 hover:text-gray-600">
+        <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-eye"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div>
+    <label class="block text-sm font-semibold mb-1.5" for="id_confirm">Confirm password</label>
+    <div class="relative">
+      <input id="id_confirm" name="confirm_password" type="password" placeholder="Re-enter password"
+             class="w-full rounded-xl border border-gray-200 px-4 py-3 pr-11 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+      <button type="button" data-toggle-password="id_confirm" class="absolute inset-y-0 right-0 px-3.5 text-gray-400 hover:text-gray-600">
+        <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-eye"/></svg>
+      </button>
+    </div>
+  </div>
+
+  {% if errors %}
+    <ul class="text-sm text-red-600 space-y-1">
+      {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+
+  <label class="flex items-start gap-2.5 text-sm text-gray-600">
+    <input type="checkbox" name="agree_terms" required class="mt-0.5 rounded border-gray-300 text-brand focus:ring-brand/40">
+    <span>I agree to the <a href="{% url 'static-page' 'terms' %}" class="font-semibold text-ink">Terms of Service</a> and <a href="{% url 'static-page' 'privacy' %}" class="font-semibold text-ink">Privacy Policy</a></span>
+  </label>
+
+  <button type="submit" class="w-full rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-3.5 transition-colors">
+    Create account
+  </button>
+
+  <p class="text-center text-sm text-gray-500">
+    Already have an account? <a href="{% url 'web-login' %}" class="font-bold text-brand hover:text-brand-dark">Log in</a>
+  </p>
+</form>
+
+<script>
+  document.querySelectorAll('[data-tabs] .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-tabs] .tab-btn').forEach(b => b.classList.remove('bg-white', 'shadow-sm'));
+      document.querySelectorAll('[data-tabs] .tab-btn').forEach(b => b.classList.add('text-gray-400'));
+      btn.classList.add('bg-white', 'shadow-sm');
+      btn.classList.remove('text-gray-400');
+      document.querySelectorAll('[data-panel]').forEach(p => p.classList.add('hidden'));
+      document.querySelector(`[data-panel="${btn.dataset.tab}"]`).classList.remove('hidden');
+      document.querySelector('[data-channel-input]').value = btn.dataset.tab;
+    });
+  });
+  document.querySelectorAll('[data-toggle-password]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.togglePassword);
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      btn.innerHTML = `<svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-${showing ? 'eye' : 'eye-off'}"/></svg>`;
+    });
+  });
+</script>
+{% endblock %}

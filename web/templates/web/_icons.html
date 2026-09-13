@@ -1,0 +1,40 @@
+{% comment %}
+Inline SVG icon defs, referenced elsewhere with {% include "web/_icons.html" %} then
+<svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-NAME"/></svg>. Kept as one hidden sprite
+sheet so pages don't repeat raw path data.
+{% endcomment %}
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <defs>
+    <g id="icon-search"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm9 2-4.35-4.35"/></g>
+    <g id="icon-heart"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" d="M12 21s-7.5-4.6-10-9.2C.5 8.4 2.3 5 5.8 5c2 0 3.4 1.1 4.2 2.3C10.8 6.1 12.2 5 14.2 5c3.5 0 5.3 3.4 3.8 6.8C19.5 16.4 12 21 12 21Z"/></g>
+    <g id="icon-heart-filled"><path fill="currentColor" d="M12 21s-7.5-4.6-10-9.2C.5 8.4 2.3 5 5.8 5c2 0 3.4 1.1 4.2 2.3C10.8 6.1 12.2 5 14.2 5c3.5 0 5.3 3.4 3.8 6.8C19.5 16.4 12 21 12 21Z"/></g>
+    <g id="icon-bag"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M6 8h12l1 13H5L6 8Z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 8V6a3 3 0 0 1 6 0v2"/></g>
+    <g id="icon-eye"><path fill="none" stroke="currentColor" stroke-width="2" d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></g>
+    <g id="icon-eye-off"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="m3 3 18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M9.9 5.1A11 11 0 0 1 12 5c7 0 11 7 11 7a13.9 13.9 0 0 1-3.2 3.9M6.5 6.6C3.6 8.3 2 12 2 12s4 7 11 7c1.3 0 2.5-.2 3.6-.6"/></g>
+    <g id="icon-arrow-left"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 12H5m0 0 6 6m-6-6 6-6"/></g>
+    <g id="icon-check"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="m20 6-11 11-5-5"/></g>
+    <g id="icon-chevron-right"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6"/></g>
+    <g id="icon-chevron-left"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6"/></g>
+    <g id="icon-star"><path fill="currentColor" d="m12 2 3.1 6.3 7 1-5 4.9 1.2 6.9-6.3-3.3-6.3 3.3 1.2-6.9-5-4.9 7-1L12 2Z"/></g>
+    <g id="icon-google"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3Z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1a5.9 5.9 0 0 1-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 14a6 6 0 0 1 0-3.9V7.4H3.1a10 10 0 0 0 0 9.1L6.4 14Z"/><path fill="#EA4335" d="M12 6a5.4 5.4 0 0 1 3.8 1.5l2.9-2.9A9.6 9.6 0 0 0 12 2 10 10 0 0 0 3.1 7.4l3.3 2.6A5.9 5.9 0 0 1 12 6Z"/></g>
+    <g id="icon-apple"><path fill="currentColor" d="M16.4 1c.1 1.1-.3 2.2-1 3-.7.8-1.8 1.4-2.9 1.3-.1-1 .4-2.2 1-2.9.8-.9 2-1.4 2.9-1.4ZM20 17.2c-.4 1-.8 1.8-1.5 2.7-1 1.2-2 2.4-3.5 2.4-1.4 0-1.9-.9-3.5-.9-1.7 0-2.2.9-3.5.9-1.4 0-2.5-1.3-3.5-2.6C2.7 17.7 1.7 14 3 11.4c.7-1.3 1.9-2.1 3.2-2.1 1.3 0 2.2.9 3.3.9 1.1 0 1.8-.9 3.4-.9 1.1 0 2.4.6 3.2 1.6-2.8 1.6-2.4 5.5.9 6.3Z"/></g>
+    <g id="icon-bell"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M13.7 21a2 2 0 0 1-3.4 0"/></g>
+    <g id="icon-home"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m3 11 9-8 9 8M5 10v10h14V10"/></g>
+    <g id="icon-pin"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M12 22s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12Z"/><circle cx="12" cy="10" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/></g>
+    <g id="icon-card"><rect x="2" y="5" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M2 10h20"/></g>
+    <g id="icon-user"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></g>
+    <g id="icon-x"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="m5 5 14 14M19 5 5 19"/></g>
+    <g id="icon-grid"><rect x="3" y="3" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/></g>
+    <g id="icon-settings"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></g>
+    <g id="icon-plus"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M12 5v14M5 12h14"/></g>
+    <g id="icon-pencil"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5Z"/></g>
+    <g id="icon-trash"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/></g>
+    <g id="icon-download"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></g>
+    <g id="icon-barcode"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 5v14M8 5v14M11 5v14M15 5v14M17 5v14M20 5v14"/></g>
+    <g id="icon-users"><circle cx="9" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 8.5a3.2 3.2 0 1 1 1.2 6.2M21.5 20c0-2.9-2-5.1-4.7-5.8"/></g>
+    <g id="icon-chart"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20V10m7 10V4m7 16v-7"/></g>
+    <g id="icon-mail"><rect x="2.5" y="5" width="19" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m3.5 6.5 8.5 7 8.5-7"/></g>
+    <g id="icon-help"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9.3 9.2a2.7 2.7 0 1 1 3.9 2.4c-.9.5-1.2 1-1.2 2.1"/><circle cx="12" cy="17" r="1" fill="currentColor"/></g>
+    <g id="icon-menu"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/></g>
+  </defs>
+</svg>

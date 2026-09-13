@@ -1,0 +1,61 @@
+{% include "web/_icons.html" %}
+<header class="sticky top-0 z-40 bg-white border-b border-gray-200">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-6">
+    <a href="{% url 'web-home' %}" class="flex items-center gap-2.5 shrink-0">
+      <span class="w-8 h-8 rounded-lg bg-ink flex items-center justify-center">
+        <span class="block w-4 h-1 rounded-full bg-brand"></span>
+      </span>
+      <span class="display text-lg">Sport<span class="text-brand">Tech</span></span>
+    </a>
+
+    <form action="{% url 'web-search' %}" method="get" class="hidden md:flex flex-1 max-w-xl">
+      <div class="relative w-full">
+        <svg viewBox="0 0 24 24" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"><use href="#icon-search"/></svg>
+        <input type="text" name="q" placeholder="Search football boots, jerseys, gym equipment..."
+               class="w-full rounded-full bg-gray-100 border border-transparent pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 focus:bg-white focus:border-gray-200">
+      </div>
+    </form>
+
+    <nav class="hidden lg:flex items-center gap-6 text-sm font-semibold shrink-0">
+      <a href="{% url 'web-category-list' %}" class="hover:text-brand">Categories</a>
+      <a href="{% url 'web-deals' %}" class="text-brand">Deals</a>
+      <a href="{% url 'web-new-arrivals' %}" class="hover:text-brand">New Arrivals</a>
+    </nav>
+
+    <div class="flex items-center gap-4 ml-auto shrink-0">
+      <a href="{% url 'web-wishlist' %}" class="hidden md:block relative text-ink/80 hover:text-ink">
+        <svg viewBox="0 0 24 24" class="w-6 h-6"><use href="#icon-heart"/></svg>
+        {% if wishlist_count %}
+          <span class="absolute -top-2 -right-2 bg-brand text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">{{ wishlist_count }}</span>
+        {% endif %}
+      </a>
+      <a href="{% url 'web-cart' %}" class="hidden md:block relative text-ink/80 hover:text-ink">
+        <svg viewBox="0 0 24 24" class="w-6 h-6"><use href="#icon-bag"/></svg>
+        {% if cart_count %}
+          <span class="absolute -top-2 -right-2 bg-brand text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">{{ cart_count }}</span>
+        {% endif %}
+      </a>
+      {% if request.user.is_authenticated %}
+        {% if request.user.seller_profile %}
+          <a href="{% url 'web-seller-overview' %}" class="text-sm font-bold text-ink hover:text-brand hidden sm:inline">My store</a>
+        {% endif %}
+        {% if request.user.is_superuser %}
+          <a href="{% url 'web-console-overview' %}" class="text-sm font-bold text-ink hover:text-brand hidden sm:inline">Admin console</a>
+        {% endif %}
+        <a href="{% url 'web-notifications' %}" class="relative text-ink/80 hover:text-ink">
+          <svg viewBox="0 0 24 24" class="w-6 h-6"><use href="#icon-bell"/></svg>
+          {% if unread_notifications %}
+            <span class="absolute -top-2 -right-2 bg-brand text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">{{ unread_notifications }}</span>
+          {% endif %}
+        </a>
+        {% if not request.user.seller_profile and not request.user.is_superuser %}
+          <a href="{% url 'web-account-overview' %}" class="hidden md:flex w-8 h-8 rounded-full bg-gray-100 items-center justify-center text-ink/70 hover:text-ink" aria-label="My account">
+            <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-user"/></svg>
+          </a>
+        {% endif %}
+      {% else %}
+        <a href="{% url 'web-login' %}" class="text-sm font-semibold text-ink hover:text-brand">Log in</a>
+      {% endif %}
+    </div>
+  </div>
+</header>

@@ -1,0 +1,35 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Add supplier{% endblock %}
+{% block seller_subtitle %}Track who you restock inventory from{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-suppliers' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to suppliers</a>
+{% endblock %}
+
+{% block seller_content %}
+<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-lg space-y-5">
+  {% csrf_token %}
+  <div>
+    <label class="block text-sm font-bold mb-2">Supplier name</label>
+    <input type="text" name="name" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Contact person</label>
+      <input type="text" name="contact_name" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Phone</label>
+      <input type="text" name="phone" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+  <div>
+    <label class="block text-sm font-bold mb-2">Email</label>
+    <input type="email" name="email" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+  <div>
+    <label class="block text-sm font-bold mb-2">Address</label>
+    <input type="text" name="address" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+  <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Add supplier</button>
+</form>
+{% endblock %}

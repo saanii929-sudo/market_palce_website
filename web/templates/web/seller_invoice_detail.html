@@ -1,0 +1,160 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Invoice {{ invoice.invoice_number }}{% endblock %}
+{% block seller_subtitle %}
+  {% if invoice.display_status == 'paid' %}Paid in full
+  {% elif invoice.display_status == 'overdue' %}Overdue — GH₵{{ invoice.balance_due }} outstanding
+  {% elif invoice.display_status == 'void' %}Void
+  {% else %}GH₵{{ invoice.balance_due }} balance due{% endif %}
+{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-invoices' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to invoices</a>
+  {% if invoice.customer_email and invoice.status != 'void' %}
+    <form method="post" action="{% url 'web-seller-invoice-send' invoice.id %}">
+      {% csrf_token %}
+      <button type="submit" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Email invoice</button>
+    </form>
+  {% endif %}
+  <button onclick="window.print()" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">Print / Download</button>
+  {% if invoice.status != 'void' and invoice.status != 'paid' %}
+    <form method="post" action="{% url 'web-seller-invoice-void' invoice.id %}" onsubmit="return confirm('Void this invoice?');">
+      {% csrf_token %}
+      <button type="submit" class="rounded-xl border border-red-200 text-red-600 font-bold text-sm px-5 py-2.5 hover:bg-red-50 transition-colors">Void</button>
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block seller_content %}
+<div class="grid lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 rounded-2xl bg-white border border-gray-200 p-8" id="invoice-doc">
+    <div class="flex items-start justify-between mb-8">
+      <div>
+        <p class="display text-2xl">{{ seller.business_name }}</p>
+        {% if seller.support_phone %}<p class="text-xs text-gray-400 mt-1">{{ seller.support_phone }}</p>{% endif %}
+      </div>
+      <div class="text-right">
+        <p class="display text-xl text-brand">INVOICE</p>
+        <p class="text-sm text-gray-500 mt-1">{{ invoice.invoice_number }}</p>
+      </div>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-6 mb-8 text-sm">
+      <div>
+        <p class="text-xs font-bold text-gray-400 tracking-widest mb-1.5">BILL TO</p>
+        <p class="font-bold">{{ invoice.customer_name }}</p>
+        {% if invoice.customer_phone %}<p class="text-gray-500">{{ invoice.customer_phone }}</p>{% endif %}
+        {% if invoice.customer_email %}<p class="text-gray-500">{{ invoice.customer_email }}</p>{% endif %}
+        {% if invoice.customer_address %}<p class="text-gray-500">{{ invoice.customer_address }}</p>{% endif %}
+      </div>
+      <div class="sm:text-right">
+        <p><span class="text-gray-400">Issue date:</span> <span class="font-semibold">{{ invoice.issue_date|date:"M d, Y" }}</span></p>
+        <p><span class="text-gray-400">Due date:</span> <span class="font-semibold">{{ invoice.due_date|date:"M d, Y"|default:"On receipt" }}</span></p>
+        <p class="mt-1.5">
+          {% if invoice.display_status == 'paid' %}
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Paid</span>
+          {% elif invoice.display_status == 'overdue' %}
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Overdue</span>
+          {% elif invoice.display_status == 'partially_paid' %}
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Partially paid</span>
+          {% elif invoice.display_status == 'void' %}
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Void</span>
+          {% elif invoice.display_status == 'sent' %}
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">Sent</span>
+          {% else %}
+            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Draft</span>
+          {% endif %}
+        </p>
+      </div>
+    </div>
+
+    <table class="w-full text-sm mb-6">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-200">
+          <th class="py-2.5">Description</th>
+          <th class="py-2.5 text-right">Qty</th>
+          <th class="py-2.5 text-right">Unit price</th>
+          <th class="py-2.5 text-right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+          <tr class="border-b border-gray-50">
+            <td class="py-2.5">{{ item.description }}</td>
+            <td class="py-2.5 text-right">{{ item.qty }}</td>
+            <td class="py-2.5 text-right">GH₵{{ item.unit_price }}</td>
+            <td class="py-2.5 text-right font-semibold">GH₵{{ item.line_total }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="flex justify-end">
+      <div class="w-full max-w-xs space-y-1.5 text-sm">
+        <div class="flex justify-between"><span class="text-gray-400">Subtotal</span><span>GH₵{{ invoice.subtotal }}</span></div>
+        {% if invoice.discount_amount %}<div class="flex justify-between"><span class="text-gray-400">Discount</span><span>-GH₵{{ invoice.discount_amount }}</span></div>{% endif %}
+        {% if invoice.tax_rate %}<div class="flex justify-between"><span class="text-gray-400">Tax ({{ invoice.tax_rate }}%)</span><span>GH₵{{ invoice.tax_amount }}</span></div>{% endif %}
+        <div class="flex justify-between font-bold text-base pt-1 border-t border-gray-200"><span>Total</span><span>GH₵{{ invoice.total }}</span></div>
+        <div class="flex justify-between text-gray-400"><span>Paid</span><span>GH₵{{ invoice.amount_paid }}</span></div>
+        <div class="flex justify-between font-bold {% if invoice.balance_due > 0 %}text-red-600{% endif %}"><span>Balance due</span><span>GH₵{{ invoice.balance_due }}</span></div>
+      </div>
+    </div>
+
+    {% if invoice.notes %}
+      <div class="mt-8 pt-5 border-t border-dashed border-gray-200 text-sm">
+        <p class="text-xs font-bold text-gray-400 tracking-widest mb-1.5">NOTES</p>
+        <p class="text-gray-500">{{ invoice.notes|linebreaks }}</p>
+      </div>
+    {% endif %}
+    {% if invoice.terms %}
+      <div class="mt-4 text-sm">
+        <p class="text-xs font-bold text-gray-400 tracking-widest mb-1.5">TERMS</p>
+        <p class="text-gray-500">{{ invoice.terms|linebreaks }}</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="space-y-6 print:hidden">
+    {% if invoice.status != 'void' and invoice.balance_due > 0 %}
+      <div class="rounded-2xl bg-white border border-gray-200 p-6">
+        <h2 class="display text-lg mb-4">Record a payment</h2>
+        <form method="post" action="{% url 'web-seller-invoice-payment-add' invoice.id %}" class="space-y-3">
+          {% csrf_token %}
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1.5">Amount (GH₵)</label>
+            <input type="number" step="0.01" min="0.01" max="{{ invoice.balance_due }}" name="amount" required class="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-ink">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1.5">Method</label>
+            <select name="method" class="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-ink">
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="mobile_money">Mobile Money</option>
+              <option value="bank_transfer">Bank transfer</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1.5">Date</label>
+            <input type="date" name="paid_on" value="{% now 'Y-m-d' %}" class="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-ink">
+          </div>
+          <button type="submit" class="w-full rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-2.5 transition-colors">Record payment</button>
+        </form>
+      </div>
+    {% endif %}
+
+    <div class="rounded-2xl bg-white border border-gray-200 p-6">
+      <h2 class="display text-lg mb-4">Payment history</h2>
+      <div class="divide-y divide-gray-100">
+        {% for payment in payments %}
+          <div class="py-2.5 text-sm flex justify-between">
+            <div>
+              <p class="font-semibold">GH₵{{ payment.amount }}</p>
+              <p class="text-xs text-gray-400">{{ payment.get_method_display }} · {{ payment.paid_on|date:"M d, Y" }}</p>
+            </div>
+          </div>
+        {% empty %}
+          <p class="text-sm text-gray-400 py-2.5">No payments recorded yet.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

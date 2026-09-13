@@ -1,0 +1,64 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Invoices{% endblock %}
+{% block seller_subtitle %}GH₵{{ outstanding_total|floatformat:0 }} outstanding across open invoices{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-invoices-export' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Download CSV</a>
+  <a href="{% url 'web-seller-invoice-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">+ New invoice</a>
+{% endblock %}
+
+{% block seller_content %}
+<div class="flex items-center gap-2 mb-5 flex-wrap">
+  <a href="?" class="text-xs font-bold px-4 py-2 rounded-full {% if not active_tab %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">All</a>
+  <a href="?status=draft" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'draft' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Draft</a>
+  <a href="?status=unpaid" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'unpaid' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Unpaid</a>
+  <a href="?status=paid" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'paid' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Paid</a>
+  <a href="?status=void" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'void' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Void</a>
+</div>
+
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Invoice</th>
+          <th class="px-5 py-3">Customer</th>
+          <th class="px-5 py-3">Issue date</th>
+          <th class="px-5 py-3">Due date</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3">Total</th>
+          <th class="px-5 py-3">Balance due</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for invoice in invoices %}
+          <tr class="border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50" onclick="window.location='{% url 'web-seller-invoice-detail' invoice.id %}'">
+            <td class="px-5 py-4 font-bold">{{ invoice.invoice_number }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ invoice.customer_name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ invoice.issue_date|date:"M d, Y" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ invoice.due_date|date:"M d, Y"|default:"—" }}</td>
+            <td class="px-5 py-4">
+              {% if invoice.display_status == 'paid' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Paid</span>
+              {% elif invoice.display_status == 'overdue' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Overdue</span>
+              {% elif invoice.display_status == 'partially_paid' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Partially paid</span>
+              {% elif invoice.display_status == 'void' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Void</span>
+              {% elif invoice.display_status == 'sent' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">Sent</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Draft</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4 font-bold">GH₵{{ invoice.total }}</td>
+            <td class="px-5 py-4 {% if invoice.balance_due > 0 %}font-bold text-red-600{% else %}text-gray-400{% endif %}">GH₵{{ invoice.balance_due }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="px-5 py-10 text-center text-gray-400">No invoices yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

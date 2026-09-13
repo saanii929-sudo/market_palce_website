@@ -1,0 +1,179 @@
+{% extends "web/account_base.html" %}
+{% load web_extras %}
+{% block title %}My account · SportTech{% endblock %}
+{% block account_title %}Overview{% endblock %}
+{% block account_title_mobile %}Profile{% endblock %}
+{% block account_subtitle %}A quick look at your SportTech account{% endblock %}
+{% block account_content %}
+
+<!-- Mobile profile layout -->
+<div class="lg:hidden space-y-6">
+  <div class="flex items-center gap-4">
+    <span class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
+      <svg viewBox="0 0 24 24" class="w-7 h-7"><use href="#icon-user"/></svg>
+    </span>
+    <div class="min-w-0 flex-1">
+      <p class="font-bold text-lg truncate">{{ request.user.full_name|default:"SportTech shopper" }}</p>
+      <p class="text-sm text-gray-400 truncate">{{ request.user.email|default:request.user.phone }}</p>
+    </div>
+    <a href="{% url 'web-account-edit' %}" aria-label="Edit profile" class="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center shrink-0">
+      <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-pencil"/></svg>
+    </a>
+  </div>
+
+  <div class="grid grid-cols-3 gap-3">
+    <div class="rounded-2xl border border-gray-200 bg-white py-4 text-center">
+      <p class="display text-2xl">{{ orders_count }}</p>
+      <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-1">Orders</p>
+    </div>
+    <div class="rounded-2xl border border-gray-200 bg-white py-4 text-center">
+      <p class="display text-2xl">{{ wishlist_items_count }}</p>
+      <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-1">Wishlist</p>
+    </div>
+    <div class="rounded-2xl border border-gray-200 bg-white py-4 text-center">
+      <p class="display text-2xl">{{ reviews_count }}</p>
+      <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-1">Reviews</p>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
+    <a href="{% url 'web-account-orders' %}" class="flex items-center gap-3 px-4 py-3.5">
+      <span class="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0"><svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-bag"/></svg></span>
+      <span class="flex-1 font-bold text-sm">My orders</span>
+      <svg viewBox="0 0 24 24" class="w-4 h-4 text-gray-300"><use href="#icon-chevron-right"/></svg>
+    </a>
+    <a href="{% url 'web-account-addresses' %}" class="flex items-center gap-3 px-4 py-3.5">
+      <span class="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0"><svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-pin"/></svg></span>
+      <span class="flex-1 font-bold text-sm">Saved addresses</span>
+      <svg viewBox="0 0 24 24" class="w-4 h-4 text-gray-300"><use href="#icon-chevron-right"/></svg>
+    </a>
+    <a href="{% url 'web-account-payment-methods' %}" class="flex items-center gap-3 px-4 py-3.5">
+      <span class="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0"><svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-card"/></svg></span>
+      <span class="flex-1 font-bold text-sm">Payment methods</span>
+      <svg viewBox="0 0 24 24" class="w-4 h-4 text-gray-300"><use href="#icon-chevron-right"/></svg>
+    </a>
+  </div>
+
+  <div class="rounded-2xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
+    <div class="flex items-center gap-3 px-4 py-3.5">
+      <span class="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0"><svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-bell"/></svg></span>
+      <span class="flex-1 font-bold text-sm">Push notifications</span>
+      <form method="post" action="{% url 'web-account-preference-toggle' %}">
+        {% csrf_token %}
+        <input type="hidden" name="field" value="push_notifications_enabled">
+        <button type="submit" aria-label="Toggle push notifications" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors {% if request.user.push_notifications_enabled %}bg-green-500{% else %}bg-gray-200{% endif %}">
+          <span class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform {% if request.user.push_notifications_enabled %}translate-x-5{% else %}translate-x-0.5{% endif %}"></span>
+        </button>
+      </form>
+    </div>
+    <div class="flex items-center gap-3 px-4 py-3.5">
+      <span class="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0"><svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-mail"/></svg></span>
+      <span class="flex-1 font-bold text-sm">Email offers</span>
+      <form method="post" action="{% url 'web-account-preference-toggle' %}">
+        {% csrf_token %}
+        <input type="hidden" name="field" value="email_offers_enabled">
+        <button type="submit" aria-label="Toggle email offers" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors {% if request.user.email_offers_enabled %}bg-green-500{% else %}bg-gray-200{% endif %}">
+          <span class="inline-block h-5 w-5 transform rounded-full bg-white transition-transform {% if request.user.email_offers_enabled %}translate-x-5{% else %}translate-x-0.5{% endif %}"></span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
+    {% if not request.user.seller_profile %}
+      <a href="{% url 'web-become-seller' %}" class="flex items-center gap-3 px-4 py-3.5">
+        <span class="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0"><svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-bag"/></svg></span>
+        <span class="flex-1 font-bold text-sm">Become a seller</span>
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-gray-300"><use href="#icon-chevron-right"/></svg>
+      </a>
+    {% endif %}
+    <a href="{% url 'web-support' %}" class="flex items-center gap-3 px-4 py-3.5">
+      <span class="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0"><svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-help"/></svg></span>
+      <span class="flex-1 font-bold text-sm">Help &amp; support</span>
+      <svg viewBox="0 0 24 24" class="w-4 h-4 text-gray-300"><use href="#icon-chevron-right"/></svg>
+    </a>
+    <a href="{% url 'web-logout' %}" class="flex items-center gap-3 px-4 py-3.5 text-red-600">
+      <span class="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center shrink-0"><svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-x"/></svg></span>
+      <span class="flex-1 font-bold text-sm">Log out</span>
+    </a>
+  </div>
+
+  {% if seller_application and seller_application.status == 'pending' %}
+    <div class="rounded-2xl bg-amber-50 border border-amber-200 p-4">
+      <p class="font-bold text-amber-800 text-sm">Seller application under review</p>
+      <p class="text-xs text-amber-700 mt-1">Submitted {{ seller_application.submitted_at|date:"M d, Y" }}.</p>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Desktop overview layout -->
+<div class="hidden lg:block">
+<div class="grid sm:grid-cols-3 gap-5 max-w-3xl">
+  <div class="rounded-2xl border border-gray-200 bg-white p-6">
+    <p class="text-xs font-bold tracking-widest text-gray-400 uppercase">Orders placed</p>
+    <p class="display text-4xl mt-2">{{ orders_count }}</p>
+  </div>
+  <div class="rounded-2xl border border-gray-200 bg-white p-6">
+    <p class="text-xs font-bold tracking-widest text-gray-400 uppercase">Wishlist items</p>
+    <p class="display text-4xl mt-2">{{ wishlist_items_count }}</p>
+  </div>
+  <div class="rounded-2xl border border-gray-200 bg-white p-6">
+    <p class="text-xs font-bold tracking-widest text-gray-400 uppercase">Reviews written</p>
+    <p class="display text-4xl mt-2">{{ reviews_count }}</p>
+  </div>
+</div>
+
+<h2 class="display text-2xl mt-10 mb-4">Recent orders</h2>
+{% if recent_orders %}
+  <div class="rounded-2xl border border-gray-200 bg-white overflow-x-auto">
+    <table class="w-full text-sm min-w-[640px]">
+      <thead>
+        <tr class="text-left text-gray-400 text-xs font-bold uppercase tracking-wide">
+          <th class="px-6 py-4">Order</th>
+          <th class="px-6 py-4">Items</th>
+          <th class="px-6 py-4">Date</th>
+          <th class="px-6 py-4">Status</th>
+          <th class="px-6 py-4">Total</th>
+          <th class="px-6 py-4"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for order in recent_orders %}
+          <tr class="border-t border-gray-100">
+            <td class="px-6 py-4 font-bold">{{ order.order_number }}</td>
+            <td class="px-6 py-4">{% include "web/_order_item_icons.html" %}</td>
+            <td class="px-6 py-4 text-gray-500">{{ order.placed_at|date:"M d, Y" }}</td>
+            <td class="px-6 py-4">
+              <span class="text-xs font-bold px-2.5 py-1 rounded-full {{ order.status|order_status_badge }}">{{ order.status|order_display_status }}</span>
+            </td>
+            <td class="px-6 py-4 font-bold">GH₵{{ order.total }}</td>
+            <td class="px-6 py-4 text-right">
+              <a href="{% url 'web-order-confirmation' order.order_number %}" class="inline-block rounded-lg border border-gray-200 font-bold text-sm px-4 py-1.5 hover:border-ink transition-colors">View</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="text-sm text-gray-400">You haven't placed any orders yet.</p>
+{% endif %}
+
+{% if seller_application and seller_application.status == 'pending' %}
+  <div class="mt-10 rounded-2xl bg-amber-50 border border-amber-200 p-6 flex items-center justify-between gap-4 flex-wrap max-w-3xl">
+    <div>
+      <p class="font-bold text-amber-800">Your seller application is under review</p>
+      <p class="text-sm text-amber-700 mt-1">Submitted {{ seller_application.submitted_at|date:"M d, Y" }} — we'll notify you once it's reviewed.</p>
+    </div>
+  </div>
+{% elif not seller_application or seller_application.status == 'rejected' %}
+  <div class="mt-10 rounded-2xl bg-ink text-white p-6 flex items-center justify-between gap-4 flex-wrap max-w-3xl">
+    <div>
+      <p class="display text-lg">Want to sell on SportTech?</p>
+      <p class="text-sm text-white/60 mt-1">Open your own storefront and reach thousands of shoppers.</p>
+    </div>
+    <a href="{% url 'web-become-seller' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-5 py-2.5 transition-colors shrink-0">Become a seller</a>
+  </div>
+{% endif %}
+</div>
+{% endblock %}

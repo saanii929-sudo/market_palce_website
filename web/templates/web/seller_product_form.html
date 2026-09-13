@@ -1,0 +1,99 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}{% if product %}Edit product{% else %}Add product{% endif %}{% endblock %}
+{% block seller_subtitle %}{% if product %}Update details for {{ product.name }}{% else %}List a new product in your store{% endif %}{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-products' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to products</a>
+{% endblock %}
+
+{% block seller_content %}
+<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl space-y-5">
+  {% csrf_token %}
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Product name</label>
+    <input type="text" name="name" value="{{ product.name|default:'' }}" required
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Category</label>
+      <select name="category_id" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+        <option value="">Select a category</option>
+        {% for category in categories %}
+          <option value="{{ category.id }}" {% if product.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Stock quantity</label>
+      <input type="number" name="stock_qty" min="0" value="{{ product.stock_qty|default:0 }}"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Price (GH₵)</label>
+      <input type="number" step="0.01" name="price" value="{{ product.price|default:'' }}" required
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Original price <span class="text-gray-400 font-normal">(optional, for discounts)</span></label>
+      <input type="number" step="0.01" name="original_price" value="{{ product.original_price|default:'' }}"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Description</label>
+    <textarea name="description" rows="4"
+              class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">{{ product.description|default:'' }}</textarea>
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Image URLs <span class="text-gray-400 font-normal">(one per line{% if product %}, leave blank to keep current images{% endif %})</span></label>
+    <textarea name="image_urls" rows="3" placeholder="https://images.unsplash.com/..."
+              class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink"></textarea>
+  </div>
+
+  <div class="flex items-center gap-6 flex-wrap">
+    <label class="flex items-center gap-2 text-sm font-semibold">
+      <input type="checkbox" name="is_active" value="1" {% if product.is_active or not product %}checked{% endif %} class="rounded border-gray-300">
+      Active (visible to shoppers)
+    </label>
+    <label class="flex items-center gap-2 text-sm font-semibold">
+      <input type="checkbox" name="is_featured" value="1" {% if product.is_featured %}checked{% endif %} class="rounded border-gray-300">
+      Featured
+    </label>
+  </div>
+
+  <div class="rounded-xl border border-gray-200 p-4">
+    <label class="flex items-center gap-2 text-sm font-bold" id="returnable-toggle-label">
+      <input type="checkbox" name="is_returnable" value="1" id="is-returnable-checkbox" {% if product.is_returnable or not product %}checked{% endif %} class="rounded border-gray-300">
+      Customers can return this product
+    </label>
+    <div class="mt-3 pl-6" id="return-window-row">
+      <label class="block text-xs font-bold text-gray-500 mb-1.5">Return window (days after delivery)</label>
+      <input type="number" name="return_window_days" min="0" value="{{ product.return_window_days|default:7 }}"
+             class="w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+  <script>
+    (function () {
+      const checkbox = document.getElementById('is-returnable-checkbox');
+      const row = document.getElementById('return-window-row');
+      const sync = () => row.classList.toggle('hidden', !checkbox.checked);
+      checkbox.addEventListener('change', sync);
+      sync();
+    })();
+  </script>
+
+  <div class="flex items-center gap-3 pt-2">
+    <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">
+      {% if product %}Save changes{% else %}Add product{% endif %}
+    </button>
+    <a href="{% url 'web-seller-products' %}" class="rounded-xl border border-gray-200 font-bold px-6 py-3 hover:border-ink transition-colors">Cancel</a>
+  </div>
+</form>
+{% endblock %}

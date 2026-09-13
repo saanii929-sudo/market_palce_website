@@ -1,0 +1,10 @@
+{% extends "web/base.html" %}
+{% block title %}{{ page.title }} · SportTech{% endblock %}
+{% block content %}
+{% include "web/_site_header.html" %}
+<main class="max-w-2xl mx-auto px-4 sm:px-6 py-14">
+  <h1 class="display text-3xl mb-6">{{ page.title }}</h1>
+  <div class="prose prose-sm max-w-none text-gray-600 leading-relaxed">{{ page.body|safe }}</div>
+</main>
+{% include "web/_site_footer.html" %}
+{% endblock %}

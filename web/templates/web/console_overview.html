@@ -1,0 +1,108 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Overview{% endblock %}
+{% block console_subtitle %}Platform health at a glance{% endblock %}
+
+{% block console_content %}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">TOTAL USERS</p>
+    <p class="display text-3xl mt-2">{{ total_users }}</p>
+    <p class="text-xs font-bold {% if users_percent >= 0 %}text-green-600{% else %}text-red-500{% endif %} mt-2">
+      {% if users_percent >= 0 %}▲{% else %}▼{% endif %} {{ users_percent }}% this week
+    </p>
+  </div>
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">ACTIVE SELLERS</p>
+    <p class="display text-3xl mt-2">{{ active_sellers }}</p>
+    <p class="text-xs font-bold text-green-600 mt-2">▲ {{ sellers_this_week }} this week</p>
+  </div>
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">GMV (30 DAYS)</p>
+    <p class="display text-3xl mt-2">GH₵{{ gmv_30d|floatformat:0 }}</p>
+    <p class="text-xs font-bold {% if gmv_percent >= 0 %}text-green-600{% else %}text-red-500{% endif %} mt-2">
+      {% if gmv_percent >= 0 %}▲{% else %}▼{% endif %} {{ gmv_percent }}% vs last month
+    </p>
+  </div>
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">ORDERS TODAY</p>
+    <p class="display text-3xl mt-2">{{ orders_today }}</p>
+    <p class="text-xs font-bold {% if orders_percent >= 0 %}text-green-600{% else %}text-red-500{% endif %} mt-2">
+      {% if orders_percent >= 0 %}▲{% else %}▼{% endif %} {{ orders_percent }}% vs yesterday
+    </p>
+  </div>
+</div>
+
+<div class="grid lg:grid-cols-3 gap-6 mt-6">
+  <div class="lg:col-span-2 rounded-2xl bg-white border border-gray-200 p-6">
+    <h2 class="display text-lg mb-6">Orders, last 7 days</h2>
+    <div class="flex items-end justify-between gap-3 h-48">
+      {% for day in chart %}
+        <div class="flex-1 flex flex-col items-center justify-end h-full gap-2">
+          <div class="w-full max-w-10 bg-brand rounded-md" style="height: {{ day.percent|default:2 }}%; min-height: 4px;" title="{{ day.count }} orders"></div>
+          <span class="text-xs text-gray-400 font-semibold">{{ day.label }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-gray-200 p-6">
+    <h2 class="display text-lg mb-4">Recent activity</h2>
+    <div class="divide-y divide-gray-100">
+      {% for item in activity %}
+        <div class="py-3 flex gap-3">
+          <span class="w-1.5 h-1.5 rounded-full bg-brand mt-2 shrink-0"></span>
+          <div>
+            <p class="text-sm">{{ item.text }}</p>
+            <p class="text-xs text-gray-400 mt-0.5">{{ item.at|timesince }} ago</p>
+          </div>
+        </div>
+      {% empty %}
+        <p class="text-sm text-gray-400 py-3">No activity yet.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<section class="mt-10">
+  <h2 class="display text-2xl mb-4">Pending seller applications</h2>
+  <div class="rounded-2xl bg-white border border-gray-200 overflow-x-auto">
+    <table class="w-full text-sm min-w-[640px]">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Business</th>
+          <th class="px-5 py-3">Category</th>
+          <th class="px-5 py-3">Submitted</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for application in pending_applications %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ application.business_name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ application.category.name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ application.submitted_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4"><span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Pending</span></td>
+            <td class="px-5 py-4">
+              <div class="flex gap-2 justify-end">
+                <form method="post" action="{% url 'web-console-seller-application-approve' application.id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{% url 'web-console-overview' %}">
+                  <button type="submit" class="rounded-lg border border-green-200 text-green-700 font-bold text-xs px-4 py-2 hover:bg-green-50 transition-colors">Approve</button>
+                </form>
+                <form method="post" action="{% url 'web-console-seller-application-reject' application.id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{% url 'web-console-overview' %}">
+                  <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Reject</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No pending applications.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

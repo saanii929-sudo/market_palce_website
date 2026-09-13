@@ -1,0 +1,65 @@
+{% extends "web/base.html" %}
+{% load web_extras %}
+{% block title %}{{ seller.business_name }} · SportTech{% endblock %}
+{% block content %}
+{% include "web/_site_header.html" %}
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+
+  <div class="rounded-3xl bg-ink text-white p-8 flex flex-col sm:flex-row sm:items-center gap-6 justify-between">
+    <div class="flex items-center gap-5">
+      {% if seller.resolved_logo_url %}
+        <span class="w-16 h-16 rounded-full overflow-hidden shrink-0">
+          <img src="{{ seller.resolved_logo_url }}" alt="{{ seller.business_name }}" class="w-full h-full object-cover">
+        </span>
+      {% else %}
+        <span class="w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold display shrink-0" style="background: {{ seller|placeholder_gradient }}">
+          {{ seller.business_name|initial }}
+        </span>
+      {% endif %}
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="display text-2xl">{{ seller.business_name }}</h1>
+          {% if seller.is_verified %}
+            <span class="text-xs font-bold bg-green-500/15 text-green-400 px-2.5 py-1 rounded-full flex items-center gap-1">✓ Verified</span>
+          {% endif %}
+        </div>
+        {% if seller.tagline %}<p class="text-white/60 text-sm mt-1 max-w-lg">{{ seller.tagline }}</p>{% endif %}
+      </div>
+    </div>
+    {% if request.user.is_authenticated %}
+      <button type="button" class="bg-brand hover:bg-brand-dark text-white font-bold px-6 py-2.5 rounded-xl transition-colors shrink-0">✓ Following</button>
+    {% endif %}
+  </div>
+
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 text-center">
+    <div class="rounded-xl border border-gray-200 bg-white py-5">
+      <p class="display text-2xl">{{ product_count }}</p>
+      <p class="text-xs text-gray-400 font-semibold mt-1">PRODUCTS</p>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white py-5">
+      <p class="display text-2xl">{{ seller.rating }}</p>
+      <p class="text-xs text-gray-400 font-semibold mt-1">RATING</p>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white py-5">
+      <p class="display text-2xl">—</p>
+      <p class="text-xs text-gray-400 font-semibold mt-1">FOLLOWERS</p>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white py-5">
+      <p class="display text-2xl">—</p>
+      <p class="text-xs text-gray-400 font-semibold mt-1">RESPONSE TIME</p>
+    </div>
+  </div>
+
+  <section class="mt-10">
+    <h2 class="display text-2xl mb-5">All products</h2>
+    {% if products %}
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+        {% for product in products %}{% include "web/_product_card.html" %}{% endfor %}
+      </div>
+    {% else %}
+      <p class="text-sm text-gray-400">This seller hasn't listed any products yet.</p>
+    {% endif %}
+  </section>
+</main>
+{% include "web/_site_footer.html" %}
+{% endblock %}

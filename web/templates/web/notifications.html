@@ -1,0 +1,24 @@
+{% extends "web/base.html" %}
+{% block title %}Notifications · SportTech{% endblock %}
+{% block content %}
+{% include "web/_site_header.html" %}
+<main class="max-w-2xl mx-auto px-4 sm:px-6 py-10">
+  <h1 class="display text-3xl mb-6">Notifications</h1>
+  {% if notifications %}
+    <div class="space-y-3">
+      {% for n in notifications %}
+        <div class="rounded-xl border border-gray-200 p-4 {% if not n.is_read %}bg-orange-50/40 border-brand/20{% else %}bg-white{% endif %}">
+          <div class="flex items-center justify-between">
+            <p class="font-bold text-sm">{{ n.title }}</p>
+            <span class="text-xs text-gray-400">{{ n.created_at|timesince }} ago</span>
+          </div>
+          {% if n.body %}<p class="text-sm text-gray-500 mt-1">{{ n.body }}</p>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-sm text-gray-400">You're all caught up — no notifications yet.</p>
+  {% endif %}
+</main>
+{% include "web/_site_footer.html" %}
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Purchase orders{% endblock %}
+{% block seller_subtitle %}Restock inventory from your suppliers{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-purchase-order-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">+ New purchase order</a>
+{% endblock %}
+
+{% block seller_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Reference</th>
+          <th class="px-5 py-3">Supplier</th>
+          <th class="px-5 py-3">Items</th>
+          <th class="px-5 py-3">Cost</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for po in purchase_orders %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ po.reference }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ po.supplier.name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ po.items.count }} line{{ po.items.count|pluralize }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ po.total_cost }}</td>
+            <td class="px-5 py-4">
+              {% if po.status == 'received' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Received</span>
+              {% elif po.status == 'cancelled' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Cancelled</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Pending</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4 text-right">
+              {% if po.status == 'pending' %}
+                <div class="flex gap-2 justify-end">
+                  <form method="post" action="{% url 'web-seller-purchase-order-receive' po.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-lg bg-brand hover:bg-brand-dark text-white font-bold text-xs px-4 py-2 transition-colors">Receive</button>
+                  </form>
+                  <form method="post" action="{% url 'web-seller-purchase-order-cancel' po.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">Cancel</button>
+                  </form>
+                </div>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">No purchase orders yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% comment %} Expects `breadcrumbs`: a list of (label, url_or_none) tuples. {% endcomment %}
+<nav class="max-w-7xl mx-auto px-4 sm:px-6 pt-4 text-sm text-gray-400 flex items-center gap-1.5 flex-wrap">
+  {% for label, url in breadcrumbs %}
+    {% if not forloop.first %}<span>/</span>{% endif %}
+    {% if url and not forloop.last %}
+      <a href="{{ url }}" class="hover:text-ink">{{ label }}</a>
+    {% else %}
+      <span class="text-ink font-semibold">{{ label }}</span>
+    {% endif %}
+  {% endfor %}
+</nav>

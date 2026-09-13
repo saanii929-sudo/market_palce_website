@@ -1,0 +1,42 @@
+{% extends "web/base.html" %}
+{% block content %}
+{% include "web/_icons.html" %}
+<div class="min-h-screen flex flex-col lg:flex-row">
+
+  <!-- Left brand panel (desktop only) -->
+  <div class="hidden lg:flex relative overflow-hidden bg-ink text-white lg:w-1/2 lg:min-h-screen flex-col justify-between px-8 py-10 sm:px-16 sm:py-14">
+    <div class="ring-decor dim w-96 h-96 -top-32 -right-24"></div>
+    <div class="ring-decor w-72 h-72 bottom-24 right-8"></div>
+    <div class="ring-decor dim w-64 h-64 -bottom-20 -left-20"></div>
+
+    <a href="{% url 'web-home' %}" class="relative z-10 inline-flex items-center gap-3">
+      <span class="w-11 h-11 rounded-xl bg-white flex items-center justify-center">
+        <span class="block w-6 h-1.5 rounded-full bg-brand"></span>
+      </span>
+      <span class="display text-2xl">Sport<span class="text-brand">Tech</span></span>
+    </a>
+
+    <div class="relative z-10">
+      <h1 class="display text-4xl sm:text-5xl leading-[1.05]">
+        Shop. Train.<br><span class="text-brand">Perform.</span>
+      </h1>
+      <p class="mt-4 max-w-sm text-white/60 text-sm leading-relaxed">
+        Gear from sellers you can trust, curated for every level of play — delivered to your door across Ghana.
+      </p>
+    </div>
+
+    <div class="relative z-10 flex flex-wrap gap-x-6 gap-y-2 text-xs text-white/50">
+      <span class="flex items-center gap-1.5"><svg viewBox="0 0 24 24" class="w-3.5 h-3.5 text-brand"><use href="#icon-check"/></svg>Verified sellers</span>
+      <span class="flex items-center gap-1.5"><svg viewBox="0 0 24 24" class="w-3.5 h-3.5 text-brand"><use href="#icon-check"/></svg>Secure checkout</span>
+      <span class="flex items-center gap-1.5"><svg viewBox="0 0 24 24" class="w-3.5 h-3.5 text-brand"><use href="#icon-check"/></svg>Fast delivery</span>
+    </div>
+  </div>
+
+  <!-- Right form panel -->
+  <div class="flex-1 flex items-start justify-center px-6 py-14 sm:px-10 lg:py-24">
+    <div class="w-full max-w-md">
+      {% block form_content %}{% endblock %}
+    </div>
+  </div>
+</div>
+{% endblock %}

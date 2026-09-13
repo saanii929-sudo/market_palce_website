@@ -1,0 +1,63 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Expenses{% endblock %}
+{% block seller_subtitle %}Operating costs that reduce your net income{% endblock %}
+{% block seller_actions %}{% endblock %}
+
+{% block seller_content %}
+<div class="grid lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 rounded-2xl bg-white border border-gray-200 overflow-hidden h-fit">
+    <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+            <th class="px-5 py-3">Date</th>
+            <th class="px-5 py-3">Category</th>
+            <th class="px-5 py-3">Description</th>
+            <th class="px-5 py-3">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for expense in expenses %}
+            <tr class="border-b border-gray-50 last:border-0">
+              <td class="px-5 py-4 text-gray-500">{{ expense.incurred_on|date:"M d, Y" }}</td>
+              <td class="px-5 py-4"><span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">{{ expense.get_category_display }}</span></td>
+              <td class="px-5 py-4 text-gray-500">{{ expense.description|default:"—" }}</td>
+              <td class="px-5 py-4 font-bold">GH₵{{ expense.amount }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="px-5 py-10 text-center text-gray-400">No expenses logged yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-gray-200 p-6 h-fit">
+    <h2 class="display text-lg mb-4">Log an expense</h2>
+    <form method="post" action="{% url 'web-seller-expense-add' %}" class="space-y-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-sm font-bold mb-2">Category</label>
+        <select name="category" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+          {% for code, label in categories %}
+            <option value="{{ code }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-bold mb-2">Amount (GH₵)</label>
+        <input type="number" step="0.01" min="0.01" name="amount" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <div>
+        <label class="block text-sm font-bold mb-2">Date</label>
+        <input type="date" name="incurred_on" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <div>
+        <label class="block text-sm font-bold mb-2">Description</label>
+        <input type="text" name="description" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <button type="submit" class="w-full rounded-xl bg-brand hover:bg-brand-dark text-white font-bold py-3 transition-colors">Add expense</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

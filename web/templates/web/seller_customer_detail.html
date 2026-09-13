@@ -1,0 +1,41 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}{{ customer.full_name }}{% endblock %}
+{% block seller_subtitle %}{{ customer.phone|default:customer.email|default:"Customer" }}{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-customers' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to customers</a>
+{% endblock %}
+
+{% block seller_content %}
+<div class="rounded-2xl bg-white border border-gray-200 p-5 mb-6 max-w-xs">
+  <p class="text-xs font-bold text-gray-400 tracking-widest">LIFETIME SPEND</p>
+  <p class="display text-2xl mt-2">GH₵{{ lifetime_spend|floatformat:0 }}</p>
+  <p class="text-xs text-gray-400 mt-2">{{ sales.count }} purchase{{ sales.count|pluralize }}</p>
+</div>
+
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Receipt</th>
+          <th class="px-5 py-3">Items</th>
+          <th class="px-5 py-3">Date</th>
+          <th class="px-5 py-3">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sale in sales %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold"><a href="{% url 'web-pos-receipt' sale.receipt_number %}" class="hover:text-brand">{{ sale.receipt_number }}</a></td>
+            <td class="px-5 py-4 text-gray-500">{% for item in sale.items.all %}{{ item.qty }}× {{ item.product.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+            <td class="px-5 py-4 text-gray-500">{{ sale.sold_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ sale.total }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="px-5 py-10 text-center text-gray-400">No purchases yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

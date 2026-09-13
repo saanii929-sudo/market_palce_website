@@ -1,0 +1,62 @@
+{% extends "web/base.html" %}
+{% load web_extras %}
+{% block title %}Wishlist · SportTech{% endblock %}
+{% block content %}
+{% include "web/_site_header.html" %}
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+  <h1 class="display text-3xl">Wishlist</h1>
+  <p class="text-sm text-gray-400 mt-1">{{ items|length }} item{{ items|length|pluralize }} saved</p>
+
+  {% if items %}
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5 mt-8">
+      {% for item in items %}
+        {% with product=item.product %}
+        <div class="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+          {% with photo=product.images.first.resolved_url %}
+          <div class="relative aspect-square" style="background: {% if photo %}#f3f4f6{% else %}{{ product|placeholder_gradient }}{% endif %}">
+            {% if photo %}
+              <img src="{{ photo }}" alt="{{ product.name }}" class="w-full h-full object-cover">
+            {% else %}
+              <span class="absolute inset-0 flex items-center justify-center text-4xl font-black text-white/25 display">{{ product.name|initial }}</span>
+            {% endif %}
+            {% if product.discount_percent %}
+              <span class="absolute top-3 left-3 bg-ink text-white text-xs font-bold px-2 py-1 rounded-md">-{{ product.discount_percent }}%</span>
+            {% endif %}
+            <form method="post" action="{% url 'web-wishlist-toggle' %}" class="absolute top-3 right-3">
+              {% csrf_token %}
+              <input type="hidden" name="product_id" value="{{ product.id }}">
+              <input type="hidden" name="next" value="{% url 'web-wishlist' %}">
+              <button type="submit" aria-label="Remove from wishlist" class="w-7 h-7 rounded-full bg-white/90 flex items-center justify-center text-gray-500 hover:text-red-500">
+                <svg viewBox="0 0 24 24" class="w-3.5 h-3.5"><use href="#icon-x"/></svg>
+              </button>
+            </form>
+          </div>
+          {% endwith %}
+          <div class="p-4">
+            <p class="text-xs text-gray-400 font-medium">{{ product.brand.name|default:product.seller.business_name }}</p>
+            <a href="{% url 'web-product-detail' product.slug %}" class="font-bold text-sm hover:text-brand line-clamp-2">{{ product.name }}</a>
+            <p class="font-bold mt-2">GH₵{{ product.price }}</p>
+            <form method="post" action="{% url 'web-wishlist-move-to-cart' product.id %}" class="mt-3">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{% url 'web-wishlist' %}">
+              <button type="submit" class="w-full rounded-lg bg-ink hover:bg-black text-white text-sm font-bold py-2.5 transition-colors">Move to cart</button>
+            </form>
+          </div>
+        </div>
+        {% endwith %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="text-center py-16">
+      <span class="inline-flex w-16 h-16 rounded-full bg-gray-100 items-center justify-center text-gray-300">
+        <svg viewBox="0 0 24 24" class="w-7 h-7"><use href="#icon-heart"/></svg>
+      </span>
+      <h2 class="display text-2xl mt-6">Nothing saved yet</h2>
+      <p class="mt-3 text-sm text-gray-500 max-w-sm mx-auto">Tap the heart on any product to save it here for later.</p>
+      <a href="{% url 'web-home' %}" class="inline-block mt-8 rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Continue shopping</a>
+    </div>
+  {% endif %}
+</main>
+{% include "web/_site_footer.html" %}
+{% endblock %}

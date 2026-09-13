@@ -1,0 +1,40 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Store settings{% endblock %}
+{% block seller_subtitle %}Manage your public store profile{% endblock %}
+{% block seller_actions %}{% endblock %}
+
+{% block seller_content %}
+<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-xl space-y-5">
+  {% csrf_token %}
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Business name</label>
+    <input type="text" name="business_name" value="{{ seller.business_name }}" required
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Primary category</label>
+    <select name="primary_category_id" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      <option value="">Select a category</option>
+      {% for category in categories %}
+        <option value="{{ category.id }}" {% if seller.primary_category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Support phone</label>
+    <input type="text" name="support_phone" value="{{ seller.support_phone }}" placeholder="024 700 1122"
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Store description</label>
+    <textarea name="tagline" rows="4"
+              class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">{{ seller.tagline }}</textarea>
+  </div>
+
+  <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Save changes</button>
+</form>
+{% endblock %}

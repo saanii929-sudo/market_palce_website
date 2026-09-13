@@ -1,0 +1,57 @@
+{% extends "web/seller_base.html" %}
+{% load web_extras %}
+{% block seller_title %}Orders{% endblock %}
+{% block seller_subtitle %}{{ orders_count }} order{{ orders_count|pluralize }} to fulfil{% endblock %}
+
+{% block seller_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="p-5 flex items-center gap-2 flex-wrap border-b border-gray-100">
+    <a href="{% url 'web-seller-orders' %}" class="text-xs font-bold px-4 py-2 rounded-full {% if not active_tab %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">All orders</a>
+    <a href="?status=processing" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'processing' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Processing</a>
+    <a href="?status=shipped" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'shipped' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Shipped</a>
+    <a href="?status=delivered" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'delivered' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Delivered</a>
+    <a href="?status=cancelled" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'cancelled' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Cancelled</a>
+  </div>
+
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Order</th>
+          <th class="px-5 py-3">Customer</th>
+          <th class="px-5 py-3">Items</th>
+          <th class="px-5 py-3">Date</th>
+          <th class="px-5 py-3">Total</th>
+          <th class="px-5 py-3">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for order in orders %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ order.order_number }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ order.delivery_recipient_name }}</td>
+            <td class="px-5 py-4">{% include "web/_order_item_icons.html" %}</td>
+            <td class="px-5 py-4 text-gray-500">{{ order.placed_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ order.seller_total }}</td>
+            <td class="px-5 py-4">
+              <form method="post" action="{% url 'web-seller-order-status' order.order_number %}">
+                {% csrf_token %}
+                <select name="status" onchange="this.form.submit()" {% if order.status == 'delivered' or order.status == 'cancelled' %}disabled{% endif %}
+                        class="rounded-lg border border-gray-200 text-xs font-bold px-3 py-2 focus:outline-none focus:border-ink disabled:opacity-50">
+                  <option value="processing" {% if order.status == 'processing' %}selected{% endif %}>Processing</option>
+                  <option value="shipped" {% if order.status == 'shipped' %}selected{% endif %}>Shipped</option>
+                  <option value="out_for_delivery" {% if order.status == 'out_for_delivery' %}selected{% endif %}>Out for delivery</option>
+                  <option value="delivered" {% if order.status == 'delivered' %}selected{% endif %}>Delivered</option>
+                  <option value="cancelled" {% if order.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                </select>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">No orders in this view yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
