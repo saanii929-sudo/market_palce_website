@@ -1,7 +1,7 @@
 from django.db.models import Count
 from django.utils import timezone
 
-from catalog.models import Banner, Brand, Collection, FlashDeal, Product, Seller
+from catalog.models import Banner, Brand, Category, Collection, FlashDeal, Product, Seller
 
 from .models import RecentlyViewed
 
@@ -9,6 +9,11 @@ RECOMMENDED_LIMIT = 12
 TRENDING_LIMIT = 12
 POPULAR_LIMIT = 12
 FEATURED_LIMIT = 12
+HOME_CATEGORY_LIMIT = 10
+
+
+def get_home_categories(limit=HOME_CATEGORY_LIMIT):
+    return Category.objects.filter(is_active=True).order_by("display_order", "name")[:limit]
 
 
 def get_active_banners():

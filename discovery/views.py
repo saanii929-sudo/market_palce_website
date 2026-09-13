@@ -10,6 +10,7 @@ from catalog.models import Brand, Category, Product, Seller
 from catalog.serializers import (
     BannerSerializer,
     BrandSerializer,
+    CategorySerializer,
     CollectionSerializer,
     FlashDealSerializer,
     ProductListSerializer,
@@ -48,6 +49,7 @@ class HomeView(APIView):
         if payload is None:
             context = {"request": request}
             payload = {
+                "categories": CategorySerializer(services.get_home_categories(), many=True, context=context).data,
                 "banners": BannerSerializer(services.get_active_banners(), many=True, context=context).data,
                 "flash_deals": FlashDealSerializer(
                     services.get_live_flash_deals(), many=True, context=context
