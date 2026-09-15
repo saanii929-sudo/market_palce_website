@@ -167,16 +167,12 @@ class SearchLogView(APIView):
 
 class RecentlyViewedListView(generics.ListAPIView):
     serializer_class = RecentlyViewedSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return RecentlyViewed.objects.none()
-        return (
-            RecentlyViewed.objects.filter(user=self.request.user)
-            .select_related("product")
-            .order_by("-viewed_at")
-        )
+        return services.list_recently_viewed(self.request)
 
 
 class NewsletterSubscribeView(APIView):

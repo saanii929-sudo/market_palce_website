@@ -107,6 +107,50 @@ def get_recommended_products(user, limit=RECOMMENDED_LIMIT):
     )
 
 
+def _owner_kwargs_for_write(request) -> dict:
+    if request.user.is_authenticated:
+        return {"user": request.user, "session_key": None}
+    if not request.session.session_key:
+        request.session.save()
+    return {"user": None, "session_key": request.session.session_key}
+
+
+def _owner_kwargs_for_read(request) -> dict | None:
+    if request.user.is_authenticated:
+        return {"user": request.user}
+    session_key = getattr(request.session, "session_key", None)
+    if not session_key:
+        return None
+    return {"session_key": session_key}
+
+
+def record_view(request, product) -> None:
+    owner_kwargs = _owner_kwargs_for_write(request)
+    RecentlyViewed.objects.update_or_create(product=product, **owner_kwargs)
+
+
+def list_recently_viewed(request):
+    owner_kwargs = _owner_kwargs_for_read(request)
+    if owner_kwargs is None:
+        return RecentlyViewed.objects.none()
+    return RecentlyViewed.objects.filter(**owner_kwargs).select_related("product").order_by("-viewed_at")
+
+
+def merge_guest_recently_viewed_into_user(session_key: str, user) -> None:
+    guest_items = RecentlyViewed.objects.filter(session_key=session_key)
+    if not guest_items.exists():
+        return
+
+    existing_product_ids = set(RecentlyViewed.objects.filter(user=user).values_list("product_id", flat=True))
+    for item in guest_items:
+        if item.product_id in existing_product_ids:
+            item.delete()
+        else:
+            item.user = user
+            item.session_key = None
+            item.save(update_fields=["user", "session_key"])
+
+
 def get_active_collections():
     return Collection.objects.filter(is_active=True).prefetch_related("products").order_by("display_order")
 

@@ -121,6 +121,7 @@ def login_view(request):
         if request.session.session_key:
             cart_services.merge_guest_cart_into_user_cart(request.session.session_key, user)
             wishlist_services.merge_guest_wishlist_into_user_wishlist(request.session.session_key, user)
+            discovery_services.merge_guest_recently_viewed_into_user(request.session.session_key, user)
 
         django_login(request, user)
         messages.success(request, f"Welcome back, {user.full_name or user.email or user.phone}!")

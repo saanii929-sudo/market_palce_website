@@ -139,10 +139,12 @@ class LoginView(APIView):
 
         if request.session.session_key:
             from cart.services import merge_guest_cart_into_user_cart
+            from discovery.services import merge_guest_recently_viewed_into_user
             from wishlist.services import merge_guest_wishlist_into_user_wishlist
 
             merge_guest_cart_into_user_cart(request.session.session_key, user)
             merge_guest_wishlist_into_user_wishlist(request.session.session_key, user)
+            merge_guest_recently_viewed_into_user(request.session.session_key, user)
 
         return Response({"user": UserSerializer(user).data, **tokens_for_user(user)})
 

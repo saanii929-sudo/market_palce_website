@@ -5,7 +5,7 @@ from .models import NewsletterSubscriber, RecentlyViewed, SearchQuery
 
 @admin.register(RecentlyViewed)
 class RecentlyViewedAdmin(admin.ModelAdmin):
-    list_display = ["id", "user", "product", "viewed_at"]
+    list_display = ["id", "user", "session_key", "product", "viewed_at"]
     autocomplete_fields = ["user", "product"]
 
 

@@ -112,9 +112,8 @@ class ProductViewTrackingView(APIView):
         with transaction.atomic():
             Product.objects.filter(id=product.id).update(view_count=product.view_count + 1)
 
-            if request.user.is_authenticated:
-                from discovery.models import RecentlyViewed
+            from discovery import services as discovery_services
 
-                RecentlyViewed.objects.update_or_create(user=request.user, product=product)
+            discovery_services.record_view(request, product)
 
         return Response(status=status.HTTP_204_NO_CONTENT)

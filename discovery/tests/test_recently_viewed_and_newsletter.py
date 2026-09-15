@@ -14,9 +14,10 @@ def api_client():
 
 
 @pytest.mark.django_db
-def test_recently_viewed_requires_authentication(api_client):
+def test_recently_viewed_is_empty_for_anonymous_without_session(api_client):
     response = api_client.get(reverse("recently-viewed"))
-    assert response.status_code == 401
+    assert response.status_code == 200
+    assert response.data["results"] == []
 
 
 @pytest.mark.django_db
@@ -34,6 +35,26 @@ def test_recently_viewed_lists_only_own_products():
 
     names = [r["product"]["name"] for r in response.data["results"]]
     assert names == ["Viewed by A"]
+
+
+@pytest.mark.django_db
+def test_recently_viewed_tracks_guest_by_session_and_merges_on_login():
+    product = ProductFactory(name="Viewed by guest")
+    client = APIClient()
+
+    client.post(reverse("product-track-view", kwargs={"slug": product.slug}))
+    response = client.get(reverse("recently-viewed"))
+    names = [r["product"]["name"] for r in response.data["results"]]
+    assert names == ["Viewed by guest"]
+
+    user = UserFactory(email="guest-turned-user@example.com")
+    from discovery.services import merge_guest_recently_viewed_into_user
+
+    session_key = client.session.session_key
+    merge_guest_recently_viewed_into_user(session_key, user)
+
+    assert RecentlyViewed.objects.filter(user=user, product=product).exists()
+    assert not RecentlyViewed.objects.filter(session_key=session_key).exists()
 
 
 @pytest.mark.django_db
