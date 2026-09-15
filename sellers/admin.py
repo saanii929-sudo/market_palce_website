@@ -1,14 +1,61 @@
 from django.contrib import admin, messages
+from django.utils import timezone
 from django.utils.html import format_html
 
 from .models import Payout, SellerApplication
-from .services import SellerApplicationError, approve_application, reject_application
+from .services import (
+    PayoutError,
+    SellerApplicationError,
+    approve_application,
+    mark_payout_paid,
+    reject_application,
+    reject_payout,
+    schedule_payout,
+)
 
 
 @admin.register(Payout)
 class PayoutAdmin(admin.ModelAdmin):
-    list_display = ["seller", "amount", "method", "status", "payout_date"]
+    list_display = ["seller", "amount", "method", "account_details", "status", "created_at", "payout_date"]
     list_filter = ["status", "seller"]
+    autocomplete_fields = ["seller"]
+    actions = ["schedule_selected", "mark_paid_selected", "reject_selected"]
+
+    @admin.action(description="Schedule for payout today")
+    def schedule_selected(self, request, queryset):
+        scheduled = 0
+        for payout in queryset:
+            try:
+                schedule_payout(payout, payout_date=timezone.now().date(), admin_note=f"Scheduled by {request.user}")
+                scheduled += 1
+            except PayoutError as exc:
+                self.message_user(request, f"{payout}: {exc.message}", level=messages.WARNING)
+        if scheduled:
+            self.message_user(request, f"Scheduled {scheduled} payout(s).", level=messages.SUCCESS)
+
+    @admin.action(description="Mark selected as paid")
+    def mark_paid_selected(self, request, queryset):
+        paid = 0
+        for payout in queryset:
+            try:
+                mark_payout_paid(payout)
+                paid += 1
+            except PayoutError as exc:
+                self.message_user(request, f"{payout}: {exc.message}", level=messages.WARNING)
+        if paid:
+            self.message_user(request, f"Marked {paid} payout(s) as paid.", level=messages.SUCCESS)
+
+    @admin.action(description="Reject selected requests")
+    def reject_selected(self, request, queryset):
+        rejected = 0
+        for payout in queryset:
+            try:
+                reject_payout(payout, admin_note=f"Rejected by {request.user}")
+                rejected += 1
+            except PayoutError as exc:
+                self.message_user(request, f"{payout}: {exc.message}", level=messages.WARNING)
+        if rejected:
+            self.message_user(request, f"Rejected {rejected} payout(s).", level=messages.SUCCESS)
 
 
 @admin.register(SellerApplication)
@@ -20,10 +67,6 @@ class SellerApplicationAdmin(admin.ModelAdmin):
     list_filter = ["status", "category"]
     search_fields = ["business_name", "user__email", "user__phone"]
     autocomplete_fields = ["user", "category"]
-    # status/reviewer_note are only ever changed through the approve/reject
-    # actions below, so a decision always goes through submit_application's
-    # side effects (promoting the user to seller, creating the Seller row,
-    # sending the notification) instead of silently drifting out of sync.
     readonly_fields = [
         "submitted_at", "reviewed_at", "status", "reviewer_note", "document_links",
     ]

@@ -64,6 +64,16 @@
         <a href="{% url 'web-console-products' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'products' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-grid"/></svg>Products
         </a>
+        <a href="{% url 'web-console-payouts' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'payouts' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-chart"/></svg>Payouts</span>
+          {% if pending_payouts_count %}<span class="text-xs font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center">{{ pending_payouts_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'web-console-categories' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'categories' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-pin"/></svg>Categories
+        </a>
+        <a href="{% url 'web-console-delivery-methods' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'delivery-methods' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-barcode"/></svg>Delivery methods
+        </a>
         {% endwith %}
       </nav>
     </div>

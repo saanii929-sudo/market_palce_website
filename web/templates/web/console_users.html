@@ -2,6 +2,7 @@
 {% block console_title %}Users{% endblock %}
 {% block console_subtitle %}Customers, sellers and admins{% endblock %}
 {% block console_actions %}
+  <a href="{% url 'web-console-user-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">Add user</a>
   <a href="{% url 'web-console-users-export' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Export report</a>
 {% endblock %}
 

@@ -51,10 +51,14 @@ def test_checkout_summary_without_delivery_method_has_zero_fee():
 
 @pytest.mark.django_db
 def test_webhook_success_marks_payment_success():
+    # "other_gateway" (not "card"/"mobile_money") so this exercises the
+    # generic eager-order-then-webhook-confirms mechanism - those two real
+    # codes now route through the Hubtel deferred flow instead, see
+    # test_hubtel_checkout.py.
     user = UserFactory(email="webhookok@example.com")
     address = AddressFactory(user=user)
     delivery = DeliveryMethodFactory()
-    payment_method = PaymentMethodFactory(code="card", name="Card")
+    payment_method = PaymentMethodFactory(code="other_gateway", name="Other Gateway")
     product = ProductFactory(price="20.00", stock_qty=5)
 
     client = authed_client(user)
@@ -84,7 +88,7 @@ def test_webhook_failure_cancels_order():
     user = UserFactory(email="webhookfail@example.com")
     address = AddressFactory(user=user)
     delivery = DeliveryMethodFactory()
-    payment_method = PaymentMethodFactory(code="card", name="Card")
+    payment_method = PaymentMethodFactory(code="other_gateway", name="Other Gateway")
     product = ProductFactory(price="20.00", stock_qty=5)
 
     client = authed_client(user)
@@ -131,7 +135,7 @@ def test_webhook_is_idempotent_on_replayed_delivery():
     user = UserFactory(email="webhookreplay@example.com")
     address = AddressFactory(user=user)
     delivery = DeliveryMethodFactory()
-    payment_method = PaymentMethodFactory(code="card", name="Card")
+    payment_method = PaymentMethodFactory(code="other_gateway", name="Other Gateway")
     product = ProductFactory(price="20.00", stock_qty=5)
 
     client = authed_client(user)

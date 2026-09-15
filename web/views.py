@@ -1,6 +1,6 @@
 import secrets
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from functools import wraps
 
 from django.conf import settings
@@ -39,13 +39,21 @@ from core.defaults import CannotDeleteOnlyDefaultError, handle_deletion
 from core.sms import get_sms_backend
 from discovery import services as discovery_services
 from notifications.models import Notification
-from orders.models import DeliveryMethod, Order, OrderItem, PaymentMethod, ReturnRequest
+from orders.models import DeliveryMethod, Order, OrderItem, PaymentMethod, PendingCheckout, ReturnRequest, Shipment
+from orders.services.hubtel_checkout import (
+    HubtelCheckoutError,
+    finalize_pending_checkout,
+    mark_pending_checkout_failed,
+    start_hubtel_checkout,
+)
 from orders.services.order_placement import OrderPlacementError, place_order
+from orders.services.payment_gateway import HUBTEL_PAYMENT_METHOD_CODES, HubtelGateway, PaymentGatewayError
 from orders.services.returns import ReturnError, eligible_order_items, request_return, resolve_return_request
 from payments.models import PaymentMethodToken
 from payments.serializers import PaymentMethodTokenCreateSerializer
 from reviews.models import Review
 from sellers.models import Payout, SellerApplication
+from sellers.services import PayoutError, get_available_balance, request_withdrawal
 from support.models import FAQ
 from support.serializers import SupportTicketCreateSerializer
 from wishlist import services as wishlist_services
@@ -597,6 +605,24 @@ def checkout_view(request):
         delivery_method = get_object_or_404(DeliveryMethod, id=request.POST.get("delivery_method_id"), is_active=True)
         payment_method = _resolve_checkout_payment_method(request)
 
+        if payment_method.code in HUBTEL_PAYMENT_METHOD_CODES:
+            try:
+                pending = start_hubtel_checkout(
+                    user=request.user, cart=cart, address=address, delivery_method=delivery_method,
+                    payment_method=payment_method,
+                    callback_url=request.build_absolute_uri(reverse("payment-webhook", kwargs={"gateway": "hubtel"})),
+                    return_url=request.build_absolute_uri(reverse("web-hubtel-return")),
+                    cancellation_url=request.build_absolute_uri(reverse("web-checkout")),
+                )
+            except HubtelCheckoutError as exc:
+                messages.error(request, str(exc))
+                return redirect("web-checkout")
+
+            if not pending.checkout_url:
+                messages.error(request, "Couldn't start the Hubtel checkout. Please try again.")
+                return redirect("web-checkout")
+            return redirect(pending.checkout_url)
+
         try:
             order = place_order(
                 user=request.user, cart=cart, address=address,
@@ -614,6 +640,39 @@ def checkout_view(request):
         "totals": totals, "addresses": addresses, "delivery_methods": delivery_methods,
         "payment_tokens": payment_tokens, "cod_method": cod_method, "payment_methods": payment_methods,
     })
+
+
+@login_required(login_url="web-login")
+def hubtel_return_view(request):
+    """Where the browser lands after Hubtel's hosted checkout page. The
+    webhook usually finalizes the order first, but the browser can get here
+    before that delivery arrives, so this re-checks directly with Hubtel."""
+    reference = request.GET.get("clientReference") or request.GET.get("reference")
+    if not reference:
+        messages.error(request, "Missing payment reference.")
+        return redirect("web-checkout")
+
+    pending = get_object_or_404(PendingCheckout, reference=reference, user=request.user)
+
+    if pending.status == PendingCheckout.Status.PENDING:
+        try:
+            result = HubtelGateway().check_status(reference)
+        except PaymentGatewayError:
+            result = {"status": "pending"}
+
+        if result["status"] == "success":
+            pending = finalize_pending_checkout(pending)
+        elif result["status"] == "failed":
+            pending = mark_pending_checkout_failed(pending, "Payment failed or was cancelled.")
+
+    if pending.status == PendingCheckout.Status.PAID and pending.order:
+        return redirect("web-order-confirmation", order_number=pending.order.order_number)
+    if pending.status == PendingCheckout.Status.FAILED:
+        messages.error(request, pending.failure_reason or "Payment failed or was cancelled.")
+        return redirect("web-checkout")
+
+    messages.info(request, "We're still confirming your payment - this can take a moment. Please check back shortly.")
+    return redirect("web-account-orders")
 
 
 @login_required(login_url="web-login")
@@ -1126,9 +1185,20 @@ def seller_orders_view(request, seller):
 def seller_order_status_update_view(request, seller, order_number):
     order = get_object_or_404(Order, order_number=order_number, items__product__seller=seller)
     new_status = request.POST.get("status", "")
+    courier_name = request.POST.get("courier_name", "").strip()
+    tracking_number = request.POST.get("tracking_number", "").strip()
+
     try:
-        order.transition_to(new_status, note="Updated by seller.")
-        messages.success(request, f"Order {order.order_number} marked as {order.get_status_display()}.")
+        if new_status and new_status != order.status:
+            order.transition_to(new_status, note="Updated by seller.")
+            messages.success(request, f"Order {order.order_number} marked as {order.get_status_display()}.")
+
+        if order.status == Order.Status.SHIPPED and (courier_name or tracking_number):
+            shipment, _ = Shipment.objects.get_or_create(order=order)
+            shipment.courier_name = courier_name
+            shipment.tracking_number = tracking_number
+            shipment.save(update_fields=["courier_name", "tracking_number", "updated_at"])
+            messages.success(request, f"Tracking info saved for order {order.order_number}.")
     except ValueError:
         messages.error(request, f"Can't move order {order.order_number} to that status.")
     return redirect("web-seller-orders")
@@ -1181,16 +1251,40 @@ def seller_order_return_resolve_view(request, seller, return_id):
 def seller_payouts_view(request, seller):
     payouts = Payout.objects.filter(seller=seller)
     next_payout = payouts.filter(status=Payout.Status.SCHEDULED).first()
-    history = payouts.filter(status=Payout.Status.PAID)
+    pending_request = payouts.filter(status=Payout.Status.REQUESTED).first()
+    history = payouts.exclude(status=Payout.Status.REQUESTED)
 
     return render(request, "web/seller_payouts.html", {
         "active_nav": "payouts",
         "seller": seller,
         "products_count": Product.objects.filter(seller=seller).count(),
         "orders_count": _seller_order_qs(seller).count(),
+        "available_balance": get_available_balance(seller),
         "next_payout": next_payout,
+        "pending_request": pending_request,
         "payout_history": history,
     })
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_payout_request_view(request, seller):
+    amount = request.POST.get("amount", "").strip()
+    method = request.POST.get("method", "").strip()
+    account_details = request.POST.get("account_details", "").strip()
+
+    try:
+        amount = Decimal(amount)
+    except (InvalidOperation, ValueError):
+        messages.error(request, "Enter a valid amount to withdraw.")
+        return redirect("web-seller-payouts")
+
+    try:
+        request_withdrawal(seller, amount=amount, method=method, account_details=account_details)
+        messages.success(request, f"Withdrawal request for GH₵{amount} submitted for review.")
+    except PayoutError as exc:
+        messages.error(request, exc.message)
+    return redirect("web-seller-payouts")
 
 
 @seller_required

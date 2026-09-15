@@ -14,6 +14,10 @@ class Category(TimeStampedModel):
     icon_url = models.URLField(blank=True, max_length=500)
     display_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    commission_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=Decimal("10.00"),
+        help_text="Platform commission percentage on sales in this category (e.g. 10.00 for 10%).",
+    )
 
     class Meta:
         verbose_name_plural = "categories"

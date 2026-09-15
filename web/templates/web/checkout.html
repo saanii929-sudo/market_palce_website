@@ -5,18 +5,21 @@
 <main class="max-w-5xl mx-auto px-4 sm:px-6 py-10">
   <h1 class="display text-3xl mb-6">Checkout</h1>
 
-  <!-- Step indicator (this is a single-page checkout - purely a progress cue, not separate routes) -->
+  <!-- Step indicator (this is a single-page checkout - purely a progress cue, not separate routes).
+       Steps 2/3 toggle client-side via data-step-dot/data-step-label; the form only ever submits once, from step 3. -->
   <div class="flex items-center gap-3 mb-10 text-sm font-semibold overflow-x-auto no-scrollbar" data-step-indicator>
     <span class="flex items-center gap-2 text-green-600 shrink-0">
       <span class="w-6 h-6 rounded-full bg-green-600 text-white flex items-center justify-center text-xs">✓</span>Cart
     </span>
     <span class="h-px w-8 bg-gray-200 shrink-0"></span>
-    <span class="flex items-center gap-2 text-brand shrink-0">
-      <span class="w-6 h-6 rounded-full bg-brand text-white flex items-center justify-center text-xs">2</span>Address &amp; delivery
+    <span class="flex items-center gap-2 shrink-0" data-step="2">
+      <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" data-step-dot>2</span>
+      <span data-step-label>Address &amp; delivery</span>
     </span>
     <span class="h-px w-8 bg-gray-200 shrink-0"></span>
-    <span class="flex items-center gap-2 text-gray-300 shrink-0">
-      <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-xs">3</span>Payment
+    <span class="flex items-center gap-2 shrink-0" data-step="3">
+      <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs" data-step-dot>3</span>
+      <span data-step-label>Payment</span>
     </span>
     <span class="h-px w-8 bg-gray-200 shrink-0"></span>
     <span class="flex items-center gap-2 text-gray-300 shrink-0">
@@ -24,10 +27,11 @@
     </span>
   </div>
 
-  <form method="post" class="grid lg:grid-cols-3 gap-10">
+  <form method="post" class="grid lg:grid-cols-3 gap-10" id="checkout-form">
     {% csrf_token %}
 
     <div class="lg:col-span-2 space-y-8">
+    <div data-checkout-step="2">
       <section>
         <h2 class="font-bold text-lg mb-3">Delivery address</h2>
         {% if addresses %}
@@ -90,7 +94,9 @@
           {% endfor %}
         </div>
       </section>
+    </div>
 
+    <div data-checkout-step="3" hidden>
       <section>
         <h2 class="font-bold text-lg mb-3">Payment method</h2>
         <div class="space-y-2">
@@ -121,7 +127,9 @@
             </label>
           {% endfor %}
         </div>
+        <button type="button" id="checkout-back-btn" class="mt-4 text-sm font-semibold text-gray-500 hover:text-ink">← Back to address &amp; delivery</button>
       </section>
+    </div>
     </div>
 
     <div class="rounded-2xl border border-gray-200 bg-white p-6 h-fit space-y-3">
@@ -133,12 +141,92 @@
       <div class="flex justify-between text-sm"><span class="text-gray-500">Delivery</span><span class="font-semibold">{% if totals.delivery_fee %}GH₵{{ totals.delivery_fee }}{% else %}Free{% endif %}</span></div>
       <div class="h-px bg-gray-100 my-2"></div>
       <div class="flex justify-between font-bold"><span>Total</span><span>GH₵{{ totals.total }}</span></div>
-      <button type="submit" {% if not addresses %}disabled{% endif %}
+      <p id="checkout-error" class="text-xs text-red-600 mt-1" hidden></p>
+      <button type="button" id="checkout-submit-btn" {% if not addresses %}disabled{% endif %}
               class="w-full mt-4 rounded-xl bg-brand hover:bg-brand-dark disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-3.5 transition-colors">
-        Place order
+        Payment
       </button>
     </div>
   </form>
 </main>
 {% include "web/_site_footer.html" %}
+<script>
+  (function () {
+    const form = document.getElementById('checkout-form');
+    const stepAddress = document.querySelector('[data-checkout-step="2"]');
+    const stepPayment = document.querySelector('[data-checkout-step="3"]');
+    const submitBtn = document.getElementById('checkout-submit-btn');
+    const backBtn = document.getElementById('checkout-back-btn');
+    const errorEl = document.getElementById('checkout-error');
+    const dots = {
+      2: document.querySelector('[data-step="2"] [data-step-dot]'),
+      3: document.querySelector('[data-step="3"] [data-step-dot]'),
+    };
+    const wrappers = {
+      2: document.querySelector('[data-step="2"]'),
+      3: document.querySelector('[data-step="3"]'),
+    };
+
+    function paintStep(step) {
+      [2, 3].forEach((n) => {
+        const active = n === step;
+        const done = n < step;
+        wrappers[n].classList.toggle('text-brand', active);
+        wrappers[n].classList.toggle('text-gray-300', !active && !done);
+        wrappers[n].classList.toggle('text-green-600', done);
+        dots[n].classList.remove('bg-brand', 'bg-gray-100', 'bg-green-600', 'text-white', 'text-gray-400');
+        if (active) {
+          dots[n].classList.add('bg-brand', 'text-white');
+        } else if (done) {
+          dots[n].classList.add('bg-green-600', 'text-white');
+        } else {
+          dots[n].classList.add('bg-gray-100', 'text-gray-400');
+        }
+        dots[n].textContent = done ? '✓' : String(n);
+      });
+    }
+
+    function showError(message) {
+      errorEl.textContent = message;
+      errorEl.hidden = false;
+    }
+    function clearError() {
+      errorEl.hidden = true;
+    }
+
+    function goToPayment() {
+      if (!form.querySelector('[name="address_id"]:checked')) {
+        showError('Select or add a delivery address to continue.');
+        return;
+      }
+      clearError();
+      stepAddress.hidden = true;
+      stepPayment.hidden = false;
+      paintStep(3);
+      submitBtn.textContent = 'Place order';
+      submitBtn.dataset.mode = 'submit';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function goToAddress() {
+      stepPayment.hidden = true;
+      stepAddress.hidden = false;
+      paintStep(2);
+      submitBtn.textContent = 'Payment';
+      submitBtn.dataset.mode = 'continue';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    submitBtn.addEventListener('click', () => {
+      if (submitBtn.dataset.mode === 'submit') {
+        form.submit();
+      } else {
+        goToPayment();
+      }
+    });
+    backBtn.addEventListener('click', goToAddress);
+
+    paintStep(2);
+  })();
+</script>
 {% endblock %}

@@ -18,6 +18,10 @@ gunicorn==23.0.0
 whitenoise==6.11.0
 psycopg[binary]==3.2.10
 
+# Object storage (Cloudflare R2 / S3-compatible media storage)
+django-storages==1.14.6
+boto3==1.43.94
+
 pytest==9.1.1
 pytest-django==4.14.0
 factory_boy==3.3.3

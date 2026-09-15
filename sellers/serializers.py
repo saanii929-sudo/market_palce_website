@@ -1,8 +1,10 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from catalog.models import Category
 
-from .models import SellerApplication
+from .models import Payout, SellerApplication
 
 
 class SellerApplicationSerializer(serializers.ModelSerializer):
@@ -43,3 +45,19 @@ class SellerApplicationCreateSerializer(serializers.Serializer):
 class SellerApplicationReviewSerializer(serializers.Serializer):
     action = serializers.ChoiceField(choices=["approve", "reject"])
     reviewer_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class PayoutSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payout
+        fields = [
+            "id", "amount", "method", "account_details", "status",
+            "created_at", "payout_date", "admin_note",
+        ]
+        read_only_fields = fields
+
+
+class PayoutRequestSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
+    method = serializers.CharField(max_length=50)
+    account_details = serializers.CharField(max_length=255)

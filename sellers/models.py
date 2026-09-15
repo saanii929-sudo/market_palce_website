@@ -42,17 +42,23 @@ class SellerApplication(TimeStampedModel):
 
 class Payout(TimeStampedModel):
     class Status(models.TextChoices):
+        REQUESTED = "requested", "Requested"
         SCHEDULED = "scheduled", "Scheduled"
         PAID = "paid", "Paid"
+        REJECTED = "rejected", "Rejected"
 
     seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name="payouts")
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     method = models.CharField(max_length=50, blank=True)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.SCHEDULED)
-    payout_date = models.DateField()
+    account_details = models.CharField(
+        max_length=255, blank=True, help_text="Destination account/number for this payout, e.g. mobile money number."
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.REQUESTED)
+    payout_date = models.DateField(null=True, blank=True, help_text="Set once the payout is scheduled or paid.")
+    admin_note = models.CharField(max_length=255, blank=True)
 
     class Meta:
-        ordering = ["-payout_date"]
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"Payout({self.seller.business_name}, {self.amount}, {self.status})"

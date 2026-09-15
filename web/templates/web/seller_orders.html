@@ -34,9 +34,11 @@
             <td class="px-5 py-4 text-gray-500">{{ order.placed_at|date:"M d, Y" }}</td>
             <td class="px-5 py-4 font-bold">GH₵{{ order.seller_total }}</td>
             <td class="px-5 py-4">
-              <form method="post" action="{% url 'web-seller-order-status' order.order_number %}">
+              <form method="post" action="{% url 'web-seller-order-status' order.order_number %}" class="flex flex-col gap-1.5 items-start">
                 {% csrf_token %}
-                <select name="status" onchange="this.form.submit()" {% if order.status == 'delivered' or order.status == 'cancelled' %}disabled{% endif %}
+                <select name="status" id="status-{{ order.order_number }}"
+                        onchange="var t = document.getElementById('tracking-{{ order.order_number }}'); if (this.value === 'shipped') { t.style.display = 'flex'; } else { t.style.display = 'none'; this.form.submit(); }"
+                        {% if order.status == 'delivered' or order.status == 'cancelled' %}disabled{% endif %}
                         class="rounded-lg border border-gray-200 text-xs font-bold px-3 py-2 focus:outline-none focus:border-ink disabled:opacity-50">
                   <option value="processing" {% if order.status == 'processing' %}selected{% endif %}>Processing</option>
                   <option value="shipped" {% if order.status == 'shipped' %}selected{% endif %}>Shipped</option>
@@ -44,6 +46,13 @@
                   <option value="delivered" {% if order.status == 'delivered' %}selected{% endif %}>Delivered</option>
                   <option value="cancelled" {% if order.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
                 </select>
+                <div id="tracking-{{ order.order_number }}" class="flex-col gap-1.5" style="display: {% if order.status == 'shipped' %}flex{% else %}none{% endif %};">
+                  <input type="text" name="courier_name" placeholder="Courier (e.g. DHL)" value="{{ order.shipment.courier_name }}"
+                         class="rounded-lg border border-gray-200 text-xs px-2.5 py-1.5 w-36 focus:outline-none focus:border-ink">
+                  <input type="text" name="tracking_number" placeholder="Tracking number" value="{{ order.shipment.tracking_number }}"
+                         class="rounded-lg border border-gray-200 text-xs px-2.5 py-1.5 w-36 focus:outline-none focus:border-ink">
+                  <button type="submit" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-ink text-white w-fit">Save tracking</button>
+                </div>
               </form>
             </td>
           </tr>

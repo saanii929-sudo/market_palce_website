@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import DeliveryMethod, Order, OrderItem, OrderStatusHistory, Payment, PaymentMethod, Shipment
+from .models import DeliveryMethod, Order, OrderItem, OrderStatusHistory, Payment, PaymentMethod, PendingCheckout, Shipment
 
 
 @admin.register(DeliveryMethod)
@@ -58,3 +58,12 @@ class OrderAdmin(admin.ModelAdmin):
 class ShipmentAdmin(admin.ModelAdmin):
     list_display = ["id", "order", "courier_name", "tracking_number", "current_status"]
     autocomplete_fields = ["order"]
+
+
+@admin.register(PendingCheckout)
+class PendingCheckoutAdmin(admin.ModelAdmin):
+    list_display = ["reference", "user", "total", "status", "created_at", "order"]
+    list_filter = ["status"]
+    search_fields = ["reference", "user__email", "user__phone"]
+    autocomplete_fields = ["user", "address", "delivery_method", "payment_method", "coupon", "order"]
+    readonly_fields = ["reference", "cart_snapshot", "checkout_url"]

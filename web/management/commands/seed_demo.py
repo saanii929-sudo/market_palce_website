@@ -457,6 +457,7 @@ class Command(BaseCommand):
         PaymentMethod.objects.get_or_create(code="cash_on_delivery", defaults={"name": "Cash on Delivery"})
         PaymentMethod.objects.get_or_create(code="card", defaults={"name": "Card"})
         PaymentMethod.objects.get_or_create(code="mobile_money", defaults={"name": "Mobile Money"})
+        PaymentMethod.objects.get_or_create(code="hubtel", defaults={"name": "Mobile Money / Card (Hubtel)"})
         Coupon.objects.get_or_create(
             code="WELCOME10",
             defaults=dict(discount_type=Coupon.DiscountType.PERCENTAGE, value="10.00",

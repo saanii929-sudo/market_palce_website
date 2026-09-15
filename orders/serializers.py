@@ -4,7 +4,7 @@ from accounts.models import Address
 from cart.serializers import CartItemSerializer
 from catalog.models import Product
 
-from .models import DeliveryMethod, Order, OrderItem, OrderStatusHistory, Payment, PaymentMethod, Shipment
+from .models import DeliveryMethod, Order, OrderItem, OrderStatusHistory, Payment, PaymentMethod, PendingCheckout, Shipment
 
 
 class DeliveryMethodSerializer(serializers.ModelSerializer):
@@ -32,6 +32,11 @@ class PlaceOrderSerializer(serializers.Serializer):
     address_id = serializers.IntegerField()
     delivery_method_id = serializers.IntegerField()
     payment_method_id = serializers.IntegerField()
+    # Only used when the resolved payment method is a hosted-checkout gateway
+    # (e.g. Hubtel) - where the customer's browser should land after paying.
+    # Falls back to HUBTEL_RETURN_URL/HUBTEL_CANCELLATION_URL if omitted.
+    return_url = serializers.URLField(required=False, allow_blank=True)
+    cancellation_url = serializers.URLField(required=False, allow_blank=True)
 
     def validate(self, attrs):
         request = self.context["request"]
@@ -125,3 +130,11 @@ class OrderTrackingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = ["order_number", "status", "status_history", "shipment"]
+
+
+class PendingCheckoutSerializer(serializers.ModelSerializer):
+    order = OrderDetailSerializer(read_only=True)
+
+    class Meta:
+        model = PendingCheckout
+        fields = ["reference", "checkout_url", "status", "failure_reason", "order"]

@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.db.models import Count
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -27,6 +27,40 @@ class CategoryListView(generics.ListAPIView):
     pagination_class = None
 
 
+def _apply_product_filters(qs, params):
+    subcategory = params.get("subcategory")
+    if subcategory:
+        qs = qs.filter(subcategory__slug=subcategory)
+
+    brand = params.get("brand")
+    if brand:
+        qs = qs.filter(brand__slug=brand)
+
+    seller = params.get("seller")
+    if seller:
+        qs = qs.filter(seller__slug=seller)
+
+    sort = params.get("sort")
+    ordering = SORT_OPTIONS.get(sort)
+    if ordering:
+        qs = qs.order_by(*ordering)
+
+    return qs
+
+
+@extend_schema_view(
+    get=extend_schema(
+        parameters=[
+            OpenApiParameter("category", str, description="Filter by category slug."),
+            OpenApiParameter("subcategory", str, description="Filter by subcategory slug."),
+            OpenApiParameter("brand", str, description="Filter by brand slug."),
+            OpenApiParameter("seller", str, description="Filter by seller slug."),
+            OpenApiParameter(
+                "sort", str, description="Sort order.", enum=list(SORT_OPTIONS.keys())
+            ),
+        ]
+    )
+)
 class ProductListView(generics.ListAPIView):
     serializer_class = ProductListSerializer
     permission_classes = [permissions.AllowAny]
@@ -41,24 +75,41 @@ class ProductListView(generics.ListAPIView):
         if category:
             qs = qs.filter(category__slug=category)
 
-        subcategory = params.get("subcategory")
-        if subcategory:
-            qs = qs.filter(subcategory__slug=subcategory)
+        return _apply_product_filters(qs, params)
 
-        brand = params.get("brand")
-        if brand:
-            qs = qs.filter(brand__slug=brand)
 
-        seller = params.get("seller")
-        if seller:
-            qs = qs.filter(seller__slug=seller)
+@extend_schema_view(
+    get=extend_schema(
+        parameters=[
+            OpenApiParameter("subcategory", str, description="Filter by subcategory slug."),
+            OpenApiParameter("brand", str, description="Filter by brand slug."),
+            OpenApiParameter("seller", str, description="Filter by seller slug."),
+            OpenApiParameter(
+                "sort", str, description="Sort order.", enum=list(SORT_OPTIONS.keys())
+            ),
+        ]
+    )
+)
+class CategoryProductListView(generics.ListAPIView):
+    """Products scoped to one category via the URL, e.g.
+    /catalog/categories/football/products/ - a dedicated alternative to
+    /catalog/products/?category=football for clients that prefer a
+    resource-nested URL over a query param."""
 
-        sort = params.get("sort")
-        ordering = SORT_OPTIONS.get(sort)
-        if ordering:
-            qs = qs.order_by(*ordering)
+    serializer_class = ProductListSerializer
+    permission_classes = [permissions.AllowAny]
 
-        return qs
+    def get_category(self):
+        return get_object_or_404(Category, slug=self.kwargs["slug"], is_active=True)
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Product.objects.none()
+
+        qs = Product.objects.filter(is_active=True, category=self.get_category()).select_related(
+            "seller", "category", "brand"
+        ).prefetch_related("images")
+        return _apply_product_filters(qs, self.request.query_params)
 
 
 class ProductDetailView(generics.RetrieveAPIView):
@@ -69,9 +120,6 @@ class ProductDetailView(generics.RetrieveAPIView):
 
 
 class ProductReviewListView(generics.ListAPIView):
-    """Paginated reviews + rating histogram for a product. Creating a review
-    now lives at POST /reviews/ (reviews app), which enforces verified
-    purchase against a delivered OrderItem."""
 
     serializer_class = ReviewSerializer
     permission_classes = [permissions.AllowAny]

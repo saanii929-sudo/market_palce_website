@@ -1,0 +1,56 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}{% if delivery_method %}Edit delivery method{% else %}Add delivery method{% endif %}{% endblock %}
+{% block console_subtitle %}{% if delivery_method %}Update details for {{ delivery_method.name }}{% else %}Create a new shipping option{% endif %}{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-delivery-methods' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to delivery methods</a>
+{% endblock %}
+
+{% block console_content %}
+<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl space-y-5">
+  {% csrf_token %}
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Name</label>
+      <input type="text" name="name" value="{{ delivery_method.name|default:'' }}" required placeholder="e.g. Express"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Code</label>
+      <input type="text" name="code" value="{{ delivery_method.code|default:'' }}" required placeholder="e.g. express"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      <p class="text-xs text-gray-400 mt-1.5">Unique identifier - can't be changed once orders use it.</p>
+    </div>
+  </div>
+
+  <div class="grid sm:grid-cols-3 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Price (GH₵)</label>
+      <input type="number" step="0.01" min="0" name="price" value="{{ delivery_method.price|default:'0.00' }}" required
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Min ETA (days)</label>
+      <input type="number" min="0" name="eta_days_min" value="{{ delivery_method.eta_days_min|default:1 }}" required
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Max ETA (days)</label>
+      <input type="number" min="0" name="eta_days_max" value="{{ delivery_method.eta_days_max|default:3 }}" required
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+
+  <label class="flex items-center gap-2 text-sm font-semibold">
+    <input type="checkbox" name="is_active" value="1" {% if delivery_method.is_active or not delivery_method %}checked{% endif %} class="rounded border-gray-300">
+    Active (offered to shoppers at checkout)
+  </label>
+
+  <div class="flex items-center gap-3 pt-2">
+    <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">
+      {% if delivery_method %}Save changes{% else %}Add delivery method{% endif %}
+    </button>
+    <a href="{% url 'web-console-delivery-methods' %}" class="rounded-xl border border-gray-200 font-bold px-6 py-3 hover:border-ink transition-colors">Cancel</a>
+  </div>
+</form>
+{% endblock %}

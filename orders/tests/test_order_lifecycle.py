@@ -5,7 +5,7 @@ from rest_framework.test import APIClient
 from accounts.tests.factories import AddressFactory, UserFactory
 from catalog.tests.factories import ProductFactory
 
-from ..models import Order
+from ..models import Order, Shipment
 from .factories import DeliveryMethodFactory, PaymentMethodFactory
 
 
@@ -77,6 +77,40 @@ def test_tracking_reflects_status_history():
     statuses = [h["status"] for h in response.data["status_history"]]
     assert statuses == [Order.Status.PROCESSING, Order.Status.SHIPPED]
     assert response.data["status"] == Order.Status.SHIPPED
+
+
+@pytest.mark.django_db
+def test_transition_creates_and_syncs_shipment_status():
+    user = UserFactory(email="shipmentsync@example.com")
+    client, order_number, _ = _place_order(user)
+    order = Order.objects.get(order_number=order_number)
+
+    assert not Shipment.objects.filter(order=order).exists()
+
+    order.transition_to(Order.Status.SHIPPED, note="Left the warehouse.")
+    shipment = Shipment.objects.get(order=order)
+    assert shipment.current_status == "Shipped"
+
+    order.transition_to(Order.Status.OUT_FOR_DELIVERY)
+    shipment.refresh_from_db()
+    assert shipment.current_status == "Out for delivery"
+
+
+@pytest.mark.django_db
+def test_tracking_endpoint_surfaces_courier_and_tracking_number():
+    user = UserFactory(email="trackingnumber@example.com")
+    client, order_number, _ = _place_order(user)
+    order = Order.objects.get(order_number=order_number)
+    order.transition_to(Order.Status.SHIPPED)
+
+    shipment = Shipment.objects.get(order=order)
+    shipment.courier_name = "DHL"
+    shipment.tracking_number = "DHL123456789"
+    shipment.save(update_fields=["courier_name", "tracking_number"])
+
+    response = client.get(reverse("order-tracking", kwargs={"order_number": order_number}))
+    assert response.data["shipment"]["courier_name"] == "DHL"
+    assert response.data["shipment"]["tracking_number"] == "DHL123456789"
 
 
 @pytest.mark.django_db

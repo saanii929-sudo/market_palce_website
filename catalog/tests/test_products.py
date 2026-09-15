@@ -47,6 +47,38 @@ def test_product_list_filters_by_category_brand_seller(api_client):
 
 
 @pytest.mark.django_db
+def test_category_product_list_endpoint_scopes_to_category(api_client):
+    category = CategoryFactory(slug="football")
+    other_category = CategoryFactory(slug="basketball")
+    brand = BrandFactory(slug="nike")
+
+    match = ProductFactory(name="Match", category=category, brand=brand)
+    ProductFactory(name="NoMatch", category=other_category)
+
+    response = api_client.get(reverse("category-product-list", kwargs={"slug": "football"}))
+    assert response.status_code == 200
+    assert [p["name"] for p in response.data["results"]] == ["Match"]
+
+    # Brand/sort filters still apply within the category scope.
+    response = api_client.get(reverse("category-product-list", kwargs={"slug": "football"}), {"brand": "nike"})
+    assert [p["name"] for p in response.data["results"]] == ["Match"]
+
+    response = api_client.get(reverse("category-product-list", kwargs={"slug": "football"}), {"brand": "adidas"})
+    assert response.data["results"] == []
+
+
+@pytest.mark.django_db
+def test_category_product_list_404s_for_unknown_or_inactive_category(api_client):
+    CategoryFactory(slug="inactive-category", is_active=False)
+
+    response = api_client.get(reverse("category-product-list", kwargs={"slug": "does-not-exist"}))
+    assert response.status_code == 404
+
+    response = api_client.get(reverse("category-product-list", kwargs={"slug": "inactive-category"}))
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
 def test_product_list_sort_price_asc(api_client):
     ProductFactory(name="Expensive", price="100.00")
     ProductFactory(name="Cheap", price="10.00")

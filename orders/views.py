@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions, status
@@ -7,17 +9,19 @@ from rest_framework.views import APIView
 
 import cart.services as cart_services
 
-from .models import DeliveryMethod, Order, Payment
+from .models import DeliveryMethod, Order, Payment, PendingCheckout
 from .serializers import (
     CheckoutSummarySerializer,
     OrderDetailSerializer,
     OrderListSerializer,
     OrderTrackingSerializer,
+    PendingCheckoutSerializer,
     PlaceOrderSerializer,
 )
 from .services import checkout as checkout_service
+from .services.hubtel_checkout import HubtelCheckoutError, finalize_pending_checkout, mark_pending_checkout_failed, start_hubtel_checkout
 from .services.order_placement import OrderPlacementError, place_order
-from .services.payment_gateway import get_gateway
+from .services.payment_gateway import HUBTEL_PAYMENT_METHOD_CODES, HubtelGateway, PaymentGatewayError, get_gateway
 
 
 class CheckoutSummaryView(APIView):
@@ -59,20 +63,46 @@ class OrderListCreateView(generics.ListAPIView):
     def post(self, request):
         serializer = PlaceOrderSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
+        payment_method = serializer.validated_data["payment_method"]
 
         idempotency_key = request.headers.get("Idempotency-Key")
+        cart = cart_services.get_or_create_cart(request)
+
+        if payment_method.code in HUBTEL_PAYMENT_METHOD_CODES:
+            already_existed = bool(
+                idempotency_key
+                and PendingCheckout.objects.filter(user=request.user, idempotency_key=idempotency_key).exists()
+            )
+            try:
+                pending = start_hubtel_checkout(
+                    user=request.user,
+                    cart=cart,
+                    address=serializer.validated_data["address"],
+                    delivery_method=serializer.validated_data["delivery_method"],
+                    payment_method=payment_method,
+                    callback_url=request.build_absolute_uri(reverse("payment-webhook", kwargs={"gateway": "hubtel"})),
+                    return_url=serializer.validated_data.get("return_url") or settings.HUBTEL_RETURN_URL,
+                    cancellation_url=serializer.validated_data.get("cancellation_url") or settings.HUBTEL_CANCELLATION_URL,
+                    idempotency_key=idempotency_key,
+                )
+            except HubtelCheckoutError as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response(
+                PendingCheckoutSerializer(pending).data,
+                status=status.HTTP_200_OK if already_existed else status.HTTP_201_CREATED,
+            )
+
         already_existed = bool(
             idempotency_key and Order.objects.filter(user=request.user, idempotency_key=idempotency_key).exists()
         )
-
-        cart = cart_services.get_or_create_cart(request)
         try:
             order = place_order(
                 user=request.user,
                 cart=cart,
                 address=serializer.validated_data["address"],
                 delivery_method=serializer.validated_data["delivery_method"],
-                payment_method=serializer.validated_data["payment_method"],
+                payment_method=payment_method,
                 idempotency_key=idempotency_key,
             )
         except OrderPlacementError as exc:
@@ -105,6 +135,35 @@ class OrderTrackingView(generics.RetrieveAPIView):
         if getattr(self, "swagger_fake_view", False):
             return Order.objects.none()
         return Order.objects.filter(user=self.request.user).prefetch_related("status_history")
+
+
+class HubtelCheckoutStatusView(APIView):
+    """Polling fallback for clients that can't rely on the server-to-server
+    webhook alone (e.g. the browser landing back on return_url before the
+    webhook has arrived) - actively re-checks Hubtel if still pending."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(responses=PendingCheckoutSerializer)
+    def get(self, request):
+        reference = request.query_params.get("reference")
+        if not reference:
+            return Response({"detail": "reference is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        pending = get_object_or_404(PendingCheckout, reference=reference, user=request.user)
+
+        if pending.status == PendingCheckout.Status.PENDING:
+            try:
+                result = HubtelGateway().check_status(reference)
+            except PaymentGatewayError as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+            if result["status"] == "success":
+                pending = finalize_pending_checkout(pending)
+            elif result["status"] == "failed":
+                pending = mark_pending_checkout_failed(pending, "Payment failed or was cancelled.")
+
+        return Response(PendingCheckoutSerializer(pending).data)
 
 
 class OrderCancelView(APIView):
@@ -153,6 +212,9 @@ class PaymentWebhookView(APIView):
         except Exception:
             return Response({"detail": "Unknown gateway."}, status=status.HTTP_404_NOT_FOUND)
 
+        if gateway == "hubtel":
+            return self._handle_hubtel_webhook(backend, request)
+
         if not backend.verify_webhook_signature(request):
             return Response({"detail": "Invalid signature."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -167,5 +229,27 @@ class PaymentWebhookView(APIView):
         order = payment.order
         if event["status"] != "success" and order.status == Order.Status.PROCESSING:
             order.transition_to(Order.Status.CANCELLED, note="Payment failed.")
+
+        return Response({"detail": "Webhook processed."})
+
+    def _handle_hubtel_webhook(self, backend, request):
+        event = backend.parse_webhook_event(request)
+        reference = event.get("reference")
+        pending = PendingCheckout.objects.filter(reference=reference).first()
+        if pending is None:
+            return Response({"detail": "Unknown reference."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Hubtel's callback body isn't cryptographically signed, so it's
+        # only a trigger to check - the actual result is confirmed against
+        # Hubtel's own status API before anything is finalized.
+        try:
+            result = backend.check_status(reference)
+        except PaymentGatewayError:
+            result = event
+
+        if result["status"] == "success":
+            finalize_pending_checkout(pending)
+        elif result["status"] == "failed":
+            mark_pending_checkout_failed(pending, "Payment failed or was cancelled.")
 
         return Response({"detail": "Webhook processed."})

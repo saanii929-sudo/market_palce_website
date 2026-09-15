@@ -1,0 +1,59 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Delivery methods{% endblock %}
+{% block console_subtitle %}Shipping options shown to customers at checkout{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-delivery-method-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">Add delivery method</a>
+{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Name</th>
+          <th class="px-5 py-3">Code</th>
+          <th class="px-5 py-3">Price</th>
+          <th class="px-5 py-3">ETA (days)</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for method in delivery_methods %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ method.name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ method.code }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ method.price }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ method.eta_days_min }}–{{ method.eta_days_max }}</td>
+            <td class="px-5 py-4">
+              {% if method.is_active %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Active</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4">
+              <div class="flex gap-2 justify-end flex-wrap">
+                <a href="{% url 'web-console-delivery-method-edit' method.id %}" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">Edit</a>
+                <form method="post" action="{% url 'web-console-delivery-method-toggle' method.id %}">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">
+                    {% if method.is_active %}Deactivate{% else %}Activate{% endif %}
+                  </button>
+                </form>
+                <form method="post" action="{% url 'web-console-delivery-method-delete' method.id %}" onsubmit="return confirm('Delete {{ method.name }}? This can\'t be undone.');">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">No delivery methods yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

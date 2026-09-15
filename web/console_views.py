@@ -1,21 +1,32 @@
 import csv
 import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
-from django.db.models import Q, Sum
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Count, ProtectedError, Q, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
-from catalog.models import Product, Seller
-from orders.models import Order
+from catalog.models import Category, Product, Seller
+from orders.models import DeliveryMethod, Order
 from pos.models import POSSale
-from sellers.models import SellerApplication
-from sellers.services import SellerApplicationError, approve_application, reject_application
+from sellers.models import Payout, SellerApplication
+from sellers.services import (
+    PayoutError,
+    SellerApplicationError,
+    approve_application,
+    mark_payout_paid,
+    reject_application,
+    reject_payout,
+    schedule_payout,
+)
 
 from .views import _safe_redirect_target, superadmin_required
 
@@ -36,6 +47,7 @@ def _base_ctx(active_nav):
         "pending_applications_count": SellerApplication.objects.filter(
             status=SellerApplication.Status.PENDING
         ).count(),
+        "pending_payouts_count": Payout.objects.filter(status=Payout.Status.REQUESTED).count(),
     }
 
 
@@ -268,6 +280,67 @@ def console_users_view(request):
     return render(request, "web/console_users.html", ctx)
 
 
+def _create_user_from_form(request):
+    full_name = request.POST.get("full_name", "").strip()
+    email = request.POST.get("email", "").strip().lower()
+    phone = request.POST.get("phone", "").strip()
+    password = request.POST.get("password", "")
+    role = request.POST.get("role", User.Role.CUSTOMER)
+    is_admin = bool(request.POST.get("is_admin"))
+
+    if not email and not phone:
+        messages.error(request, "Provide an email or phone number.")
+        return None
+    if role not in User.Role.values:
+        role = User.Role.CUSTOMER
+    if not password:
+        messages.error(request, "Enter a password for this account.")
+        return None
+    try:
+        validate_password(password)
+    except DjangoValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+        return None
+    if email and User.objects.filter(email=email).exists():
+        messages.error(request, "A user with that email already exists.")
+        return None
+    if phone and User.objects.filter(phone=phone).exists():
+        messages.error(request, "A user with that phone number already exists.")
+        return None
+
+    user = User(
+        full_name=full_name,
+        email=email or None,
+        phone=phone or None,
+        role=role,
+        # Admin-created accounts are considered verified immediately - the
+        # admin has already confirmed who this person is, so there's no need
+        # to route them through the OTP signup flow.
+        is_email_verified=bool(email),
+        is_phone_verified=bool(phone),
+        is_staff=is_admin,
+        is_superuser=is_admin,
+    )
+    user.set_password(password)
+    user.save()
+    return user
+
+
+@superadmin_required
+def console_user_add_view(request):
+    """Creates a customer or platform-admin account directly. Sellers still
+    go through the seller-application approval flow (console_seller_application_approve_view),
+    since that's what also creates the linked catalog.Seller storefront row."""
+    if request.method == "POST":
+        user = _create_user_from_form(request)
+        if user is not None:
+            messages.success(request, f"{user.full_name or user.email or user.phone} was added.")
+            return redirect("web-console-users")
+
+    ctx = _base_ctx("users")
+    return render(request, "web/console_user_form.html", ctx)
+
+
 @superadmin_required
 @require_http_methods(["POST"])
 def console_user_toggle_active_view(request, user_id):
@@ -323,3 +396,288 @@ def console_products_export_view(request):
         for p in Product.objects.select_related("seller", "category").order_by("-created_at")
     ]
     return _csv_response("products.csv", ["Product", "Seller", "Category", "Price", "Status"], rows)
+
+
+# -- Payouts ---------------------------------------------------------------
+
+PAYOUT_TABS = {"requested", "scheduled", "paid", "rejected"}
+
+
+@superadmin_required
+def console_payouts_view(request):
+    tab = request.GET.get("status", "requested")
+    payouts = Payout.objects.select_related("seller").order_by("-created_at")
+    if tab in PAYOUT_TABS:
+        payouts = payouts.filter(status=tab)
+
+    ctx = _base_ctx("payouts")
+    ctx["payouts"] = payouts
+    ctx["active_tab"] = tab
+    return render(request, "web/console_payouts.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_payout_schedule_view(request, payout_id):
+    payout = get_object_or_404(Payout, id=payout_id)
+    try:
+        schedule_payout(
+            payout,
+            payout_date=request.POST.get("payout_date") or timezone.now().date(),
+            admin_note=f"Scheduled via admin console by {request.user.full_name or request.user.email}",
+        )
+        messages.success(request, f"Payout for {payout.seller.business_name} scheduled.")
+    except PayoutError as exc:
+        messages.error(request, exc.message)
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-payouts")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_payout_mark_paid_view(request, payout_id):
+    payout = get_object_or_404(Payout, id=payout_id)
+    try:
+        mark_payout_paid(payout)
+        messages.success(request, f"Payout for {payout.seller.business_name} marked as paid.")
+    except PayoutError as exc:
+        messages.error(request, exc.message)
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-payouts")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_payout_reject_view(request, payout_id):
+    payout = get_object_or_404(Payout, id=payout_id)
+    try:
+        reject_payout(
+            payout,
+            admin_note=request.POST.get("admin_note")
+            or f"Rejected via admin console by {request.user.full_name or request.user.email}",
+        )
+        messages.success(request, f"Payout for {payout.seller.business_name} rejected.")
+    except PayoutError as exc:
+        messages.error(request, exc.message)
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-payouts")))
+
+
+@superadmin_required
+def console_payouts_export_view(request):
+    rows = [
+        [p.seller.business_name, p.amount, p.method, p.account_details, p.created_at.date(), p.status]
+        for p in Payout.objects.select_related("seller").order_by("-created_at")
+    ]
+    return _csv_response(
+        "payouts.csv", ["Seller", "Amount", "Method", "Account details", "Requested", "Status"], rows
+    )
+
+
+# -- Categories -------------------------------------------------------------
+
+def _unique_category_slug(name: str) -> str:
+    base = slugify(name) or "category"
+    slug = base
+    suffix = 1
+    while Category.objects.filter(slug=slug).exists():
+        suffix += 1
+        slug = f"{base}-{suffix}"
+    return slug
+
+
+def _save_category_from_form(request, category=None):
+    name = request.POST.get("name", "").strip()
+    icon_url = request.POST.get("icon_url", "").strip()
+    display_order = request.POST.get("display_order", "0").strip()
+    commission_rate = request.POST.get("commission_rate", "").strip()
+
+    if not name:
+        messages.error(request, "Category name is required.")
+        return None
+
+    try:
+        rate = Decimal(commission_rate) if commission_rate else Decimal("10.00")
+    except InvalidOperation:
+        messages.error(request, "Enter a valid commission rate.")
+        return None
+
+    if category is None:
+        category = Category(slug=_unique_category_slug(name))
+
+    category.name = name
+    category.icon_url = icon_url
+    category.commission_rate = rate
+    try:
+        category.display_order = int(display_order or 0)
+    except ValueError:
+        category.display_order = 0
+    category.is_active = bool(request.POST.get("is_active", "1"))
+    category.save()
+    return category
+
+
+@superadmin_required
+def console_categories_view(request):
+    query = request.GET.get("q", "").strip()
+    categories = Category.objects.annotate(product_count=Count("products")).order_by("display_order", "name")
+    if query:
+        categories = categories.filter(name__icontains=query)
+
+    ctx = _base_ctx("categories")
+    ctx["categories"] = categories
+    ctx["query"] = query
+    return render(request, "web/console_categories.html", ctx)
+
+
+@superadmin_required
+def console_category_add_view(request):
+    if request.method == "POST":
+        category = _save_category_from_form(request)
+        if category is not None:
+            messages.success(request, f'"{category.name}" was added.')
+            return redirect("web-console-categories")
+
+    ctx = _base_ctx("categories")
+    ctx["category"] = None
+    return render(request, "web/console_category_form.html", ctx)
+
+
+@superadmin_required
+def console_category_edit_view(request, category_id):
+    category = get_object_or_404(Category, id=category_id)
+    if request.method == "POST":
+        saved = _save_category_from_form(request, category=category)
+        if saved is not None:
+            messages.success(request, f'"{saved.name}" was updated.')
+            return redirect("web-console-categories")
+
+    ctx = _base_ctx("categories")
+    ctx["category"] = category
+    return render(request, "web/console_category_form.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_category_toggle_view(request, category_id):
+    category = get_object_or_404(Category, id=category_id)
+    category.is_active = not category.is_active
+    category.save(update_fields=["is_active"])
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-categories")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_category_delete_view(request, category_id):
+    category = get_object_or_404(Category, id=category_id)
+    name = category.name
+    try:
+        category.delete()
+        messages.success(request, f'"{name}" was deleted.')
+    except ProtectedError:
+        category.is_active = False
+        category.save(update_fields=["is_active"])
+        messages.error(request, f'"{name}" has existing products, so it was deactivated instead of deleted.')
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-categories")))
+
+
+# -- Delivery methods --------------------------------------------------------
+
+def _save_delivery_method_from_form(request, delivery_method=None):
+    name = request.POST.get("name", "").strip()
+    code = request.POST.get("code", "").strip()
+    price = request.POST.get("price", "").strip()
+    eta_days_min = request.POST.get("eta_days_min", "").strip()
+    eta_days_max = request.POST.get("eta_days_max", "").strip()
+
+    if not name or not code:
+        messages.error(request, "Name and code are required.")
+        return None
+
+    try:
+        price = Decimal(price) if price else Decimal("0.00")
+    except InvalidOperation:
+        messages.error(request, "Enter a valid price.")
+        return None
+
+    try:
+        eta_days_min = int(eta_days_min or 1)
+        eta_days_max = int(eta_days_max or eta_days_min)
+    except ValueError:
+        messages.error(request, "Enter valid ETA days.")
+        return None
+
+    if eta_days_max < eta_days_min:
+        messages.error(request, "Max ETA days can't be less than min ETA days.")
+        return None
+
+    if delivery_method is None:
+        if DeliveryMethod.objects.filter(code=code).exists():
+            messages.error(request, f'A delivery method with code "{code}" already exists.')
+            return None
+        delivery_method = DeliveryMethod(code=code)
+    else:
+        delivery_method.code = code
+
+    delivery_method.name = name
+    delivery_method.price = price
+    delivery_method.eta_days_min = eta_days_min
+    delivery_method.eta_days_max = eta_days_max
+    delivery_method.is_active = bool(request.POST.get("is_active", "1"))
+    delivery_method.save()
+    return delivery_method
+
+
+@superadmin_required
+def console_delivery_methods_view(request):
+    ctx = _base_ctx("delivery-methods")
+    ctx["delivery_methods"] = DeliveryMethod.objects.order_by("price")
+    return render(request, "web/console_delivery_methods.html", ctx)
+
+
+@superadmin_required
+def console_delivery_method_add_view(request):
+    if request.method == "POST":
+        delivery_method = _save_delivery_method_from_form(request)
+        if delivery_method is not None:
+            messages.success(request, f'"{delivery_method.name}" was added.')
+            return redirect("web-console-delivery-methods")
+
+    ctx = _base_ctx("delivery-methods")
+    ctx["delivery_method"] = None
+    return render(request, "web/console_delivery_method_form.html", ctx)
+
+
+@superadmin_required
+def console_delivery_method_edit_view(request, delivery_method_id):
+    delivery_method = get_object_or_404(DeliveryMethod, id=delivery_method_id)
+    if request.method == "POST":
+        saved = _save_delivery_method_from_form(request, delivery_method=delivery_method)
+        if saved is not None:
+            messages.success(request, f'"{saved.name}" was updated.')
+            return redirect("web-console-delivery-methods")
+
+    ctx = _base_ctx("delivery-methods")
+    ctx["delivery_method"] = delivery_method
+    return render(request, "web/console_delivery_method_form.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_delivery_method_toggle_view(request, delivery_method_id):
+    delivery_method = get_object_or_404(DeliveryMethod, id=delivery_method_id)
+    delivery_method.is_active = not delivery_method.is_active
+    delivery_method.save(update_fields=["is_active"])
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-delivery-methods")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_delivery_method_delete_view(request, delivery_method_id):
+    delivery_method = get_object_or_404(DeliveryMethod, id=delivery_method_id)
+    name = delivery_method.name
+    try:
+        delivery_method.delete()
+        messages.success(request, f'"{name}" was deleted.')
+    except ProtectedError:
+        delivery_method.is_active = False
+        delivery_method.save(update_fields=["is_active"])
+        messages.error(request, f'"{name}" has existing orders, so it was deactivated instead of deleted.')
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-delivery-methods")))

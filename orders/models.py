@@ -59,9 +59,6 @@ class Order(TimeStampedModel):
     order_number = models.CharField(max_length=20, unique=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROCESSING)
 
-    # Lets a client retry a POST /orders/ safely (e.g. after a dropped
-    # response) without double-placing the order. Optional: orders placed
-    # without a key are never deduplicated against each other.
     idempotency_key = models.CharField(max_length=100, null=True, blank=True)
 
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
@@ -126,6 +123,10 @@ class Order(TimeStampedModel):
         self.save(update_fields=["status", "updated_at"])
         history = OrderStatusHistory.objects.create(order=self, status=new_status, note=note)
 
+        shipment, _ = Shipment.objects.get_or_create(order=self)
+        shipment.current_status = self.get_status_display()
+        shipment.save(update_fields=["current_status", "updated_at"])
+
         from .notifications import notify_order_status_change
 
         notify_order_status_change(self)
@@ -177,6 +178,7 @@ class Payment(TimeStampedModel):
     class Gateway(models.TextChoices):
         PAYSTACK = "paystack", "Paystack"
         FLUTTERWAVE = "flutterwave", "Flutterwave"
+        HUBTEL = "hubtel", "Hubtel"
         CASH_ON_DELIVERY = "cash_on_delivery", "Cash on delivery"
 
     class Status(models.TextChoices):
@@ -231,3 +233,55 @@ class ReturnRequestItem(TimeStampedModel):
 
     def __str__(self):
         return f"{self.qty} x {self.order_item.product.name}"
+
+
+def generate_checkout_reference() -> str:
+    return f"HBT-{secrets.token_hex(6).upper()}"
+
+
+class PendingCheckout(TimeStampedModel):
+    """A hosted-checkout (e.g. Hubtel) payment intent. Unlike the
+    cash-on-delivery/mock flow, nothing here becomes a real Order until the
+    gateway confirms payment succeeded - see
+    orders.services.hubtel_checkout.finalize_pending_checkout. cart_snapshot
+    locks in exactly what was being bought at checkout time, since the cart
+    itself may change (or empty) before payment completes."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PAID = "paid", "Paid"
+        FAILED = "failed", "Failed"
+
+    reference = models.CharField(max_length=40, unique=True, default=generate_checkout_reference)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pending_checkouts")
+    address = models.ForeignKey(Address, on_delete=models.PROTECT, related_name="pending_checkouts")
+    delivery_method = models.ForeignKey(DeliveryMethod, on_delete=models.PROTECT, related_name="pending_checkouts")
+    payment_method = models.ForeignKey(PaymentMethod, on_delete=models.PROTECT, related_name="pending_checkouts")
+    coupon = models.ForeignKey(Coupon, on_delete=models.SET_NULL, null=True, blank=True, related_name="pending_checkouts")
+
+    # [{"product_id": int, "variant_id": int | None, "qty": int, "unit_price": "12.50"}, ...]
+    cart_snapshot = models.JSONField()
+
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    delivery_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+
+    idempotency_key = models.CharField(max_length=100, null=True, blank=True)
+    checkout_url = models.URLField(max_length=500, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    failure_reason = models.CharField(max_length=255, blank=True)
+    order = models.OneToOneField(Order, on_delete=models.SET_NULL, null=True, blank=True, related_name="pending_checkout")
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "idempotency_key"],
+                condition=models.Q(idempotency_key__isnull=False),
+                name="unique_pending_checkout_idempotency_key_per_user",
+            )
+        ]
+
+    def __str__(self):
+        return f"PendingCheckout({self.reference}, {self.status})"
