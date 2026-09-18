@@ -1,0 +1,62 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}{% if flash_deal %}Edit flash deal{% else %}Add flash deal{% endif %}{% endblock %}
+{% block seller_subtitle %}{% if flash_deal %}Update this time-limited discount{% else %}Put one of your products on a time-limited discount{% endif %}{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-flash-deals' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to flash deals</a>
+{% endblock %}
+
+{% block seller_content %}
+<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl space-y-5">
+  {% csrf_token %}
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Product</label>
+    <select name="product_id" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      <option value="">Select a product</option>
+      {% for product in products %}
+        <option value="{{ product.id }}" {% if flash_deal.product_id == product.id %}selected{% endif %}>{{ product.name }} (GH₵{{ product.price }})</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Deal price (GH₵)</label>
+      <input type="number" step="0.01" min="0" name="deal_price" value="{{ flash_deal.deal_price|default:'' }}" required
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      <p class="text-xs text-gray-400 mt-1.5">Must be less than the product's regular price.</p>
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Deal stock</label>
+      <input type="number" min="0" name="stock_qty" value="{{ flash_deal.stock_qty|default:0 }}" required
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      <p class="text-xs text-gray-400 mt-1.5">Separate from your regular stock count.</p>
+    </div>
+  </div>
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Starts at</label>
+      <input type="datetime-local" name="starts_at" value="{{ flash_deal.starts_at|date:'Y-m-d\TH:i' }}" required
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Ends at</label>
+      <input type="datetime-local" name="ends_at" value="{{ flash_deal.ends_at|date:'Y-m-d\TH:i' }}" required
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+
+  <label class="flex items-center gap-2 text-sm font-semibold">
+    <input type="checkbox" name="is_active" value="1" {% if flash_deal.is_active or not flash_deal %}checked{% endif %} class="rounded border-gray-300">
+    Active
+  </label>
+
+  <div class="flex items-center gap-3 pt-2">
+    <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">
+      {% if flash_deal %}Save changes{% else %}Add flash deal{% endif %}
+    </button>
+    <a href="{% url 'web-seller-flash-deals' %}" class="rounded-xl border border-gray-200 font-bold px-6 py-3 hover:border-ink transition-colors">Cancel</a>
+  </div>
+</form>
+{% endblock %}

@@ -12,6 +12,7 @@ from .serializers import (
     CartSerializer,
     CouponApplySerializer,
 )
+from .services import CartError
 
 
 def _cart_response(cart):
@@ -37,12 +38,15 @@ class CartItemListCreateView(APIView):
         serializer = CartItemAddSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         cart = services.get_or_create_cart(request)
-        services.add_item(
-            cart,
-            product=serializer.validated_data["product"],
-            variant=serializer.validated_data["variant"],
-            qty=serializer.validated_data["qty"],
-        )
+        try:
+            services.add_item(
+                cart,
+                product=serializer.validated_data["product"],
+                variant=serializer.validated_data["variant"],
+                qty=serializer.validated_data["qty"],
+            )
+        except CartError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
         return _cart_response(cart)
 
 
@@ -61,7 +65,10 @@ class CartItemDetailView(APIView):
 
         serializer = CartItemUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        services.update_item_qty(item, serializer.validated_data["qty"])
+        try:
+            services.update_item_qty(item, serializer.validated_data["qty"])
+        except CartError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
         return _cart_response(item.cart)
 
     def delete(self, request, item_id):

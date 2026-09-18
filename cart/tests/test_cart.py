@@ -105,3 +105,61 @@ def test_cart_clear_empties_items(api_client):
 
     response = api_client.post(reverse("cart-clear"))
     assert response.data["items"] == []
+
+
+@pytest.mark.django_db
+def test_cannot_add_more_than_available_stock(api_client):
+    product = ProductFactory(price="10.00", stock_qty=3)
+
+    response = api_client.post(reverse("cart-item-add"), {"product_id": product.id, "qty": 4})
+    assert response.status_code == 400
+    assert not CartItem.objects.filter(product=product).exists()
+
+
+@pytest.mark.django_db
+def test_cannot_add_out_of_stock_product(api_client):
+    product = ProductFactory(price="10.00", stock_qty=0)
+
+    response = api_client.post(reverse("cart-item-add"), {"product_id": product.id, "qty": 1})
+    assert response.status_code == 400
+    assert "Out of stock" in response.data["detail"]
+
+
+@pytest.mark.django_db
+def test_adding_in_two_steps_is_capped_at_stock(api_client):
+    product = ProductFactory(price="10.00", stock_qty=5)
+
+    first = api_client.post(reverse("cart-item-add"), {"product_id": product.id, "qty": 3})
+    assert first.status_code == 200
+
+    second = api_client.post(reverse("cart-item-add"), {"product_id": product.id, "qty": 3})
+    assert second.status_code == 400
+    assert CartItem.objects.get(product=product).qty == 3
+
+
+@pytest.mark.django_db
+def test_variant_stock_is_independent_of_product_stock(api_client):
+    product = ProductFactory(price="30.00", stock_qty=100)
+    small = ProductVariantFactory(product=product, size="S", stock_qty=2)
+    large = ProductVariantFactory(product=product, size="L", stock_qty=50)
+
+    small_response = api_client.post(
+        reverse("cart-item-add"), {"product_id": product.id, "variant_id": small.id, "qty": 3}
+    )
+    assert small_response.status_code == 400
+
+    large_response = api_client.post(
+        reverse("cart-item-add"), {"product_id": product.id, "variant_id": large.id, "qty": 3}
+    )
+    assert large_response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_updating_qty_beyond_stock_is_rejected(api_client):
+    product = ProductFactory(price="15.00", stock_qty=4)
+    add_response = api_client.post(reverse("cart-item-add"), {"product_id": product.id, "qty": 2})
+    item_id = add_response.data["items"][0]["id"]
+
+    response = api_client.patch(reverse("cart-item-detail", kwargs={"item_id": item_id}), {"qty": 10})
+    assert response.status_code == 400
+    assert CartItem.objects.get(id=item_id).qty == 2

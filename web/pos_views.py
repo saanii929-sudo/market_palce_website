@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -12,9 +13,9 @@ from catalog.models import Product
 from pos.models import Customer, Discount, Employee, POSSale
 from pos.services import POSError, complete_sale, find_product
 
-from .views import _seller_order_qs, seller_required
+from .views import _seller_order_qs, subscription_required
 
-@seller_required
+@subscription_required
 def seller_employees_view(request, seller):
     return render(request, "web/seller_employees.html", {
         "active_nav": "employees",
@@ -58,7 +59,7 @@ def _save_employee_from_form(request, seller, employee=None):
     return employee
 
 
-@seller_required
+@subscription_required
 def seller_employee_add_view(request, seller):
     if request.method == "POST":
         employee = _save_employee_from_form(request, seller)
@@ -76,7 +77,7 @@ def seller_employee_add_view(request, seller):
     })
 
 
-@seller_required
+@subscription_required
 def seller_employee_edit_view(request, seller, employee_id):
     employee = get_object_or_404(Employee, id=employee_id, seller=seller)
     if request.method == "POST":
@@ -95,7 +96,7 @@ def seller_employee_edit_view(request, seller, employee_id):
     })
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_employee_toggle_view(request, seller, employee_id):
     employee = get_object_or_404(Employee, id=employee_id, seller=seller)
@@ -104,7 +105,7 @@ def seller_employee_toggle_view(request, seller, employee_id):
     return redirect("web-seller-employees")
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_employee_delete_view(request, seller, employee_id):
     employee = get_object_or_404(Employee, id=employee_id, seller=seller)
@@ -120,7 +121,7 @@ def _clocked_in_employee(request, seller):
     return Employee.objects.filter(id=employee_id, seller=seller, is_active=True).first()
 
 
-@seller_required
+@subscription_required
 def pos_terminal_view(request, seller):
     employee = _clocked_in_employee(request, seller)
     if employee is None:
@@ -133,19 +134,30 @@ def pos_terminal_view(request, seller):
             "employees": seller.employees.filter(is_active=True),
         })
 
+    recent_products = list(
+        Product.objects.filter(seller=seller, is_active=True)
+        .prefetch_related("variants", "images")
+        .order_by("-sold_count")[:12]
+    )
+    for product in recent_products:
+        product.variants_json = json.dumps([
+            {"id": v.id, "size": v.size, "color": v.color, "stock_qty": v.stock_qty, "in_stock": v.in_stock}
+            for v in product.variants.all()
+        ])
+
     return render(request, "web/pos_terminal.html", {
         "active_nav": "pos",
         "seller": seller,
         "products_count": Product.objects.filter(seller=seller).count(),
         "orders_count": _seller_order_qs(seller).count(),
         "employee": employee,
-        "recent_products": Product.objects.filter(seller=seller, is_active=True).order_by("-sold_count")[:12],
+        "recent_products": recent_products,
         "customers": seller.customers.all(),
         "discounts": seller.discounts.filter(is_active=True),
     })
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def pos_clock_in_view(request, seller):
     employee = get_object_or_404(Employee, id=request.POST.get("employee_id"), seller=seller, is_active=True)
@@ -157,17 +169,23 @@ def pos_clock_in_view(request, seller):
     return redirect("web-pos-terminal")
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def pos_clock_out_view(request, seller):
     request.session.pop(f"pos_employee_{seller.id}", None)
     return redirect("web-pos-terminal")
 
 
-@seller_required
+@subscription_required
 def pos_lookup_view(request, seller):
     code = request.GET.get("code", "").strip()
     query = request.GET.get("q", "").strip()
+
+    def _variants(product):
+        return [
+            {"id": v.id, "size": v.size, "color": v.color, "stock_qty": v.stock_qty, "in_stock": v.in_stock}
+            for v in product.variants.all()
+        ]
 
     if code:
         product = find_product(seller, code)
@@ -182,6 +200,7 @@ def pos_lookup_view(request, seller):
                 "price": str(product.price),
                 "stock_qty": product.stock_qty,
                 "image": photo.resolved_url if photo else None,
+                "variants": _variants(product),
             },
         })
 
@@ -192,6 +211,7 @@ def pos_lookup_view(request, seller):
                 {
                     "id": p.id, "name": p.name, "price": str(p.price), "stock_qty": p.stock_qty,
                     "image": p.images.first().resolved_url if p.images.first() else None,
+                    "variants": _variants(p),
                 }
                 for p in products
             ]
@@ -200,7 +220,7 @@ def pos_lookup_view(request, seller):
     return JsonResponse({"found": False, "results": []})
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def pos_checkout_view(request, seller):
     employee = _clocked_in_employee(request, seller)
@@ -209,10 +229,11 @@ def pos_checkout_view(request, seller):
         return redirect("web-pos-terminal")
 
     product_ids = request.POST.getlist("product_id")
+    variant_ids = request.POST.getlist("variant_id")
     qtys = request.POST.getlist("qty")
     cart_lines = [
-        {"product_id": int(pid), "qty": int(qty)}
-        for pid, qty in zip(product_ids, qtys)
+        {"product_id": int(pid), "variant_id": int(vid) if vid else None, "qty": int(qty)}
+        for pid, vid, qty in zip(product_ids, variant_ids, qtys)
         if pid and qty
     ]
 
@@ -251,7 +272,7 @@ def pos_checkout_view(request, seller):
     return redirect("web-pos-receipt", receipt_number=sale.receipt_number)
 
 
-@seller_required
+@subscription_required
 def pos_receipt_view(request, seller, receipt_number):
     sale = get_object_or_404(POSSale, receipt_number=receipt_number, seller=seller)
     return render(request, "web/pos_receipt.html", {
@@ -260,7 +281,7 @@ def pos_receipt_view(request, seller, receipt_number):
     })
 
 
-@seller_required
+@subscription_required
 def pos_sales_history_view(request, seller):
     tab = request.GET.get("range", "")
     sales = POSSale.objects.filter(seller=seller).select_related("employee").prefetch_related("items__product")
@@ -289,7 +310,7 @@ def _shift_month(date_value, months):
     return date_value.replace(year=year, month=month, day=1)
 
 
-@seller_required
+@subscription_required
 def pos_reports_view(request, seller):
     now = timezone.now()
     today = now.date()

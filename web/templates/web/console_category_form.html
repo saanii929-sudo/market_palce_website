@@ -6,7 +6,7 @@
 {% endblock %}
 
 {% block console_content %}
-<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl space-y-5">
+<form method="post" enctype="multipart/form-data" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl space-y-5">
   {% csrf_token %}
 
   <div>
@@ -31,9 +31,13 @@
   </div>
 
   <div>
-    <label class="block text-sm font-bold mb-2">Icon URL <span class="text-gray-400 font-normal">(optional)</span></label>
-    <input type="url" name="icon_url" value="{{ category.icon_url|default:'' }}" placeholder="https://..."
+    <label class="block text-sm font-bold mb-2">Icon <span class="text-gray-400 font-normal">(optional)</span></label>
+    {% if category.resolved_icon_url %}
+      <img src="{{ category.resolved_icon_url }}" alt="" class="w-12 h-12 rounded-lg object-cover mb-2 border border-gray-200">
+    {% endif %}
+    <input type="file" name="icon" accept="image/*"
            class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    {% if category %}<p class="text-xs text-gray-400 mt-1.5">Leave blank to keep the current icon.</p>{% endif %}
   </div>
 
   <label class="flex items-center gap-2 text-sm font-semibold">
@@ -48,4 +52,39 @@
     <a href="{% url 'web-console-categories' %}" class="rounded-xl border border-gray-200 font-bold px-6 py-3 hover:border-ink transition-colors">Cancel</a>
   </div>
 </form>
+
+{% if category %}
+<div class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl mt-6">
+  <h2 class="font-bold text-lg mb-4">Subcategories</h2>
+
+  <div class="space-y-2 mb-5">
+    {% for sub in subcategories %}
+      <div class="flex items-center justify-between rounded-xl border border-gray-200 p-3">
+        <span class="text-sm font-semibold {% if not sub.is_active %}text-gray-400{% endif %}">{{ sub.name }}</span>
+        <div class="flex gap-2">
+          <form method="post" action="{% url 'web-console-subcategory-toggle' category.id sub.id %}">
+            {% csrf_token %}
+            <button type="submit" class="rounded-lg border border-gray-200 font-bold text-xs px-3 py-1.5 hover:border-ink transition-colors">
+              {% if sub.is_active %}Deactivate{% else %}Activate{% endif %}
+            </button>
+          </form>
+          <form method="post" action="{% url 'web-console-subcategory-delete' category.id sub.id %}" onsubmit="return confirm('Delete {{ sub.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-3 py-1.5 hover:bg-red-50 transition-colors">Delete</button>
+          </form>
+        </div>
+      </div>
+    {% empty %}
+      <p class="text-sm text-gray-400">No subcategories yet.</p>
+    {% endfor %}
+  </div>
+
+  <form method="post" action="{% url 'web-console-subcategory-add' category.id %}" class="flex gap-3">
+    {% csrf_token %}
+    <input type="text" name="name" required placeholder="New subcategory name"
+           class="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    <button type="submit" class="rounded-xl bg-ink text-white font-bold text-sm px-5 py-2.5">Add</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}

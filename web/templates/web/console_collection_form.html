@@ -1,0 +1,64 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}{% if collection %}Edit collection{% else %}Add collection{% endif %}{% endblock %}
+{% block console_subtitle %}{% if collection %}Update details for {{ collection.title }}{% else %}Create a new curated collection{% endif %}{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-collections' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to collections</a>
+{% endblock %}
+
+{% block console_content %}
+<form method="post" enctype="multipart/form-data" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl space-y-5">
+  {% csrf_token %}
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Title</label>
+    <input type="text" name="title" value="{{ collection.title|default:'' }}" required
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Banner image <span class="text-gray-400 font-normal">(optional)</span></label>
+    {% if collection.resolved_banner_url %}
+      <img src="{{ collection.resolved_banner_url }}" alt="" class="w-full max-w-xs aspect-video rounded-lg object-cover mb-2 border border-gray-200">
+    {% endif %}
+    <input type="file" name="banner_image" accept="image/*"
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    {% if collection %}<p class="text-xs text-gray-400 mt-1.5">Leave blank to keep the current banner image.</p>{% endif %}
+  </div>
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Linked category <span class="text-gray-400 font-normal">(optional)</span></label>
+      <select name="linked_category_id" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+        <option value="">None</option>
+        {% for category in categories %}
+          <option value="{{ category.id }}" {% if collection.linked_category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Display order</label>
+      <input type="number" name="display_order" value="{{ collection.display_order|default:0 }}"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Products <span class="text-gray-400 font-normal">(one product slug per line)</span></label>
+    <textarea name="product_slugs" rows="5" placeholder="football-boots-pro&#10;training-jersey-red"
+              class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink font-mono">{{ current_product_slugs|default:'' }}</textarea>
+    <p class="text-xs text-gray-400 mt-1.5">Find a product's slug on its product page URL. Unrecognized slugs are ignored.</p>
+  </div>
+
+  <label class="flex items-center gap-2 text-sm font-semibold">
+    <input type="checkbox" name="is_active" value="1" {% if collection.is_active or not collection %}checked{% endif %} class="rounded border-gray-300">
+    Active
+  </label>
+
+  <div class="flex items-center gap-3 pt-2">
+    <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">
+      {% if collection %}Save changes{% else %}Add collection{% endif %}
+    </button>
+    <a href="{% url 'web-console-collections' %}" class="rounded-xl border border-gray-200 font-bold px-6 py-3 hover:border-ink transition-colors">Cancel</a>
+  </div>
+</form>
+{% endblock %}

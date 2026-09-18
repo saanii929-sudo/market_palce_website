@@ -1,0 +1,40 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}{% if brand %}Edit brand{% else %}Add brand{% endif %}{% endblock %}
+{% block console_subtitle %}{% if brand %}Update details for {{ brand.name }}{% else %}Create a new brand{% endif %}{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-brands' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to brands</a>
+{% endblock %}
+
+{% block console_content %}
+<form method="post" enctype="multipart/form-data" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl space-y-5">
+  {% csrf_token %}
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Brand name</label>
+    <input type="text" name="name" value="{{ brand.name|default:'' }}" required
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Logo <span class="text-gray-400 font-normal">(optional)</span></label>
+    {% if brand.resolved_logo_url %}
+      <img src="{{ brand.resolved_logo_url }}" alt="" class="w-12 h-12 rounded-lg object-cover mb-2 border border-gray-200">
+    {% endif %}
+    <input type="file" name="logo" accept="image/*"
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    {% if brand %}<p class="text-xs text-gray-400 mt-1.5">Leave blank to keep the current logo.</p>{% endif %}
+  </div>
+
+  <label class="flex items-center gap-2 text-sm font-semibold">
+    <input type="checkbox" name="is_active" value="1" {% if brand.is_active or not brand %}checked{% endif %} class="rounded border-gray-300">
+    Active (selectable by sellers, shown as a filter to shoppers)
+  </label>
+
+  <div class="flex items-center gap-3 pt-2">
+    <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">
+      {% if brand %}Save changes{% else %}Add brand{% endif %}
+    </button>
+    <a href="{% url 'web-console-brands' %}" class="rounded-xl border border-gray-200 font-bold px-6 py-3 hover:border-ink transition-colors">Cancel</a>
+  </div>
+</form>
+{% endblock %}

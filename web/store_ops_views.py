@@ -27,7 +27,7 @@ from pos.models import (
 from pos.reports import compute_pnl
 from pos.services import POSError, mark_payroll_paid, process_return, receive_purchase_order, run_payroll, write_off_batch
 
-from .views import _seller_order_qs, seller_required
+from .views import _seller_order_qs, subscription_required
 
 
 def _base_ctx(seller, active_nav):
@@ -56,14 +56,14 @@ def _parse_date(value, default):
         return default
 
 
-@seller_required
+@subscription_required
 def seller_suppliers_view(request, seller):
     ctx = _base_ctx(seller, "suppliers")
     ctx["suppliers"] = seller.suppliers.all()
     return render(request, "web/seller_suppliers.html", ctx)
 
 
-@seller_required
+@subscription_required
 def seller_supplier_add_view(request, seller):
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
@@ -84,7 +84,7 @@ def seller_supplier_add_view(request, seller):
     return render(request, "web/seller_supplier_form.html", ctx)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_supplier_toggle_view(request, seller, supplier_id):
     supplier = get_object_or_404(Supplier, id=supplier_id, seller=seller)
@@ -93,14 +93,14 @@ def seller_supplier_toggle_view(request, seller, supplier_id):
     return redirect("web-seller-suppliers")
 
 
-@seller_required
+@subscription_required
 def seller_purchase_orders_view(request, seller):
     ctx = _base_ctx(seller, "purchase-orders")
     ctx["purchase_orders"] = seller.purchase_orders.select_related("supplier").prefetch_related("items")
     return render(request, "web/seller_purchase_orders.html", ctx)
 
 
-@seller_required
+@subscription_required
 def seller_purchase_order_add_view(request, seller):
     if request.method == "POST":
         supplier = get_object_or_404(Supplier, id=request.POST.get("supplier_id"), seller=seller)
@@ -134,7 +134,7 @@ def seller_purchase_order_add_view(request, seller):
     return render(request, "web/seller_purchase_order_form.html", ctx)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_purchase_order_receive_view(request, seller, po_id):
     po = get_object_or_404(PurchaseOrder, id=po_id, seller=seller)
@@ -146,7 +146,7 @@ def seller_purchase_order_receive_view(request, seller, po_id):
     return redirect("web-seller-purchase-orders")
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_purchase_order_cancel_view(request, seller, po_id):
     po = get_object_or_404(PurchaseOrder, id=po_id, seller=seller, status=PurchaseOrder.Status.PENDING)
@@ -158,7 +158,7 @@ def seller_purchase_order_cancel_view(request, seller, po_id):
 LOW_STOCK_THRESHOLD = 10
 
 
-@seller_required
+@subscription_required
 def seller_inventory_view(request, seller):
     view = request.GET.get("view", "stock")
     ctx = _base_ctx(seller, "inventory")
@@ -181,7 +181,7 @@ def seller_inventory_view(request, seller):
     return render(request, "web/seller_inventory.html", ctx)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_batch_write_off_view(request, seller, batch_id):
     batch = get_object_or_404(ProductBatch, id=batch_id, product__seller=seller)
@@ -193,7 +193,7 @@ def seller_batch_write_off_view(request, seller, batch_id):
     return redirect(f"{reverse('web-seller-inventory')}?view=expiry")
 
 
-@seller_required
+@subscription_required
 def seller_inventory_export_view(request, seller):
     products = Product.objects.filter(seller=seller).select_related("category")
     rows = [
@@ -207,7 +207,7 @@ def seller_inventory_export_view(request, seller):
     )
 
 
-@seller_required
+@subscription_required
 def seller_expenses_view(request, seller):
     ctx = _base_ctx(seller, "expenses")
     ctx["expenses"] = seller.expenses.all()
@@ -215,7 +215,7 @@ def seller_expenses_view(request, seller):
     return render(request, "web/seller_expenses.html", ctx)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_expense_add_view(request, seller):
     try:
@@ -239,14 +239,14 @@ def seller_expense_add_view(request, seller):
 
 # -- Payroll ------------------------------------------------------------
 
-@seller_required
+@subscription_required
 def seller_payroll_view(request, seller):
     ctx = _base_ctx(seller, "payroll")
     ctx["pay_runs"] = seller.pay_runs.prefetch_related("payslips__employee")
     return render(request, "web/seller_payroll.html", ctx)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_payroll_run_view(request, seller):
     period_start = _parse_date(request.POST.get("period_start"), None)
@@ -260,7 +260,7 @@ def seller_payroll_run_view(request, seller):
     return redirect("web-seller-payroll-detail", pay_run_id=pay_run.id)
 
 
-@seller_required
+@subscription_required
 def seller_payroll_detail_view(request, seller, pay_run_id):
     pay_run = get_object_or_404(PayRun, id=pay_run_id, seller=seller)
     ctx = _base_ctx(seller, "payroll")
@@ -269,7 +269,7 @@ def seller_payroll_detail_view(request, seller, pay_run_id):
     return render(request, "web/seller_payroll_detail.html", ctx)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_payslip_update_view(request, seller, payslip_id):
     payslip = get_object_or_404(PaySlip, id=payslip_id, pay_run__seller=seller, pay_run__status=PayRun.Status.DRAFT)
@@ -286,7 +286,7 @@ def seller_payslip_update_view(request, seller, payslip_id):
     return redirect("web-seller-payroll-detail", pay_run_id=payslip.pay_run_id)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_payroll_mark_paid_view(request, seller, pay_run_id):
     pay_run = get_object_or_404(PayRun, id=pay_run_id, seller=seller)
@@ -298,7 +298,7 @@ def seller_payroll_mark_paid_view(request, seller, pay_run_id):
     return redirect("web-seller-payroll-detail", pay_run_id=pay_run.id)
 
 
-@seller_required
+@subscription_required
 def seller_payroll_export_view(request, seller):
     rows = []
     for pay_run in seller.pay_runs.prefetch_related("payslips__employee"):
@@ -314,14 +314,14 @@ def seller_payroll_export_view(request, seller):
     )
 
 
-@seller_required
+@subscription_required
 def seller_discounts_view(request, seller):
     ctx = _base_ctx(seller, "discounts")
     ctx["discounts"] = seller.discounts.all()
     return render(request, "web/seller_discounts.html", ctx)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_discount_add_view(request, seller):
     name = request.POST.get("name", "").strip()
@@ -341,7 +341,7 @@ def seller_discount_add_view(request, seller):
     return redirect("web-seller-discounts")
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_discount_toggle_view(request, seller, discount_id):
     discount = get_object_or_404(Discount, id=discount_id, seller=seller)
@@ -350,7 +350,7 @@ def seller_discount_toggle_view(request, seller, discount_id):
     return redirect("web-seller-discounts")
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_discount_delete_view(request, seller, discount_id):
     discount = get_object_or_404(Discount, id=discount_id, seller=seller)
@@ -358,14 +358,14 @@ def seller_discount_delete_view(request, seller, discount_id):
     return redirect("web-seller-discounts")
 
 
-@seller_required
+@subscription_required
 def seller_customers_view(request, seller):
     ctx = _base_ctx(seller, "customers")
     ctx["customers"] = seller.customers.all()
     return render(request, "web/seller_customers.html", ctx)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_customer_add_view(request, seller):
     full_name = request.POST.get("full_name", "").strip()
@@ -381,7 +381,7 @@ def seller_customer_add_view(request, seller):
     return redirect("web-seller-customers")
 
 
-@seller_required
+@subscription_required
 def seller_customer_detail_view(request, seller, customer_id):
     customer = get_object_or_404(Customer, id=customer_id, seller=seller)
     ctx = _base_ctx(seller, "customers")
@@ -391,7 +391,7 @@ def seller_customer_detail_view(request, seller, customer_id):
     return render(request, "web/seller_customer_detail.html", ctx)
 
 
-@seller_required
+@subscription_required
 def seller_customers_export_view(request, seller):
     rows = []
     for customer in seller.customers.all():
@@ -404,7 +404,7 @@ def seller_customers_export_view(request, seller):
     )
 
 
-@seller_required
+@subscription_required
 def seller_returns_view(request, seller):
     ctx = _base_ctx(seller, "pos-returns")
     ctx["returns"] = POSReturn.objects.filter(sale__seller=seller).select_related("sale", "processed_by")
@@ -419,7 +419,7 @@ def seller_returns_view(request, seller):
     return render(request, "web/seller_returns.html", ctx)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_return_process_view(request, seller):
     from .pos_views import _clocked_in_employee
@@ -445,13 +445,13 @@ def seller_return_process_view(request, seller):
     return redirect("web-seller-returns")
 
 
-@seller_required
+@subscription_required
 def seller_reports_hub_view(request, seller):
     ctx = _base_ctx(seller, "reports")
     return render(request, "web/seller_reports_hub.html", ctx)
 
 
-@seller_required
+@subscription_required
 def seller_pnl_view(request, seller):
     today = timezone.now().date()
     start_date = _parse_date(request.GET.get("start"), today.replace(day=1))
@@ -469,7 +469,7 @@ def seller_pnl_view(request, seller):
     return render(request, "web/seller_pnl.html", ctx)
 
 
-@seller_required
+@subscription_required
 def seller_pnl_export_view(request, seller):
     today = timezone.now().date()
     start_date = _parse_date(request.GET.get("start"), today.replace(day=1))
@@ -502,7 +502,7 @@ def seller_pnl_export_view(request, seller):
     return _csv_response(f"{seller.slug}-profit-and-loss.csv", ["Line item", "Amount (GHS)"], rows)
 
 
-@seller_required
+@subscription_required
 def seller_suppliers_export_view(request, seller):
     rows = []
     for po in seller.purchase_orders.select_related("supplier").prefetch_related("items"):
@@ -518,7 +518,7 @@ def seller_suppliers_export_view(request, seller):
     )
 
 
-@seller_required
+@subscription_required
 def seller_discounts_export_view(request, seller):
     rows = []
     for discount in seller.discounts.all():

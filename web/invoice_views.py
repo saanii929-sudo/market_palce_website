@@ -19,7 +19,7 @@ from pos.services import (
     void_invoice,
 )
 
-from .views import _seller_order_qs, seller_required
+from .views import _seller_order_qs, subscription_required
 
 
 def _base_ctx(seller, active_nav):
@@ -47,7 +47,7 @@ INVOICE_TAB_STATUSES = {
 }
 
 
-@seller_required
+@subscription_required
 def seller_invoices_view(request, seller):
     tab = request.GET.get("status", "")
     invoices = seller.invoices.select_related("customer").prefetch_related("items")
@@ -64,7 +64,7 @@ def seller_invoices_view(request, seller):
     return render(request, "web/seller_invoices.html", ctx)
 
 
-@seller_required
+@subscription_required
 def seller_invoice_add_view(request, seller):
     if request.method == "POST":
         customer = None
@@ -146,7 +146,7 @@ def seller_invoice_add_view(request, seller):
     return render(request, "web/seller_invoice_form.html", ctx)
 
 
-@seller_required
+@subscription_required
 def seller_invoice_detail_view(request, seller, invoice_id):
     invoice = get_object_or_404(Invoice, id=invoice_id, seller=seller)
     ctx = _base_ctx(seller, "invoices")
@@ -156,7 +156,7 @@ def seller_invoice_detail_view(request, seller, invoice_id):
     return render(request, "web/seller_invoice_detail.html", ctx)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_invoice_payment_add_view(request, seller, invoice_id):
     invoice = get_object_or_404(Invoice, id=invoice_id, seller=seller)
@@ -177,7 +177,7 @@ def seller_invoice_payment_add_view(request, seller, invoice_id):
     return redirect("web-seller-invoice-detail", invoice_id=invoice.id)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_invoice_send_view(request, seller, invoice_id):
     invoice = get_object_or_404(Invoice, id=invoice_id, seller=seller)
@@ -189,7 +189,7 @@ def seller_invoice_send_view(request, seller, invoice_id):
     return redirect("web-seller-invoice-detail", invoice_id=invoice.id)
 
 
-@seller_required
+@subscription_required
 @require_http_methods(["POST"])
 def seller_invoice_void_view(request, seller, invoice_id):
     invoice = get_object_or_404(Invoice, id=invoice_id, seller=seller)
@@ -201,7 +201,7 @@ def seller_invoice_void_view(request, seller, invoice_id):
     return redirect("web-seller-invoice-detail", invoice_id=invoice.id)
 
 
-@seller_required
+@subscription_required
 def seller_invoices_export_view(request, seller):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{seller.slug}-invoices.csv"'

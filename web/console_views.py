@@ -14,7 +14,7 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
-from catalog.models import Category, Product, Seller
+from catalog.models import Banner, Brand, Category, Collection, Product, Seller, Subcategory
 from orders.models import DeliveryMethod, Order
 from pos.models import POSSale
 from sellers.models import Payout, SellerApplication
@@ -152,8 +152,6 @@ def console_overview_export_view(request):
     ]
     return _csv_response("platform-overview.csv", ["Metric", "Value"], rows)
 
-
-# -- Seller applications --------------------------------------------------
 
 APPLICATION_TABS = {"pending", "approved", "rejected"}
 
@@ -473,11 +471,11 @@ def console_payouts_export_view(request):
 
 # -- Categories -------------------------------------------------------------
 
-def _unique_category_slug(name: str) -> str:
-    base = slugify(name) or "category"
+def _unique_slug(model, name: str, fallback: str = "item") -> str:
+    base = slugify(name) or fallback
     slug = base
     suffix = 1
-    while Category.objects.filter(slug=slug).exists():
+    while model.objects.filter(slug=slug).exists():
         suffix += 1
         slug = f"{base}-{suffix}"
     return slug
@@ -485,7 +483,6 @@ def _unique_category_slug(name: str) -> str:
 
 def _save_category_from_form(request, category=None):
     name = request.POST.get("name", "").strip()
-    icon_url = request.POST.get("icon_url", "").strip()
     display_order = request.POST.get("display_order", "0").strip()
     commission_rate = request.POST.get("commission_rate", "").strip()
 
@@ -500,10 +497,11 @@ def _save_category_from_form(request, category=None):
         return None
 
     if category is None:
-        category = Category(slug=_unique_category_slug(name))
+        category = Category(slug=_unique_slug(Category, name, "category"))
 
     category.name = name
-    category.icon_url = icon_url
+    if request.FILES.get("icon"):
+        category.icon = request.FILES["icon"]
     category.commission_rate = rate
     try:
         category.display_order = int(display_order or 0)
@@ -547,11 +545,56 @@ def console_category_edit_view(request, category_id):
         saved = _save_category_from_form(request, category=category)
         if saved is not None:
             messages.success(request, f'"{saved.name}" was updated.')
-            return redirect("web-console-categories")
+            return redirect("web-console-category-edit", category_id=category.id)
 
     ctx = _base_ctx("categories")
     ctx["category"] = category
+    ctx["subcategories"] = category.subcategories.order_by("display_order", "name")
     return render(request, "web/console_category_form.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_subcategory_add_view(request, category_id):
+    category = get_object_or_404(Category, id=category_id)
+    name = request.POST.get("name", "").strip()
+    if not name:
+        messages.error(request, "Subcategory name is required.")
+        return redirect("web-console-category-edit", category_id=category.id)
+
+    if Subcategory.objects.filter(category=category, name__iexact=name).exists():
+        messages.error(request, f'"{name}" already exists under {category.name}.')
+        return redirect("web-console-category-edit", category_id=category.id)
+
+    base_slug = slugify(name) or "subcategory"
+    slug, suffix = base_slug, 1
+    while Subcategory.objects.filter(slug=slug).exists():
+        suffix += 1
+        slug = f"{base_slug}-{suffix}"
+
+    Subcategory.objects.create(category=category, name=name, slug=slug)
+    messages.success(request, f'"{name}" was added under {category.name}.')
+    return redirect("web-console-category-edit", category_id=category.id)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_subcategory_toggle_view(request, category_id, subcategory_id):
+    subcategory = get_object_or_404(Subcategory, id=subcategory_id, category_id=category_id)
+    subcategory.is_active = not subcategory.is_active
+    subcategory.save(update_fields=["is_active"])
+    return redirect("web-console-category-edit", category_id=category_id)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_subcategory_delete_view(request, category_id, subcategory_id):
+    # Product.subcategory is SET_NULL, so deleting one just unlinks its
+    # products rather than blocking - no protected-error fallback needed.
+    subcategory = get_object_or_404(Subcategory, id=subcategory_id, category_id=category_id)
+    subcategory.delete()
+    messages.success(request, f'"{subcategory.name}" was deleted.')
+    return redirect("web-console-category-edit", category_id=category_id)
 
 
 @superadmin_required
@@ -681,3 +724,271 @@ def console_delivery_method_delete_view(request, delivery_method_id):
         delivery_method.save(update_fields=["is_active"])
         messages.error(request, f'"{name}" has existing orders, so it was deactivated instead of deleted.')
     return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-delivery-methods")))
+
+
+# -- Brands -------------------------------------------------------------
+
+def _save_brand_from_form(request, brand=None):
+    name = request.POST.get("name", "").strip()
+
+    if not name:
+        messages.error(request, "Brand name is required.")
+        return None
+
+    if brand is None:
+        brand = Brand(slug=_unique_slug(Brand, name, "brand"))
+
+    brand.name = name
+    if request.FILES.get("logo"):
+        brand.logo = request.FILES["logo"]
+    brand.is_active = bool(request.POST.get("is_active", "1"))
+    brand.save()
+    return brand
+
+
+@superadmin_required
+def console_brands_view(request):
+    query = request.GET.get("q", "").strip()
+    brands = Brand.objects.annotate(product_count=Count("products")).order_by("name")
+    if query:
+        brands = brands.filter(name__icontains=query)
+
+    ctx = _base_ctx("brands")
+    ctx["brands"] = brands
+    ctx["query"] = query
+    return render(request, "web/console_brands.html", ctx)
+
+
+@superadmin_required
+def console_brand_add_view(request):
+    if request.method == "POST":
+        brand = _save_brand_from_form(request)
+        if brand is not None:
+            messages.success(request, f'"{brand.name}" was added.')
+            return redirect("web-console-brands")
+
+    ctx = _base_ctx("brands")
+    ctx["brand"] = None
+    return render(request, "web/console_brand_form.html", ctx)
+
+
+@superadmin_required
+def console_brand_edit_view(request, brand_id):
+    brand = get_object_or_404(Brand, id=brand_id)
+    if request.method == "POST":
+        saved = _save_brand_from_form(request, brand=brand)
+        if saved is not None:
+            messages.success(request, f'"{saved.name}" was updated.')
+            return redirect("web-console-brands")
+
+    ctx = _base_ctx("brands")
+    ctx["brand"] = brand
+    return render(request, "web/console_brand_form.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_brand_toggle_view(request, brand_id):
+    brand = get_object_or_404(Brand, id=brand_id)
+    brand.is_active = not brand.is_active
+    brand.save(update_fields=["is_active"])
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-brands")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_brand_delete_view(request, brand_id):
+    # Product.brand is SET_NULL, so deleting one just unlinks its products.
+    brand = get_object_or_404(Brand, id=brand_id)
+    brand.delete()
+    messages.success(request, f'"{brand.name}" was deleted.')
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-brands")))
+
+
+# -- Banners --------------------------------------------------------------
+
+def _parse_datetime_local(value: str):
+    if not value:
+        return None
+    parsed = datetime.datetime.fromisoformat(value)
+    return timezone.make_aware(parsed) if timezone.is_naive(parsed) else parsed
+
+
+def _save_banner_from_form(request, banner=None):
+    title = request.POST.get("title", "").strip()
+    if not title:
+        messages.error(request, "Banner title is required.")
+        return None
+
+    try:
+        active_from = _parse_datetime_local(request.POST.get("active_from", "").strip())
+        active_to = _parse_datetime_local(request.POST.get("active_to", "").strip())
+    except ValueError:
+        messages.error(request, "Enter valid start/end dates.")
+        return None
+
+    try:
+        display_order = int(request.POST.get("display_order") or 0)
+    except ValueError:
+        display_order = 0
+
+    if banner is None:
+        banner = Banner()
+
+    banner.title = title
+    banner.subtitle = request.POST.get("subtitle", "").strip()
+    if request.FILES.get("image"):
+        banner.image = request.FILES["image"]
+    banner.cta_label = request.POST.get("cta_label", "").strip()
+    banner.cta_link = request.POST.get("cta_link", "").strip()
+    banner.active_from = active_from
+    banner.active_to = active_to
+    banner.display_order = display_order
+    banner.is_active = bool(request.POST.get("is_active", "1"))
+    banner.save()
+    return banner
+
+
+@superadmin_required
+def console_banners_view(request):
+    ctx = _base_ctx("banners")
+    ctx["banners"] = Banner.objects.order_by("display_order")
+    return render(request, "web/console_banners.html", ctx)
+
+
+@superadmin_required
+def console_banner_add_view(request):
+    if request.method == "POST":
+        banner = _save_banner_from_form(request)
+        if banner is not None:
+            messages.success(request, f'"{banner.title}" was added.')
+            return redirect("web-console-banners")
+
+    ctx = _base_ctx("banners")
+    ctx["banner"] = None
+    return render(request, "web/console_banner_form.html", ctx)
+
+
+@superadmin_required
+def console_banner_edit_view(request, banner_id):
+    banner = get_object_or_404(Banner, id=banner_id)
+    if request.method == "POST":
+        saved = _save_banner_from_form(request, banner=banner)
+        if saved is not None:
+            messages.success(request, f'"{saved.title}" was updated.')
+            return redirect("web-console-banners")
+
+    ctx = _base_ctx("banners")
+    ctx["banner"] = banner
+    return render(request, "web/console_banner_form.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_banner_toggle_view(request, banner_id):
+    banner = get_object_or_404(Banner, id=banner_id)
+    banner.is_active = not banner.is_active
+    banner.save(update_fields=["is_active"])
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-banners")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_banner_delete_view(request, banner_id):
+    banner = get_object_or_404(Banner, id=banner_id)
+    banner.delete()
+    messages.success(request, f'"{banner.title}" was deleted.')
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-banners")))
+
+
+# -- Collections ------------------------------------------------------------
+
+def _save_collection_from_form(request, collection=None):
+    title = request.POST.get("title", "").strip()
+    if not title:
+        messages.error(request, "Collection title is required.")
+        return None
+
+    try:
+        display_order = int(request.POST.get("display_order") or 0)
+    except ValueError:
+        display_order = 0
+
+    linked_category = None
+    linked_category_id = request.POST.get("linked_category_id")
+    if linked_category_id:
+        linked_category = Category.objects.filter(id=linked_category_id).first()
+
+    if collection is None:
+        collection = Collection(slug=_unique_slug(Collection, title, "collection"))
+
+    collection.title = title
+    if request.FILES.get("banner_image"):
+        collection.banner_image = request.FILES["banner_image"]
+    collection.linked_category = linked_category
+    collection.display_order = display_order
+    collection.is_active = bool(request.POST.get("is_active", "1"))
+    collection.save()
+
+    slugs = [s.strip() for s in request.POST.get("product_slugs", "").splitlines() if s.strip()]
+    if slugs:
+        collection.products.set(Product.objects.filter(slug__in=slugs))
+    else:
+        collection.products.clear()
+
+    return collection
+
+
+@superadmin_required
+def console_collections_view(request):
+    ctx = _base_ctx("collections")
+    ctx["collections"] = Collection.objects.annotate(product_count=Count("products")).order_by("display_order")
+    return render(request, "web/console_collections.html", ctx)
+
+
+@superadmin_required
+def console_collection_add_view(request):
+    if request.method == "POST":
+        collection = _save_collection_from_form(request)
+        if collection is not None:
+            messages.success(request, f'"{collection.title}" was added.')
+            return redirect("web-console-collections")
+
+    ctx = _base_ctx("collections")
+    ctx["collection"] = None
+    ctx["categories"] = Category.objects.filter(is_active=True)
+    return render(request, "web/console_collection_form.html", ctx)
+
+
+@superadmin_required
+def console_collection_edit_view(request, collection_id):
+    collection = get_object_or_404(Collection, id=collection_id)
+    if request.method == "POST":
+        saved = _save_collection_from_form(request, collection=collection)
+        if saved is not None:
+            messages.success(request, f'"{saved.title}" was updated.')
+            return redirect("web-console-collections")
+
+    ctx = _base_ctx("collections")
+    ctx["collection"] = collection
+    ctx["categories"] = Category.objects.filter(is_active=True)
+    ctx["current_product_slugs"] = "\n".join(collection.products.values_list("slug", flat=True))
+    return render(request, "web/console_collection_form.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_collection_toggle_view(request, collection_id):
+    collection = get_object_or_404(Collection, id=collection_id)
+    collection.is_active = not collection.is_active
+    collection.save(update_fields=["is_active"])
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-collections")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_collection_delete_view(request, collection_id):
+    collection = get_object_or_404(Collection, id=collection_id)
+    collection.delete()
+    messages.success(request, f'"{collection.title}" was deleted.')
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-collections")))

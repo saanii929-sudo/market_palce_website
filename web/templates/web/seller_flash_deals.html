@@ -1,0 +1,62 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Flash deals{% endblock %}
+{% block seller_subtitle %}Time-limited discounts on your products{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-flash-deal-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">+ Add flash deal</a>
+{% endblock %}
+
+{% block seller_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Product</th>
+          <th class="px-5 py-3">Deal price</th>
+          <th class="px-5 py-3">Stock</th>
+          <th class="px-5 py-3">Window</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for deal in flash_deals %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ deal.product.name }}</td>
+            <td class="px-5 py-4">
+              <span class="font-bold">GH₵{{ deal.deal_price }}</span>
+              <span class="text-gray-400 text-xs line-through ml-1">GH₵{{ deal.product.price }}</span>
+            </td>
+            <td class="px-5 py-4 text-gray-500">{{ deal.stock_sold }} / {{ deal.stock_qty|add:deal.stock_sold }} sold</td>
+            <td class="px-5 py-4 text-gray-500 text-xs">{{ deal.starts_at|date:"M d, g:i A" }} – {{ deal.ends_at|date:"M d, g:i A" }}</td>
+            <td class="px-5 py-4">
+              {% if deal.is_active %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Active</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4">
+              <div class="flex gap-2 justify-end flex-wrap">
+                <a href="{% url 'web-seller-flash-deal-edit' deal.id %}" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">Edit</a>
+                <form method="post" action="{% url 'web-seller-flash-deal-toggle' deal.id %}">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">
+                    {% if deal.is_active %}Deactivate{% else %}Activate{% endif %}
+                  </button>
+                </form>
+                <form method="post" action="{% url 'web-seller-flash-deal-delete' deal.id %}" onsubmit="return confirm('Remove this flash deal?');">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Remove</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">No flash deals yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

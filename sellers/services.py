@@ -9,8 +9,14 @@ from django.utils.text import slugify
 from accounts.models import User
 from catalog.models import Seller
 
-from .models import Payout, SellerApplication
-from .notifications import notify_application_reviewed, notify_payout_requested, notify_payout_resolved
+from .models import Payout, SellerApplication, SellerSubscription, SubscriptionPlan
+from .notifications import (
+    notify_application_reviewed,
+    notify_payout_requested,
+    notify_payout_resolved,
+    notify_subscription_activated,
+    notify_subscription_failed,
+)
 
 
 class SellerApplicationError(Exception):
@@ -110,8 +116,6 @@ def get_lifetime_earnings(seller: Seller) -> Decimal:
 
 
 def get_available_balance(seller: Seller) -> Decimal:
-    """Lifetime earnings minus anything already paid, scheduled, or
-    requested - what the seller could still withdraw right now."""
     committed = Payout.objects.filter(
         seller=seller,
         status__in=[Payout.Status.REQUESTED, Payout.Status.SCHEDULED, Payout.Status.PAID],
@@ -180,3 +184,82 @@ def reject_payout(payout: Payout, admin_note: str = "") -> Payout:
     payout.save(update_fields=["status", "admin_note"])
     notify_payout_resolved(payout)
     return payout
+
+
+class SubscriptionError(Exception):
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
+def get_active_subscription(seller: Seller) -> SellerSubscription | None:
+    now = timezone.now()
+    SellerSubscription.objects.filter(
+        seller=seller, status=SellerSubscription.Status.ACTIVE, expires_at__lte=now
+    ).update(status=SellerSubscription.Status.EXPIRED)
+
+    return (
+        SellerSubscription.objects.filter(
+            seller=seller, status=SellerSubscription.Status.ACTIVE, expires_at__gt=now
+        )
+        .order_by("-expires_at")
+        .first()
+    )
+
+
+def start_subscription_checkout(
+    seller: Seller, plan: SubscriptionPlan, *, callback_url: str, return_url: str, cancellation_url: str
+) -> SellerSubscription:
+    from orders.services.payment_gateway import HubtelGateway, PaymentGatewayError
+
+    if not plan.is_active:
+        raise SubscriptionError("This plan is no longer available.")
+
+    subscription = SellerSubscription.objects.create(seller=seller, plan=plan, amount=plan.price)
+
+    try:
+        result = HubtelGateway().initiate_checkout(
+            reference=subscription.reference,
+            amount=subscription.amount,
+            description=f"SportShop {plan.name} subscription for {seller.business_name}",
+            callback_url=callback_url,
+            return_url=return_url,
+            cancellation_url=cancellation_url,
+        )
+    except PaymentGatewayError as exc:
+        subscription.status = SellerSubscription.Status.FAILED
+        subscription.failure_reason = str(exc)
+        subscription.save(update_fields=["status", "failure_reason"])
+        raise SubscriptionError(str(exc)) from exc
+
+    subscription.checkout_url = result["authorization_url"] or ""
+    subscription.save(update_fields=["checkout_url"])
+    return subscription
+
+
+@transaction.atomic
+def finalize_subscription_payment(subscription: SellerSubscription) -> SellerSubscription:
+    subscription = SellerSubscription.objects.select_for_update().get(pk=subscription.pk)
+    if subscription.status != SellerSubscription.Status.PENDING:
+        return subscription
+
+    current = get_active_subscription(subscription.seller)
+    start_from = current.expires_at if current else timezone.now()
+
+    subscription.status = SellerSubscription.Status.ACTIVE
+    subscription.starts_at = timezone.now()
+    subscription.expires_at = start_from + datetime.timedelta(days=subscription.plan.billing_period_days)
+    subscription.save(update_fields=["status", "starts_at", "expires_at"])
+
+    notify_subscription_activated(subscription)
+    return subscription
+
+
+def mark_subscription_failed(subscription: SellerSubscription, reason: str) -> SellerSubscription:
+    if subscription.status != SellerSubscription.Status.PENDING:
+        return subscription
+    subscription.status = SellerSubscription.Status.FAILED
+    subscription.failure_reason = reason
+    subscription.save(update_fields=["status", "failure_reason"])
+    notify_subscription_failed(subscription)
+    return subscription

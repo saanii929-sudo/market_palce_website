@@ -1,5 +1,7 @@
 from django import template
 
+from catalog.color_utils import resolve_css_color
+
 register = template.Library()
 
 _PALETTE = [
@@ -73,3 +75,11 @@ def order_display_status(status: str) -> str:
 @register.filter
 def order_status_badge(status: str) -> str:
     return _ORDER_STATUS_BADGE.get(status, "bg-gray-100 text-gray-600")
+
+
+@register.filter
+def css_color(value):
+    """Best-effort CSS color for a free-text color name, for rendering a
+    swatch - returns None (render no swatch, just the text label) only when
+    the value is empty. See catalog.color_utils for the alias table."""
+    return resolve_css_color(value)

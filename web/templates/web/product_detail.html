@@ -63,23 +63,30 @@
               {% for variant in variants %}
                 <label class="cursor-pointer">
                   <input type="radio" name="variant_id" value="{{ variant.id }}" class="peer sr-only"
-                         {% if forloop.first %}checked{% endif %} {% if not variant.in_stock %}disabled{% endif %}>
-                  <span class="block px-4 py-2 rounded-lg border border-gray-200 text-sm font-bold
+                         data-stock="{{ variant.stock_qty }}"
+                         {% if variant.id == default_variant_id %}checked{% endif %} {% if not variant.in_stock %}disabled{% endif %}>
+                  <span class="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-sm font-bold
                                peer-checked:bg-ink peer-checked:text-white peer-checked:border-ink
                                peer-disabled:opacity-30 peer-disabled:line-through">
+                    {% if variant.color %}
+                      <span class="w-3.5 h-3.5 rounded-full border border-gray-300 shrink-0" style="background-color: {{ variant.color|css_color }};" title="{{ variant.color }}"></span>
+                    {% endif %}
                     {{ variant.size }}{% if variant.color %} {{ variant.color }}{% endif %}
                   </span>
                 </label>
               {% endfor %}
             </div>
+            <p class="text-xs text-gray-400 mt-2" data-stock-remaining></p>
           </div>
+        {% else %}
+          <p class="text-xs text-gray-400" data-stock-remaining data-static-stock="{{ product.stock_qty }}"></p>
         {% endif %}
 
         <div>
           <label class="block text-sm font-bold mb-2">Quantity</label>
           <div class="inline-flex items-center rounded-lg border border-gray-200">
             <button type="button" data-qty-decrement class="w-10 h-10 font-bold hover:bg-gray-50">−</button>
-            <input type="number" name="qty" value="1" min="1" data-qty-input class="w-14 h-10 text-center border-x border-gray-200 focus:outline-none">
+            <input type="number" name="qty" value="1" min="1" max="{{ product.stock_qty }}" data-qty-input class="w-14 h-10 text-center border-x border-gray-200 focus:outline-none">
             <button type="button" data-qty-increment class="w-10 h-10 font-bold hover:bg-gray-50">+</button>
           </div>
         </div>
@@ -95,11 +102,11 @@
                   class="w-12 h-12 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-brand/5 shrink-0 {% if is_wishlisted %}text-brand border-brand/40{% else %}text-brand{% endif %}">
             <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-{% if is_wishlisted %}heart-filled{% else %}heart{% endif %}"/></svg>
           </button>
-          <button type="submit" {% if not product.in_stock %}disabled{% endif %}
+          <button type="submit" data-add-to-cart-btn {% if not product.in_stock %}disabled{% endif %}
                   class="flex-1 rounded-xl bg-brand hover:bg-brand-dark disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-3.5 transition-colors">
             Add to cart
           </button>
-          <button type="submit" name="buy_now" value="1" {% if not product.in_stock %}disabled{% endif %}
+          <button type="submit" name="buy_now" value="1" data-buy-now-btn {% if not product.in_stock %}disabled{% endif %}
                   class="flex-1 rounded-xl border-2 border-ink disabled:border-gray-200 disabled:text-gray-400 font-bold py-3.5 hover:bg-ink hover:text-white transition-colors">
             Buy now
           </button>
@@ -155,7 +162,24 @@
       </dl>
     </div>
 
-    <div data-tab-panel="reviews" class="hidden pt-6 max-w-2xl space-y-5">
+    <div data-tab-panel="reviews" id="reviews" class="hidden pt-6 max-w-2xl space-y-5">
+      {% for order_item in reviewable_order_items %}
+        <form method="post" action="{% url 'web-product-review-add' product.slug %}" class="rounded-2xl border border-gray-200 p-5 space-y-3" data-review-form>
+          {% csrf_token %}
+          <input type="hidden" name="order_item_id" value="{{ order_item.id }}">
+          <p class="text-sm font-bold">Rate your purchase</p>
+          <div class="flex gap-1" data-review-stars>
+            {% for i in "12345" %}
+              <button type="button" data-review-star="{{ i }}" class="w-7 h-7 {% if forloop.counter <= 5 %}text-amber-500{% endif %}">
+                <svg viewBox="0 0 24 24" class="w-full h-full"><use href="#icon-star"/></svg>
+              </button>
+            {% endfor %}
+          </div>
+          <input type="hidden" name="rating" value="5" data-review-rating-input>
+          <textarea name="comment" rows="3" maxlength="1000" placeholder="Share what you liked or didn't (optional)" class="w-full rounded-xl border border-gray-200 p-3 text-sm"></textarea>
+          <button type="submit" class="rounded-full bg-ink text-white text-sm font-bold px-5 py-2.5">Submit review</button>
+        </form>
+      {% endfor %}
       {% for review in reviews %}
         <div class="border-b border-gray-100 pb-5">
           <div class="flex items-center gap-2">
@@ -197,9 +221,68 @@
     });
   });
 
+  document.querySelectorAll('[data-review-form]').forEach(form => {
+    const ratingInput = form.querySelector('[data-review-rating-input]');
+    const stars = form.querySelectorAll('[data-review-star]');
+    const paint = (value) => stars.forEach(s => s.classList.toggle('text-amber-500', parseInt(s.dataset.reviewStar) <= value));
+    stars.forEach(star => star.addEventListener('click', () => {
+      ratingInput.value = star.dataset.reviewStar;
+      paint(parseInt(star.dataset.reviewStar));
+    }));
+  });
+
   const qtyInput = document.querySelector('[data-qty-input]');
-  document.querySelector('[data-qty-increment]')?.addEventListener('click', () => qtyInput.value = parseInt(qtyInput.value || 1) + 1);
+  document.querySelector('[data-qty-increment]')?.addEventListener('click', () => {
+    qtyInput.value = Math.min(parseInt(qtyInput.max || Infinity), parseInt(qtyInput.value || 1) + 1);
+  });
   document.querySelector('[data-qty-decrement]')?.addEventListener('click', () => qtyInput.value = Math.max(1, parseInt(qtyInput.value || 1) - 1));
+
+  // Size selection: reflects the selected variant's own stock (not the
+  // product's overall stock_qty) in the "remaining" text, clamps the
+  // quantity stepper to it, and disables checkout while nothing in-stock is
+  // selected (e.g. every size sold out).
+  (function () {
+    const stockText = document.querySelector('[data-stock-remaining]');
+    const addBtn = document.querySelector('[data-add-to-cart-btn]');
+    const buyBtn = document.querySelector('[data-buy-now-btn]');
+    const variantInputs = document.querySelectorAll('[data-variant-group] input[type="radio"]');
+
+    function applyStock(stock) {
+      if (stockText) {
+        if (stock === null) {
+          stockText.textContent = '';
+        } else if (stock <= 0) {
+          stockText.textContent = 'Out of stock';
+          stockText.classList.add('text-red-500');
+        } else if (stock <= 5) {
+          stockText.textContent = `Only ${stock} left in stock`;
+          stockText.classList.add('text-red-500');
+        } else {
+          stockText.textContent = `${stock} in stock`;
+          stockText.classList.remove('text-red-500');
+        }
+      }
+      const inStock = stock === null || stock > 0;
+      if (addBtn) addBtn.disabled = !inStock;
+      if (buyBtn) buyBtn.disabled = !inStock;
+      if (qtyInput) {
+        qtyInput.max = stock === null ? '' : stock;
+        if (stock !== null && parseInt(qtyInput.value || 1) > stock) {
+          qtyInput.value = Math.max(1, stock);
+        }
+      }
+    }
+
+    if (variantInputs.length) {
+      variantInputs.forEach((input) => {
+        input.addEventListener('change', () => applyStock(parseInt(input.dataset.stock, 10)));
+      });
+      const checked = document.querySelector('[data-variant-group] input[type="radio"]:checked');
+      applyStock(checked ? parseInt(checked.dataset.stock, 10) : 0);
+    } else if (stockText && stockText.dataset.staticStock !== undefined) {
+      applyStock(parseInt(stockText.dataset.staticStock, 10));
+    }
+  })();
 
   document.querySelectorAll('[data-thumb]').forEach(btn => {
     btn.addEventListener('click', () => {

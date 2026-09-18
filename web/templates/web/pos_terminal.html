@@ -4,6 +4,11 @@
 {% block seller_subtitle %}{% if employee %}Clocked in as {{ employee.full_name }}{% else %}Clock in to start selling{% endif %}{% endblock %}
 {% block seller_actions %}
   {% if employee %}
+    <button type="button" id="calculator-open-btn" aria-label="Open calculator"
+            class="rounded-xl border border-gray-200 font-bold text-sm px-4 py-2.5 hover:border-ink transition-colors flex items-center gap-2">
+      <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-calculator"/></svg>
+      <span class="hidden sm:inline">Calculator</span>
+    </button>
     <form method="post" action="{% url 'web-pos-clock-out' %}">
       {% csrf_token %}
       <button type="submit" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Clock out</button>
@@ -70,7 +75,8 @@
           {% for product in recent_products %}
             <button type="button" class="pos-add-tile text-left rounded-xl border border-gray-200 p-3 hover:border-ink transition-colors"
                     data-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.price }}"
-                    data-stock="{{ product.stock_qty }}" data-image="{{ product.images.first.resolved_url|default:'' }}">
+                    data-stock="{{ product.stock_qty }}" data-image="{{ product.images.first.resolved_url|default:'' }}"
+                    data-variants='{{ product.variants_json }}'>
               {% with photo=product.images.first.resolved_url %}
                 {% if photo %}
                   <span class="block w-full aspect-square rounded-lg overflow-hidden mb-2"><img src="{{ photo }}" class="w-full h-full object-cover" alt=""></span>
@@ -85,6 +91,92 @@
             <p class="col-span-3 text-sm text-gray-400">No products yet.</p>
           {% endfor %}
         </div>
+      </div>
+    </div>
+
+    <!-- Calculator (a standalone scratchpad for the cashier - not wired to the sale total) -->
+    <div id="calculator-panel" class="hidden fixed top-16 right-4 bottom-4 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-2xl bg-white border border-gray-200 shadow-2xl p-4 flex flex-col overflow-y-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold text-sm flex items-center gap-2">
+          <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-calculator"/></svg>
+          Scientific calculator
+        </h3>
+        <div class="flex items-center gap-3">
+          <span id="calculator-memory-indicator" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand/10 text-brand">M</span>
+          <button type="button" id="calculator-close-btn" aria-label="Close calculator" class="text-gray-400 hover:text-ink text-xl leading-none">✕</button>
+        </div>
+      </div>
+
+      <div class="rounded-xl bg-ink text-white px-4 py-5 mb-3 text-right overflow-hidden shrink-0">
+        <p id="calculator-expression" class="text-xs text-white/50 h-4 truncate">&nbsp;</p>
+        <p id="calculator-display" class="text-4xl font-bold tracking-tight truncate">0</p>
+      </div>
+
+      <div class="grid grid-cols-5 gap-2.5 flex-1 auto-rows-fr min-h-0" id="calculator-keys">
+        <button type="button" data-calc-mem="mc" class="calc-btn calc-btn-muted">MC</button>
+        <button type="button" data-calc-mem="mr" class="calc-btn calc-btn-muted">MR</button>
+        <button type="button" data-calc-mem="m+" class="calc-btn calc-btn-muted">M+</button>
+        <button type="button" data-calc-mem="m-" class="calc-btn calc-btn-muted">M−</button>
+        <button type="button" data-calc-action="clear" class="calc-btn calc-btn-muted">C</button>
+
+        <button type="button" data-calc-insert="(" class="calc-btn calc-btn-muted">(</button>
+        <button type="button" data-calc-insert=")" class="calc-btn calc-btn-muted">)</button>
+        <button type="button" data-calc-fn="percent" class="calc-btn calc-btn-muted">%</button>
+        <button type="button" data-calc-action="backspace" class="calc-btn calc-btn-muted">⌫</button>
+        <button type="button" data-calc-op="/" class="calc-btn calc-btn-op">÷</button>
+
+        <button type="button" data-calc-fn="sin" class="calc-btn calc-btn-sci">sin</button>
+        <button type="button" data-calc-fn="cos" class="calc-btn calc-btn-sci">cos</button>
+        <button type="button" data-calc-fn="tan" class="calc-btn calc-btn-sci">tan</button>
+        <button type="button" data-calc-op="^" class="calc-btn calc-btn-sci">x<sup>y</sup></button>
+        <button type="button" data-calc-op="*" class="calc-btn calc-btn-op">×</button>
+
+        <button type="button" data-calc-fn="log" class="calc-btn calc-btn-sci">log</button>
+        <button type="button" data-calc-fn="ln" class="calc-btn calc-btn-sci">ln</button>
+        <button type="button" data-calc-fn="sqrt" class="calc-btn calc-btn-sci">√</button>
+        <button type="button" data-calc-fn="square" class="calc-btn calc-btn-sci">x²</button>
+        <button type="button" data-calc-op="-" class="calc-btn calc-btn-op">−</button>
+
+        <button type="button" data-calc-digit="7" class="calc-btn calc-btn-digit">7</button>
+        <button type="button" data-calc-digit="8" class="calc-btn calc-btn-digit">8</button>
+        <button type="button" data-calc-digit="9" class="calc-btn calc-btn-digit">9</button>
+        <button type="button" data-calc-insert="pi" class="calc-btn calc-btn-sci">π</button>
+        <button type="button" data-calc-op="+" class="calc-btn calc-btn-op row-span-2">+</button>
+
+        <button type="button" data-calc-digit="4" class="calc-btn calc-btn-digit">4</button>
+        <button type="button" data-calc-digit="5" class="calc-btn calc-btn-digit">5</button>
+        <button type="button" data-calc-digit="6" class="calc-btn calc-btn-digit">6</button>
+        <button type="button" data-calc-insert="e" class="calc-btn calc-btn-sci">e</button>
+
+        <button type="button" data-calc-digit="1" class="calc-btn calc-btn-digit">1</button>
+        <button type="button" data-calc-digit="2" class="calc-btn calc-btn-digit">2</button>
+        <button type="button" data-calc-digit="3" class="calc-btn calc-btn-digit">3</button>
+        <button type="button" data-calc-fn="negate" class="calc-btn calc-btn-sci">±</button>
+        <button type="button" data-calc-action="equals" class="calc-btn calc-btn-equals row-span-2">=</button>
+
+        <button type="button" data-calc-digit="0" class="calc-btn calc-btn-digit col-span-2">0</button>
+        <button type="button" data-calc-action="decimal" class="calc-btn calc-btn-digit">.</button>
+        <button type="button" data-calc-fn="reciprocal" class="calc-btn calc-btn-sci">1/x</button>
+      </div>
+      <style>
+        .calc-btn { @apply h-full w-full flex items-center justify-center rounded-2xl bg-white shadow-[0_2px_8px_rgba(15,23,42,0.08)] text-sm font-bold text-ink transition-all duration-100 hover:shadow-[0_6px_16px_rgba(15,23,42,0.14)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-[0_1px_3px_rgba(15,23,42,0.12)]; }
+        .calc-btn-digit { @apply text-xl; }
+        .calc-btn-muted { @apply bg-gray-50 text-gray-500 text-xs; }
+        .calc-btn-sci { @apply bg-gray-50 text-ink text-xs; }
+        .calc-btn-op { @apply bg-brand/10 text-brand text-lg; }
+        .calc-btn-equals { @apply bg-brand text-white text-xl hover:shadow-[0_8px_20px_rgba(0,0,0,0.25)]; }
+      </style>
+    </div>
+
+    <!-- Variant picker (shown when a product with sizes/colors is added) -->
+    <div id="variant-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-2xl p-5 w-full max-w-sm">
+        <div class="flex items-center justify-between mb-1">
+          <h3 id="variant-modal-title" class="font-bold text-lg"></h3>
+          <button type="button" id="variant-modal-close" class="text-gray-400 hover:text-ink text-xl leading-none">✕</button>
+        </div>
+        <p class="text-xs text-gray-400 mb-4">Select a size/color to add it to the sale.</p>
+        <div id="variant-modal-options" class="flex flex-wrap gap-2"></div>
       </div>
     </div>
 
@@ -176,32 +268,106 @@
       const tenderedInput = document.getElementById('tendered-input');
       const changeDisplay = document.getElementById('change-display');
       const discountSelect = document.getElementById('discount-select');
+      const variantModal = document.getElementById('variant-modal');
+      const variantModalTitle = document.getElementById('variant-modal-title');
+      const variantModalOptions = document.getElementById('variant-modal-options');
+      const variantModalClose = document.getElementById('variant-modal-close');
 
       function money(n) { return 'GH₵' + n.toFixed(2); }
 
-      function addToCart(product) {
-        const existing = cart.find(l => l.id === product.id);
-        const stock = parseInt(product.stock_qty, 10);
+      // A cart line is keyed by product+variant so different sizes/colors of
+      // the same product ring up as separate lines with their own stock cap.
+      function lineKey(productId, variantId) { return productId + ':' + (variantId || ''); }
+
+      function addToCart(product, variant) {
+        const variantId = variant ? variant.id : null;
+        const stock = parseInt(variant ? variant.stock_qty : product.stock_qty, 10);
+        const key = lineKey(product.id, variantId);
+        const existing = cart.find(l => l.key === key);
         if (existing) {
           if (existing.qty < stock) existing.qty += 1;
         } else {
-          cart.push({ id: product.id, name: product.name, price: parseFloat(product.price), qty: 1, stock: stock });
+          const variantLabel = variant ? [variant.size, variant.color].filter(Boolean).join(' ') : '';
+          cart.push({
+            key, id: product.id, variantId,
+            name: variantLabel ? `${product.name} (${variantLabel})` : product.name,
+            price: parseFloat(product.price), qty: 1, stock: stock,
+          });
         }
         render();
       }
 
-      function removeLine(id) {
-        const idx = cart.findIndex(l => l.id === id);
+      function removeLine(key) {
+        const idx = cart.findIndex(l => l.key === key);
         if (idx > -1) cart.splice(idx, 1);
         render();
       }
 
-      function changeQty(id, delta) {
-        const line = cart.find(l => l.id === id);
+      function changeQty(key, delta) {
+        const line = cart.find(l => l.key === key);
         if (!line) return;
         line.qty = Math.max(1, Math.min(line.stock, line.qty + delta));
         render();
       }
+
+      // Products without variants add straight to the cart; products with
+      // variants open a picker so out-of-stock sizes/colors can't be chosen.
+      function chooseProduct(product) {
+        const variants = product.variants || [];
+        if (!variants.length) {
+          addToCart(product, null);
+          return;
+        }
+        openVariantModal(product, variants);
+      }
+
+      // Best-effort CSS color from free-text seller input, mirrored from the
+      // `css_color` template filter (server-side has a broader alias table
+      // for apparel colors like "Charcoal"/"Burgundy"; this client-side
+      // version handles the common case of stripping spaces/hyphens).
+      function cssColor(value) {
+        return (value || '').trim().toLowerCase().replace(/[\s-]/g, '');
+      }
+
+      function openVariantModal(product, variants) {
+        variantModalTitle.textContent = product.name;
+        variantModalOptions.innerHTML = '';
+        variants.forEach(v => {
+          const label = [v.size, v.color].filter(Boolean).join(' ') || 'Default';
+          const stock = parseInt(v.stock_qty, 10);
+          const inStock = stock > 0;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.disabled = !inStock;
+          btn.className = 'flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-colors ' +
+            (inStock ? 'border-gray-200 hover:border-ink' : 'border-gray-100 text-gray-300 line-through cursor-not-allowed');
+          if (v.color) {
+            const dot = document.createElement('span');
+            dot.className = 'w-3.5 h-3.5 rounded-full border border-gray-300 shrink-0';
+            dot.style.backgroundColor = cssColor(v.color);
+            dot.title = v.color;
+            btn.appendChild(dot);
+          }
+          const text = document.createElement('span');
+          text.textContent = inStock ? `${label} (${stock} left)` : `${label} (out of stock)`;
+          btn.appendChild(text);
+          if (inStock) {
+            btn.addEventListener('click', () => {
+              addToCart(product, v);
+              closeVariantModal();
+            });
+          }
+          variantModalOptions.appendChild(btn);
+        });
+        variantModal.classList.remove('hidden');
+      }
+
+      function closeVariantModal() {
+        variantModal.classList.add('hidden');
+      }
+
+      variantModalClose.addEventListener('click', closeVariantModal);
+      variantModal.addEventListener('click', (e) => { if (e.target === variantModal) closeVariantModal(); });
 
       function render() {
         cartLines.innerHTML = '';
@@ -223,16 +389,19 @@
                 <button type="button" data-inc class="w-6 h-6 rounded border border-gray-200 font-bold text-xs">+</button>
                 <button type="button" data-rm class="w-6 h-6 rounded text-red-500 text-xs" aria-label="Remove">✕</button>
               </div>`;
-            row.querySelector('[data-dec]').addEventListener('click', () => changeQty(line.id, -1));
-            row.querySelector('[data-inc]').addEventListener('click', () => changeQty(line.id, 1));
-            row.querySelector('[data-rm]').addEventListener('click', () => removeLine(line.id));
+            row.querySelector('[data-dec]').addEventListener('click', () => changeQty(line.key, -1));
+            row.querySelector('[data-inc]').addEventListener('click', () => changeQty(line.key, 1));
+            row.querySelector('[data-rm]').addEventListener('click', () => removeLine(line.key));
             cartLines.appendChild(row);
 
             const pidInput = document.createElement('input');
             pidInput.type = 'hidden'; pidInput.name = 'product_id'; pidInput.value = line.id;
+            const variantInput = document.createElement('input');
+            variantInput.type = 'hidden'; variantInput.name = 'variant_id'; variantInput.value = line.variantId || '';
             const qtyInput = document.createElement('input');
             qtyInput.type = 'hidden'; qtyInput.name = 'qty'; qtyInput.value = line.qty;
             hiddenInputs.appendChild(pidInput);
+            hiddenInputs.appendChild(variantInput);
             hiddenInputs.appendChild(qtyInput);
           });
         }
@@ -279,8 +448,9 @@
           .then(r => r.json())
           .then(data => {
             if (data.found) {
-              addToCart(data.product);
-              feedback.textContent = `Added "${data.product.name}".`;
+              chooseProduct(data.product);
+              const needsVariant = (data.product.variants || []).length > 0;
+              feedback.textContent = needsVariant ? `Select a size/color for "${data.product.name}".` : `Added "${data.product.name}".`;
               feedback.className = 'text-xs mt-2 h-4 text-green-600';
             } else {
               feedback.textContent = 'No product found for that code.';
@@ -300,9 +470,11 @@
 
       document.querySelectorAll('.pos-add-tile').forEach(tile => {
         tile.addEventListener('click', () => {
-          addToCart({
+          let variants = [];
+          try { variants = JSON.parse(tile.dataset.variants || '[]'); } catch (e) { variants = []; }
+          chooseProduct({
             id: parseInt(tile.dataset.id, 10), name: tile.dataset.name,
-            price: tile.dataset.price, stock_qty: tile.dataset.stock,
+            price: tile.dataset.price, stock_qty: tile.dataset.stock, variants: variants,
           });
         });
       });
@@ -322,7 +494,7 @@
               btn.type = 'button';
               btn.className = 'pos-add-tile text-left rounded-xl border border-gray-200 p-3 hover:border-ink transition-colors';
               btn.innerHTML = `<span class="block text-xs font-bold truncate">${p.name}</span><span class="block text-xs text-gray-400">GH₵${p.price}</span>`;
-              btn.addEventListener('click', () => addToCart({ id: p.id, name: p.name, price: p.price, stock_qty: p.stock_qty }));
+              btn.addEventListener('click', () => chooseProduct({ id: p.id, name: p.name, price: p.price, stock_qty: p.stock_qty, variants: p.variants || [] }));
               productGrid.appendChild(btn);
             });
           });
@@ -372,6 +544,254 @@
       });
 
       render();
+    })();
+  </script>
+
+  <script>
+    // Standalone scientific calculator - a scratchpad for the cashier (e.g.
+    // splitting a bill, working out change, unit conversions), deliberately
+    // not wired to the sale total. Builds a real expression string (with
+    // parentheses and correct operator precedence) and evaluates it with a
+    // small hand-written recursive-descent parser - no eval().
+    (function () {
+      const openBtn = document.getElementById('calculator-open-btn');
+      const closeBtn = document.getElementById('calculator-close-btn');
+      const panel = document.getElementById('calculator-panel');
+      const display = document.getElementById('calculator-display');
+      const expressionEl = document.getElementById('calculator-expression');
+      const memoryIndicator = document.getElementById('calculator-memory-indicator');
+      const keys = document.getElementById('calculator-keys');
+      if (!openBtn || !panel) return;
+
+      let expression = '';
+      let justEvaluated = false;
+      let memory = 0;
+
+      function formatNumber(n) {
+        if (!isFinite(n)) return 'Error';
+        // Trim float noise (0.1 + 0.2 etc.) without mangling long intentional decimals.
+        const rounded = Math.round(n * 1e10) / 1e10;
+        return rounded.toString();
+      }
+
+      // Recursive-descent parser: expression := term (('+'|'-') term)*
+      //   term := power (('*'|'/') power)*  |  power := unary ('^' power)?
+      //   unary := '-' unary | primary   |  primary := number | '(' expr ')'
+      function evaluateExpression(text) {
+        let pos = 0;
+        const peek = () => text[pos];
+        const isDigit = (ch) => ch !== undefined && /[0-9.]/.test(ch);
+
+        function parseExpression() {
+          let value = parseTerm();
+          while (peek() === '+' || peek() === '-') {
+            const op = text[pos++];
+            const rhs = parseTerm();
+            value = op === '+' ? value + rhs : value - rhs;
+          }
+          return value;
+        }
+        function parseTerm() {
+          let value = parsePower();
+          while (peek() === '*' || peek() === '/') {
+            const op = text[pos++];
+            const rhs = parsePower();
+            if (op === '*') value *= rhs;
+            else {
+              if (rhs === 0) throw new Error('Division by zero');
+              value /= rhs;
+            }
+          }
+          return value;
+        }
+        function parsePower() {
+          const value = parseUnary();
+          if (peek() === '^') {
+            pos++;
+            return Math.pow(value, parsePower());
+          }
+          return value;
+        }
+        function parseUnary() {
+          if (peek() === '-') { pos++; return -parseUnary(); }
+          if (peek() === '+') { pos++; return parseUnary(); }
+          return parsePrimary();
+        }
+        function parsePrimary() {
+          if (peek() === '(') {
+            pos++;
+            const value = parseExpression();
+            if (peek() !== ')') throw new Error('Missing closing parenthesis');
+            pos++;
+            return value;
+          }
+          const start = pos;
+          while (isDigit(peek())) pos++;
+          if (start === pos) throw new Error('Unexpected token');
+          return parseFloat(text.slice(start, pos));
+        }
+
+        if (!text.trim()) return 0;
+        const result = parseExpression();
+        if (pos !== text.length) throw new Error('Unexpected trailing input');
+        return result;
+      }
+
+      function safeEvaluate(text) {
+        try {
+          const result = evaluateExpression(text);
+          return isFinite(result) ? result : NaN;
+        } catch (e) {
+          return NaN;
+        }
+      }
+
+      // While the user is still typing, the expression is often deliberately
+      // incomplete ("8+", "5*(") - trims a trailing run of operators/open
+      // parens (and auto-closes any dangling "(") so the live preview shows
+      // the last valid running value instead of flashing "Error" before
+      // there's actually anything wrong.
+      function previewValue(text) {
+        const trimmed = text.replace(/[+\-*/^(]+$/, '');
+        if (!trimmed) return 0;
+        const opens = (trimmed.match(/\(/g) || []).length;
+        const closes = (trimmed.match(/\)/g) || []).length;
+        return safeEvaluate(trimmed + ')'.repeat(Math.max(0, opens - closes)));
+      }
+
+      function updateDisplay() {
+        expressionEl.textContent = expression || ' ';
+        const shown = expression === '' ? '0' : expression;
+        const preview = previewValue(shown);
+        display.textContent = (expression && !justEvaluated) ? formatNumber(preview) : (expression || '0');
+        memoryIndicator.classList.toggle('hidden', memory === 0);
+      }
+
+      function lastCharIsOperator() {
+        return /[+\-*/^]$/.test(expression);
+      }
+
+      function inputDigit(digit) {
+        if (justEvaluated) { expression = ''; justEvaluated = false; }
+        expression += digit;
+        updateDisplay();
+      }
+
+      function inputDecimal() {
+        if (justEvaluated) { expression = ''; justEvaluated = false; }
+        // Only block a second '.' within the current trailing number.
+        const trailing = expression.split(/[+\-*/^()]/).pop();
+        if (!trailing.includes('.')) expression += (expression === '' || lastCharIsOperator() ? '0.' : '.');
+        updateDisplay();
+      }
+
+      function inputOperator(op) {
+        if (justEvaluated) { justEvaluated = false; }
+        if (expression === '' && op !== '-') return; // no leading +, *, /, ^
+        if (lastCharIsOperator()) expression = expression.slice(0, -1) + op;
+        else expression += op;
+        updateDisplay();
+      }
+
+      function insertToken(token) {
+        if (justEvaluated && token !== ')') { expression = ''; justEvaluated = false; }
+        if (token === 'pi') expression += Math.PI.toFixed(10);
+        else if (token === 'e') expression += Math.E.toFixed(10);
+        else expression += token;
+        updateDisplay();
+      }
+
+      function applyUnaryFn(fn) {
+        const value = safeEvaluate(expression || '0');
+        if (isNaN(value)) { expression = 'Error'; justEvaluated = true; updateDisplay(); return; }
+        let result;
+        switch (fn) {
+          case 'sin': result = Math.sin(value * Math.PI / 180); break;
+          case 'cos': result = Math.cos(value * Math.PI / 180); break;
+          case 'tan': result = Math.tan(value * Math.PI / 180); break;
+          case 'log': result = value > 0 ? Math.log10(value) : NaN; break;
+          case 'ln': result = value > 0 ? Math.log(value) : NaN; break;
+          case 'sqrt': result = value >= 0 ? Math.sqrt(value) : NaN; break;
+          case 'square': result = value * value; break;
+          case 'reciprocal': result = value !== 0 ? 1 / value : NaN; break;
+          case 'negate': result = value * -1; break;
+          case 'percent': result = value / 100; break;
+          default: result = value;
+        }
+        expression = isNaN(result) ? 'Error' : formatNumber(result);
+        justEvaluated = true;
+        updateDisplay();
+      }
+
+      function equals() {
+        if (!expression) return;
+        const result = safeEvaluate(expression);
+        expression = isNaN(result) ? 'Error' : formatNumber(result);
+        justEvaluated = true;
+        updateDisplay();
+      }
+
+      function clear() {
+        expression = '';
+        justEvaluated = false;
+        updateDisplay();
+      }
+
+      function backspace() {
+        if (justEvaluated) { clear(); return; }
+        expression = expression.slice(0, -1);
+        updateDisplay();
+      }
+
+      function applyMemory(action) {
+        const value = safeEvaluate(expression || '0');
+        switch (action) {
+          case 'mc': memory = 0; break;
+          case 'mr': expression = formatNumber(memory); justEvaluated = true; break;
+          case 'm+': if (!isNaN(value)) memory += value; break;
+          case 'm-': if (!isNaN(value)) memory -= value; break;
+        }
+        updateDisplay();
+      }
+
+      keys.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        if (btn.dataset.calcDigit !== undefined) inputDigit(btn.dataset.calcDigit);
+        else if (btn.dataset.calcOp !== undefined) inputOperator(btn.dataset.calcOp);
+        else if (btn.dataset.calcInsert !== undefined) insertToken(btn.dataset.calcInsert);
+        else if (btn.dataset.calcFn !== undefined) applyUnaryFn(btn.dataset.calcFn);
+        else if (btn.dataset.calcMem !== undefined) applyMemory(btn.dataset.calcMem);
+        else if (btn.dataset.calcAction === 'equals') equals();
+        else if (btn.dataset.calcAction === 'clear') clear();
+        else if (btn.dataset.calcAction === 'backspace') backspace();
+        else if (btn.dataset.calcAction === 'decimal') inputDecimal();
+      });
+
+      function openCalculator() {
+        panel.classList.remove('hidden');
+      }
+      function closeCalculator() {
+        panel.classList.add('hidden');
+      }
+
+      openBtn.addEventListener('click', openCalculator);
+      closeBtn.addEventListener('click', closeCalculator);
+      panel.addEventListener('click', (e) => { if (e.target === panel) closeCalculator(); });
+
+      document.addEventListener('keydown', (e) => {
+        if (panel.classList.contains('hidden')) return;
+        if (e.key >= '0' && e.key <= '9') inputDigit(e.key);
+        else if (['+', '-', '*', '/', '^'].includes(e.key)) inputOperator(e.key);
+        else if (e.key === '(' || e.key === ')') insertToken(e.key);
+        else if (e.key === '.') inputDecimal();
+        else if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); equals(); }
+        else if (e.key === 'Backspace') backspace();
+        else if (e.key === 'Delete') clear();
+        else if (e.key === 'Escape') closeCalculator();
+      });
+
+      updateDisplay();
     })();
   </script>
 {% endif %}

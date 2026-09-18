@@ -1,6 +1,3 @@
-"""
-Django settings for sports_shop project.
-"""
 from datetime import timedelta
 from pathlib import Path
 
@@ -20,11 +17,6 @@ SECRET_KEY = env("SECRET_KEY", default="django-insecure-kr$l8a-a2yj_4lwf&c@rnfg)
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
-# Coolify (and most PaaS setups) terminate TLS at a reverse proxy and forward
-# plain HTTP to this container, so Django needs to be told which header to
-# trust for "is this request actually HTTPS" - without this, request.is_secure()
-# is always False behind the proxy, which breaks secure cookies and the
-# require_https redirect-safety checks used throughout the web app.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 if not DEBUG:
@@ -97,10 +89,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "sports_shop.wsgi.application"
 
-
-# Database
-# https://docs.djangoproject.com/en/6.1/ref/settings/#databases
-
 DATABASES = {
     "default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
 }
@@ -116,9 +104,6 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 
-# Password validation
-# https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -126,9 +111,6 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-
-# Internationalization
-# https://docs.djangoproject.com/en/6.1/topics/i18n/
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
@@ -146,21 +128,12 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-
-# Static files are always served by whitenoise (works the same whether media
-# ends up on local disk or S3 below) so no separate nginx/CDN is required to
-# just "keep the project running" in a container.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
 
-# S3-compatible media storage (only enabled when a bucket name is provided -
-# requires the optional `django-storages` package). Without it, uploaded
-# media (product photos, seller documents, avatars) lives on the "media"
-# volume defined in docker-compose.yml instead. Accepts either Cloudflare
-# R2's R2_* names or the generic AWS_* names, so either convention in .env
-# works.
+
 AWS_STORAGE_BUCKET_NAME = env("R2_BUCKET_NAME", default=env("AWS_STORAGE_BUCKET_NAME", default=""))
 if AWS_STORAGE_BUCKET_NAME:
     AWS_ACCESS_KEY_ID = env("R2_ACCESS_KEY_ID", default=env("AWS_ACCESS_KEY_ID", default=""))
@@ -169,13 +142,8 @@ if AWS_STORAGE_BUCKET_NAME:
     AWS_S3_REGION_NAME = env("R2_REGION", default=env("AWS_S3_REGION_NAME", default="auto"))
     AWS_DEFAULT_ACL = None
     AWS_S3_FILE_OVERWRITE = False
-    # R2 requires SigV4 and path-style addressing, since the account-level
-    # endpoint has no per-bucket subdomain -
-    # https://developers.cloudflare.com/r2/examples/aws/boto3/
     AWS_S3_SIGNATURE_VERSION = "s3v4"
     AWS_S3_ADDRESSING_STYLE = "path"
-    # R2's public bucket domain (R2_PUBLIC_URL), if set, makes uploaded
-    # files' .url resolve to a direct public link instead of a signed one.
     _r2_public_url = env("R2_PUBLIC_URL", default="")
     if _r2_public_url:
         AWS_S3_CUSTOM_DOMAIN = _r2_public_url.removeprefix("https://").removeprefix("http://")
@@ -228,9 +196,6 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
 }
 
-
-# Cache (used for OTP throttling; swap to Redis in production)
-
 REDIS_URL = env("REDIS_URL", default=None)
 if REDIS_URL:
     CACHES = {
@@ -261,17 +226,7 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-
-# Email
-# https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
-#
-# Django 6.1's MAILERS setting is the current (non-deprecated) way to
-# configure a named mailer - individual top-level EMAIL_* settings still
-# work but are deprecated as of 6.1 and will be removed in 7.0.
-
 _email_port = env.int("SMTP_PORT", default=env.int("EMAIL_PORT", default=587))
-# Port 465 is implicit SSL; everything else (587, 25, ...) uses STARTTLS -
-# Django's SMTP backend errors if both use_tls and use_ssl are true.
 _email_use_ssl = _email_port == 465
 
 MAILERS = {
@@ -289,9 +244,6 @@ MAILERS = {
 }
 DEFAULT_FROM_EMAIL = env("SMTP_FROM", default=env("DEFAULT_FROM_EMAIL", default="no-reply@sportshop.example"))
 
-
-# SMS (see core/sms.py for the pluggable backend interface)
-
 SMS_BACKEND = env("SMS_BACKEND", default="core.sms.ConsoleSMSBackend")
 AFRICASTALKING_USERNAME = env("AFRICASTALKING_USERNAME", default="")
 AFRICASTALKING_API_KEY = env("AFRICASTALKING_API_KEY", default="")
@@ -304,23 +256,12 @@ MNOTIFY_SENDER_ID = env("MNOTIFY_SENDER_ID", default="SportShop")
 GOOGLE_OAUTH_CLIENT_ID = env("GOOGLE_OAUTH_CLIENT_ID", default="")
 APPLE_CLIENT_ID = env("APPLE_CLIENT_ID", default="")
 
-
-# Payments (see orders/services/payment_gateway.py for the pluggable backend
-# interface - PAYMENT_GATEWAY_BACKENDS defaults to Mock everywhere until real
-# credentials are added here)
-
 PAYMENT_DEFAULT_GATEWAY = env("PAYMENT_DEFAULT_GATEWAY", default="paystack")
 PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", default="")
 FLUTTERWAVE_SECRET_HASH = env("FLUTTERWAVE_SECRET_HASH", default="")
 
-# Hubtel (hosted checkout - see orders/services/payment_gateway.py::HubtelGateway
-# and orders/services/hubtel_checkout.py for the deferred order-on-payment-success flow)
 HUBTEL_API_ID = env("HUBTEL_API_ID", default="")
 HUBTEL_API_KEY = env("HUBTEL_API_KEY", default="")
 HUBTEL_MERCHANT_ACCOUNT = env("HUBTEL_MERCHANT_ACCOUNT", default="")
-# Fallback redirect targets if a client doesn't supply its own return_url/
-# cancellation_url when starting checkout. The callback (webhook) URL is
-# always built server-side from the request, not read from here, since it
-# must point at this backend regardless of what a client requests.
 HUBTEL_RETURN_URL = env("HUBTEL_RETURN_URL", default="")
 HUBTEL_CANCELLATION_URL = env("HUBTEL_CANCELLATION_URL", default="")

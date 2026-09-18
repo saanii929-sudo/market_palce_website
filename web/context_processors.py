@@ -14,11 +14,18 @@ def site_chrome(request):
         cart_count = sum(cart.items.values_list("qty", flat=True))
 
     unread_notifications = 0
+    seller_has_subscription = False
     if request.user.is_authenticated:
         unread_notifications = Notification.objects.filter(user=request.user, is_read=False).count()
+        seller = getattr(request.user, "seller_profile", None)
+        if seller is not None:
+            from sellers.services import get_active_subscription
+
+            seller_has_subscription = get_active_subscription(seller) is not None
 
     return {
         "cart_count": cart_count,
         "wishlist_count": wishlist_services.count(request),
         "unread_notifications": unread_notifications,
+        "seller_has_subscription": seller_has_subscription,
     }

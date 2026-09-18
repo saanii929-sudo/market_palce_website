@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 
-from catalog.models import Product
+from catalog.models import Product, ProductVariant
 
 from .models import (
     Customer,
@@ -51,7 +51,6 @@ def complete_sale(
     discount_amount: Decimal = Decimal("0.00"),
     amount_tendered: Decimal | None = None,
 ) -> POSSale:
-    """cart_lines: [{"product_id": int, "qty": int}, ...]"""
     if not cart_lines:
         raise POSError("Cart is empty.")
 
@@ -61,6 +60,11 @@ def complete_sale(
             id__in=[line["product_id"] for line in cart_lines], seller=seller
         )
     }
+    variant_ids = [line["variant_id"] for line in cart_lines if line.get("variant_id")]
+    variants = {
+        v.id: v
+        for v in ProductVariant.objects.select_for_update().filter(id__in=variant_ids, product__seller=seller)
+    }
 
     subtotal = Decimal("0.00")
     resolved_lines = []
@@ -68,14 +72,29 @@ def complete_sale(
         product = products.get(line["product_id"])
         if product is None:
             raise POSError("One of the scanned products no longer exists in your store.")
+
+        variant = None
+        if line.get("variant_id"):
+            variant = variants.get(line["variant_id"])
+            if variant is None or variant.product_id != product.id:
+                raise POSError(f'One of the selected sizes/colors for "{product.name}" no longer exists.')
+
         qty = int(line["qty"])
         if qty <= 0:
             continue
-        if product.stock_qty < qty:
-            raise POSError(f'Not enough stock for "{product.name}" ({product.stock_qty} left).')
+
+        stock_target = variant or product
+        if stock_target.stock_qty < qty:
+            label = product.name
+            if variant:
+                variant_label = " ".join(filter(None, [variant.size, variant.color]))
+                if variant_label:
+                    label = f"{product.name} ({variant_label})"
+            raise POSError(f'Not enough stock for "{label}" ({stock_target.stock_qty} left).')
+
         line_total = product.price * qty
         subtotal += line_total
-        resolved_lines.append((product, qty))
+        resolved_lines.append((product, variant, qty))
 
     if not resolved_lines:
         raise POSError("Cart is empty.")
@@ -99,11 +118,17 @@ def complete_sale(
         amount_tendered=amount_tendered,
     )
 
-    for product, qty in resolved_lines:
-        POSSaleItem.objects.create(sale=sale, product=product, qty=qty, unit_price=product.price)
-        product.stock_qty = product.stock_qty - qty
+    for product, variant, qty in resolved_lines:
+        POSSaleItem.objects.create(sale=sale, product=product, variant=variant, qty=qty, unit_price=product.price)
+
         product.sold_count = product.sold_count + qty
-        product.save(update_fields=["stock_qty", "sold_count"])
+        if variant is not None:
+            variant.stock_qty = variant.stock_qty - qty
+            variant.save(update_fields=["stock_qty"])
+            product.save(update_fields=["sold_count"])
+        else:
+            product.stock_qty = product.stock_qty - qty
+            product.save(update_fields=["stock_qty", "sold_count"])
 
     return sale
 
@@ -112,7 +137,6 @@ def complete_sale(
 def process_return(
     *, sale: POSSale, lines: list[dict], reason: str = "", processed_by: Employee | None = None, restock: bool = True
 ) -> POSReturn:
-    """lines: [{"sale_item_id": int, "qty": int}, ...]"""
     if not lines:
         raise POSError("Select at least one item to return.")
 
@@ -139,9 +163,15 @@ def process_return(
 
         if restock:
             product = sale_item.product
-            product.stock_qty += qty
             product.sold_count = max(0, product.sold_count - qty)
-            product.save(update_fields=["stock_qty", "sold_count"])
+            if sale_item.variant_id:
+                variant = sale_item.variant
+                variant.stock_qty += qty
+                variant.save(update_fields=["stock_qty"])
+                product.save(update_fields=["sold_count"])
+            else:
+                product.stock_qty += qty
+                product.save(update_fields=["stock_qty", "sold_count"])
         any_line = True
 
     if not any_line:
@@ -245,8 +275,6 @@ def mark_payroll_paid(pay_run: PayRun) -> Expense:
     )
 
 
-# -- Invoicing --------------------------------------------------------------
-
 @transaction.atomic
 def create_invoice(
     *,
@@ -265,7 +293,6 @@ def create_invoice(
     line_items: list[dict] | None = None,
     linked_pos_sale: POSSale | None = None,
 ) -> Invoice:
-    """line_items: [{"description": str, "qty": Decimal, "unit_price": Decimal, "product_id": int|None}, ...]"""
     if not customer_name and customer is None:
         raise POSError("Add a customer name for this invoice.")
     if not line_items:

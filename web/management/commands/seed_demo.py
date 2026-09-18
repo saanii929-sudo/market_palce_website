@@ -37,7 +37,7 @@ from pos.models import (
 )
 from pos.services import create_invoice, mark_payroll_paid, receive_purchase_order, record_invoice_payment, run_payroll
 from reviews.models import Review
-from sellers.models import Payout
+from sellers.models import Payout, SellerSubscription, SubscriptionPlan
 from support.models import FAQ, SupportTicket
 from wishlist.models import WishlistItem
 
@@ -137,6 +137,9 @@ class Command(BaseCommand):
 
         self.stdout.write("Seeding collections, banners...")
         self._seed_collections_and_banners(products_by_slug)
+
+        self.stdout.write("Seeding subscription plans...")
+        self._seed_subscription_plans()
 
         self.stdout.write("Seeding seller payouts...")
         self._seed_payouts()
@@ -291,6 +294,46 @@ class Command(BaseCommand):
                     starts_at=timezone.now() - datetime.timedelta(hours=2),
                     ends_at=timezone.now() + datetime.timedelta(hours=5),
                 ),
+            )
+
+    def _seed_subscription_plans(self):
+        plan_specs = [
+            (
+                "Starter", "starter", "45.00", 30, "For sellers just getting started with in-store sales",
+                ["POS terminal & receipts", "Sales history", "Basic stock tracking"], False, 1,
+            ),
+            (
+                "Growth", "growth", "120.00", 30, "The full back-office suite for a growing store",
+                [
+                    "Everything in Starter", "Inventory & purchase orders", "Staff accounts & payroll",
+                    "Customer directory", "Invoicing", "Sales & P&L reports",
+                ],
+                True, 2,
+            ),
+            (
+                "Growth (yearly)", "growth-yearly", "1200.00", 365, "Growth plan billed annually - 2 months free",
+                [
+                    "Everything in Growth", "Priority support", "2 months free vs. monthly billing",
+                ],
+                False, 3,
+            ),
+        ]
+        for name, slug, price, period_days, tagline, features, is_featured, order in plan_specs:
+            SubscriptionPlan.objects.get_or_create(
+                slug=slug,
+                defaults={
+                    "name": name, "price": price, "billing_period_days": period_days, "tagline": tagline,
+                    "features": features, "is_featured": is_featured, "display_order": order,
+                },
+            )
+
+        seller = Seller.objects.filter(slug="northmark-store").first()
+        growth = SubscriptionPlan.objects.filter(slug="growth").first()
+        if seller and growth and not SellerSubscription.objects.filter(seller=seller).exists():
+            now = timezone.now()
+            SellerSubscription.objects.create(
+                seller=seller, plan=growth, amount=growth.price, status=SellerSubscription.Status.ACTIVE,
+                starts_at=now, expires_at=now + datetime.timedelta(days=growth.billing_period_days),
             )
 
     def _seed_payouts(self):

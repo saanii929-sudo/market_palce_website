@@ -1,6 +1,8 @@
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from .color_utils import resolve_css_color
 from .models import (
     Banner,
     Brand,
@@ -47,17 +49,32 @@ class SellerSerializer(serializers.ModelSerializer):
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
-    url = serializers.CharField(source="resolved_url", read_only=True, allow_null=True)
+    url = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductImage
         fields = ["id", "url", "display_order"]
 
+    def get_url(self, obj) -> str | None:
+        url = obj.resolved_url
+        if not url:
+            return None
+        if url.startswith("http"):
+            return url
+        request = self.context.get("request")
+        return request.build_absolute_uri(url) if request else url
+
 
 class ProductVariantSerializer(serializers.ModelSerializer):
+    color_swatch = serializers.SerializerMethodField()
+
     class Meta:
         model = ProductVariant
-        fields = ["id", "size", "color", "stock_qty", "in_stock"]
+        fields = ["id", "size", "color", "color_swatch", "stock_qty", "in_stock"]
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_color_swatch(self, variant):
+        return resolve_css_color(variant.color)
 
 
 class ProductListSerializer(serializers.ModelSerializer):
@@ -144,6 +161,33 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             .order_by("-sold_count")[:6]
         )
         return ProductListSerializer(related, many=True, context=self.context).data
+
+
+# Storefront-sized product page, matching web/views.py::seller_detail_view's
+# own limit - a client that needs to page through more than this should use
+# GET /catalog/products/?seller=<slug> instead, which is fully paginated.
+SELLER_DETAIL_PRODUCT_LIMIT = 24
+
+
+class SellerDetailSerializer(SellerSerializer):
+    product_count = serializers.SerializerMethodField()
+    products = serializers.SerializerMethodField()
+
+    class Meta(SellerSerializer.Meta):
+        fields = SellerSerializer.Meta.fields + ["support_phone", "product_count", "products"]
+
+    def get_product_count(self, seller) -> int:
+        return seller.products.filter(is_active=True).count()
+
+    @extend_schema_field(ProductListSerializer(many=True))
+    def get_products(self, seller):
+        products = (
+            seller.products.filter(is_active=True)
+            .select_related("category", "brand")
+            .prefetch_related("images")
+            .order_by("-sold_count")[:SELLER_DETAIL_PRODUCT_LIMIT]
+        )
+        return ProductListSerializer(products, many=True, context=self.context).data
 
 
 class FlashDealSerializer(serializers.ModelSerializer):

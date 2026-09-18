@@ -20,8 +20,6 @@ def get_or_create_cart(request) -> Cart:
 
 
 def merge_guest_cart_into_user_cart(session_key: str, user) -> None:
-    """Called on login: folds a guest session's cart into the user's cart,
-    summing quantities for items already present."""
     try:
         guest_cart = Cart.objects.get(session_key=session_key)
     except Cart.DoesNotExist:
@@ -43,7 +41,20 @@ def merge_guest_cart_into_user_cart(session_key: str, user) -> None:
         guest_cart.delete()
 
 
+class CartError(Exception):
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
 def add_item(cart: Cart, product: Product, variant: ProductVariant | None, qty: int) -> CartItem:
+    stock_target = variant or product
+    existing = CartItem.objects.filter(cart=cart, product=product, variant=variant).first()
+    if existing is None and qty > stock_target.stock_qty:
+        raise CartError(f"Only {stock_target.stock_qty} left in stock." if stock_target.stock_qty else "Out of stock.")
+    if existing is not None and existing.qty + qty > stock_target.stock_qty:
+        raise CartError(f"Only {stock_target.stock_qty} left in stock - you already have {existing.qty} in your cart.")
+
     item, created = CartItem.objects.get_or_create(cart=cart, product=product, variant=variant, defaults={"qty": qty})
     if not created:
         item.qty += qty
@@ -52,6 +63,9 @@ def add_item(cart: Cart, product: Product, variant: ProductVariant | None, qty: 
 
 
 def update_item_qty(item: CartItem, qty: int) -> CartItem:
+    stock_target = item.variant or item.product
+    if qty > stock_target.stock_qty:
+        raise CartError(f"Only {stock_target.stock_qty} left in stock.")
     item.qty = qty
     item.save(update_fields=["qty"])
     return item

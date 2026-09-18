@@ -1,0 +1,79 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}{% if banner %}Edit banner{% else %}Add banner{% endif %}{% endblock %}
+{% block console_subtitle %}{% if banner %}Update details for {{ banner.title }}{% else %}Create a new home page banner{% endif %}{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-banners' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to banners</a>
+{% endblock %}
+
+{% block console_content %}
+<form method="post" enctype="multipart/form-data" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl space-y-5">
+  {% csrf_token %}
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Title</label>
+    <input type="text" name="title" value="{{ banner.title|default:'' }}" required
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Subtitle <span class="text-gray-400 font-normal">(optional)</span></label>
+    <input type="text" name="subtitle" value="{{ banner.subtitle|default:'' }}"
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Image {% if not banner %}<span class="text-gray-400 font-normal">(optional)</span>{% endif %}</label>
+    {% if banner.resolved_image_url %}
+      <img src="{{ banner.resolved_image_url }}" alt="" class="w-full max-w-xs aspect-video rounded-lg object-cover mb-2 border border-gray-200">
+    {% endif %}
+    <input type="file" name="image" accept="image/*"
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    {% if banner %}<p class="text-xs text-gray-400 mt-1.5">Leave blank to keep the current image.</p>{% endif %}
+  </div>
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Button label <span class="text-gray-400 font-normal">(optional)</span></label>
+      <input type="text" name="cta_label" value="{{ banner.cta_label|default:'' }}" placeholder="e.g. Shop now"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Button link <span class="text-gray-400 font-normal">(optional)</span></label>
+      <input type="text" name="cta_link" value="{{ banner.cta_link|default:'' }}" placeholder="/products/"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Active from <span class="text-gray-400 font-normal">(optional)</span></label>
+      <input type="datetime-local" name="active_from" value="{{ banner.active_from|date:'Y-m-d\TH:i' }}"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Active to <span class="text-gray-400 font-normal">(optional)</span></label>
+      <input type="datetime-local" name="active_to" value="{{ banner.active_to|date:'Y-m-d\TH:i' }}"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+  <p class="text-xs text-gray-400 -mt-3">Leave both blank to show the banner indefinitely (as long as it's active).</p>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Display order</label>
+    <input type="number" name="display_order" value="{{ banner.display_order|default:0 }}"
+           class="w-32 rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+
+  <label class="flex items-center gap-2 text-sm font-semibold">
+    <input type="checkbox" name="is_active" value="1" {% if banner.is_active or not banner %}checked{% endif %} class="rounded border-gray-300">
+    Active
+  </label>
+
+  <div class="flex items-center gap-3 pt-2">
+    <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">
+      {% if banner %}Save changes{% else %}Add banner{% endif %}
+    </button>
+    <a href="{% url 'web-console-banners' %}" class="rounded-xl border border-gray-200 font-bold px-6 py-3 hover:border-ink transition-colors">Cancel</a>
+  </div>
+</form>
+{% endblock %}

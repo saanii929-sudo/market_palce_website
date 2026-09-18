@@ -48,3 +48,29 @@ def notify_payout_resolved(payout) -> None:
     if body is None:
         return
     notify(seller_user, "system", title_by_status[payout.status], body)
+
+
+def notify_subscription_activated(subscription) -> None:
+    from notifications.services import notify
+
+    seller_user = subscription.seller.user
+    if seller_user is None:
+        return
+    expires = subscription.expires_at.strftime("%d %b %Y") if subscription.expires_at else ""
+    notify(
+        seller_user, "system", "Subscription activated",
+        f"Your {subscription.plan.name} subscription is active until {expires}. "
+        "The point-of-sale suite is now unlocked.",
+    )
+
+
+def notify_subscription_failed(subscription) -> None:
+    from notifications.services import notify
+
+    seller_user = subscription.seller.user
+    if seller_user is None:
+        return
+    notify(
+        seller_user, "system", "Subscription payment failed",
+        subscription.failure_reason or f"Your payment for {subscription.plan.name} could not be completed.",
+    )

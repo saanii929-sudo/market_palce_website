@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.html import format_html
 
-from .models import Payout, SellerApplication
+from .models import Payout, SellerApplication, SellerSubscription, SubscriptionPlan
 from .services import (
     PayoutError,
     SellerApplicationError,
@@ -12,6 +12,23 @@ from .services import (
     reject_payout,
     schedule_payout,
 )
+
+
+@admin.register(SubscriptionPlan)
+class SubscriptionPlanAdmin(admin.ModelAdmin):
+    list_display = ["name", "price", "billing_period_days", "is_active", "is_featured", "display_order"]
+    list_filter = ["is_active", "is_featured"]
+    search_fields = ["name"]
+    prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(SellerSubscription)
+class SellerSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ["seller", "plan", "amount", "status", "starts_at", "expires_at", "created_at"]
+    list_filter = ["status", "plan"]
+    search_fields = ["seller__business_name", "reference"]
+    autocomplete_fields = ["seller", "plan"]
+    readonly_fields = ["reference", "checkout_url", "failure_reason"]
 
 
 @admin.register(Payout)

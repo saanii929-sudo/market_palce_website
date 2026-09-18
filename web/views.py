@@ -1,4 +1,5 @@
 import secrets
+import datetime
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from functools import wraps
@@ -15,7 +16,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
 from django.core.paginator import Paginator
 from django.db import IntegrityError
-from django.db.models import ProtectedError, Q, Sum
+from django.db.models import Max, ProtectedError, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -34,7 +35,8 @@ from accounts.serializers import AddressSerializer, RegisterSerializer
 from accounts.services.otp import OTPVerificationError, send_otp, verify_otp
 from cart import services as cart_services
 from cart.models import CartItem
-from catalog.models import Brand, Category, Collection, Product, ProductImage, ProductVariant, Seller
+from cart.services import CartError
+from catalog.models import Brand, Category, Collection, FlashDeal, Product, ProductImage, ProductVariant, Seller
 from core.defaults import CannotDeleteOnlyDefaultError, handle_deletion
 from core.sms import get_sms_backend
 from discovery import services as discovery_services
@@ -52,8 +54,18 @@ from orders.services.returns import ReturnError, eligible_order_items, request_r
 from payments.models import PaymentMethodToken
 from payments.serializers import PaymentMethodTokenCreateSerializer
 from reviews.models import Review
-from sellers.models import Payout, SellerApplication
-from sellers.services import PayoutError, get_available_balance, request_withdrawal
+from reviews.serializers import ReviewCreateSerializer
+from sellers.models import Payout, SellerApplication, SellerSubscription, SubscriptionPlan
+from sellers.services import (
+    PayoutError,
+    SubscriptionError,
+    finalize_subscription_payment,
+    get_active_subscription,
+    get_available_balance,
+    mark_subscription_failed,
+    request_withdrawal,
+    start_subscription_checkout,
+)
 from support.models import FAQ
 from support.serializers import SupportTicketCreateSerializer
 from wishlist import services as wishlist_services
@@ -464,15 +476,47 @@ def product_detail_view(request, slug):
     breadcrumbs.append((product.name, None))
 
     wishlisted_ids = wishlist_services.get_wishlisted_product_ids(request)
+    variants = list(product.variants.all())
+    # Default to the first in-stock size/color rather than blindly the first
+    # row, so a shopper doesn't land on an option they can't actually select.
+    default_variant = next((v for v in variants if v.in_stock), variants[0] if variants else None)
+
+    reviewable_order_items = []
+    if request.user.is_authenticated:
+        reviewable_order_items = list(
+            OrderItem.objects.filter(
+                order__user=request.user,
+                order__status=Order.Status.DELIVERED,
+                product=product,
+                review__isnull=True,
+            ).order_by("-order__created_at")
+        )
+
     return render(request, "web/product_detail.html", {
         "product": product,
         "breadcrumbs": breadcrumbs,
-        "variants": product.variants.all(),
+        "variants": variants,
+        "default_variant_id": default_variant.id if default_variant else None,
         "reviews": product.reviews.select_related("user").order_by("-created_at")[:10],
+        "reviewable_order_items": reviewable_order_items,
         "related_products": related,
         "wishlisted_ids": wishlisted_ids,
         "is_wishlisted": product.id in wishlisted_ids,
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def product_review_add_view(request, slug):
+    product = get_object_or_404(Product, slug=slug, is_active=True)
+    serializer = ReviewCreateSerializer(data=request.POST, context={"request": request})
+    if serializer.is_valid():
+        serializer.save()
+        messages.success(request, "Thanks! Your review has been posted.")
+    else:
+        first_error = next(iter(serializer.errors.values()))[0]
+        messages.error(request, first_error)
+    return redirect(reverse("web-product-detail", args=[product.slug]) + "#reviews")
 
 
 def wishlist_view(request):
@@ -520,7 +564,12 @@ def cart_add_view(request):
         qty = 1
 
     cart = cart_services.get_or_create_cart(request)
-    cart_services.add_item(cart, product=product, variant=variant, qty=qty)
+    try:
+        cart_services.add_item(cart, product=product, variant=variant, qty=qty)
+    except CartError as exc:
+        messages.error(request, exc.message)
+        target = _safe_redirect_target(request, request.POST.get("next"), reverse("web-product-detail", args=[product.slug]))
+        return redirect(target)
 
     if request.POST.get("buy_now"):
         return redirect("web-checkout")
@@ -542,7 +591,10 @@ def cart_item_update_view(request, item_id):
     if qty < 1:
         item.delete()
     else:
-        cart_services.update_item_qty(item, qty)
+        try:
+            cart_services.update_item_qty(item, qty)
+        except CartError as exc:
+            messages.error(request, exc.message)
     return redirect("web-cart")
 
 
@@ -952,6 +1004,26 @@ def seller_required(view_func):
     return wrapper
 
 
+def subscription_required(view_func):
+    """Like seller_required, but also requires an active SportShop Pro
+    subscription - gates the point-of-sale, inventory, staff/payroll and
+    reporting pages, which stay locked until the seller subscribes."""
+
+    @wraps(view_func)
+    @login_required(login_url="web-login")
+    def wrapper(request, *args, **kwargs):
+        seller = getattr(request.user, "seller_profile", None)
+        if seller is None:
+            messages.error(request, "You need an approved seller account to view this page.")
+            return redirect("web-home")
+        if get_active_subscription(seller) is None:
+            messages.warning(request, "Subscribe to a SportShop Pro plan to unlock the point-of-sale suite.")
+            return redirect("web-seller-subscription")
+        return view_func(request, seller, *args, **kwargs)
+
+    return wrapper
+
+
 def superadmin_required(view_func):
     @wraps(view_func)
     @login_required(login_url="web-login")
@@ -1061,7 +1133,7 @@ def _save_product_from_form(request, seller, product=None):
     stock_qty = request.POST.get("stock_qty", "0").strip()
     description = request.POST.get("description", "").strip()
     original_price = request.POST.get("original_price", "").strip()
-    image_urls = [u.strip() for u in request.POST.get("image_urls", "").splitlines() if u.strip()]
+    images = request.FILES.getlist("images")
 
     if not name or not category_id or not price:
         messages.error(request, "Name, category, and price are required.")
@@ -1091,10 +1163,12 @@ def _save_product_from_form(request, seller, product=None):
         product.return_window_days = 7
     product.save()
 
-    if image_urls:
-        product.images.all().delete()
-        for i, url in enumerate(image_urls):
-            ProductImage.objects.create(product=product, external_url=url, display_order=i)
+    if images:
+        # Uploads add to the existing gallery rather than replacing it -
+        # remove unwanted photos individually from the edit page instead.
+        next_order = (product.images.aggregate(m=Max("display_order"))["m"] or -1) + 1
+        for i, image in enumerate(images):
+            ProductImage.objects.create(product=product, image=image, display_order=next_order + i)
 
     return product
 
@@ -1104,8 +1178,8 @@ def seller_product_add_view(request, seller):
     if request.method == "POST":
         product = _save_product_from_form(request, seller)
         if product is not None:
-            messages.success(request, f'"{product.name}" was added to your store.')
-            return redirect("web-seller-products")
+            messages.success(request, f'"{product.name}" was added. You can now add size/color variants below if this product needs them.')
+            return redirect("web-seller-product-edit", product_id=product.id)
 
     return render(request, "web/seller_product_form.html", {
         "active_nav": "products",
@@ -1124,7 +1198,7 @@ def seller_product_edit_view(request, seller, product_id):
         saved = _save_product_from_form(request, seller, product=product)
         if saved is not None:
             messages.success(request, f'"{saved.name}" was updated.')
-            return redirect("web-seller-products")
+            return redirect("web-seller-product-edit", product_id=product.id)
 
     return render(request, "web/seller_product_form.html", {
         "active_nav": "products",
@@ -1133,7 +1207,57 @@ def seller_product_edit_view(request, seller, product_id):
         "orders_count": _seller_order_qs(seller).count(),
         "categories": Category.objects.filter(is_active=True),
         "product": product,
+        "variants": product.variants.order_by("size", "color"),
+        "product_images": product.images.all(),
     })
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_product_image_delete_view(request, seller, product_id, image_id):
+    image = get_object_or_404(ProductImage, id=image_id, product_id=product_id, product__seller=seller)
+    image.delete()
+    messages.success(request, "Image removed.")
+    return redirect("web-seller-product-edit", product_id=product_id)
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_product_variant_add_view(request, seller, product_id):
+    product = get_object_or_404(Product, id=product_id, seller=seller)
+    size = request.POST.get("size", "").strip()
+    color = request.POST.get("color", "").strip()
+    sku = request.POST.get("sku", "").strip() or None
+    stock_qty = request.POST.get("stock_qty", "0").strip()
+
+    if not size and not color:
+        messages.error(request, "Enter a size and/or color for the variant.")
+        return redirect("web-seller-product-edit", product_id=product.id)
+
+    try:
+        stock_qty = max(0, int(stock_qty or 0))
+    except ValueError:
+        stock_qty = 0
+
+    if ProductVariant.objects.filter(product=product, size=size, color=color).exists():
+        messages.error(request, "A variant with that size/color combination already exists.")
+        return redirect("web-seller-product-edit", product_id=product.id)
+    if sku and ProductVariant.objects.filter(sku=sku).exists():
+        messages.error(request, f'SKU "{sku}" is already used by another variant.')
+        return redirect("web-seller-product-edit", product_id=product.id)
+
+    ProductVariant.objects.create(product=product, size=size, color=color, sku=sku, stock_qty=stock_qty)
+    messages.success(request, "Variant added.")
+    return redirect("web-seller-product-edit", product_id=product.id)
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_product_variant_delete_view(request, seller, product_id, variant_id):
+    variant = get_object_or_404(ProductVariant, id=variant_id, product_id=product_id, product__seller=seller)
+    variant.delete()
+    messages.success(request, "Variant removed.")
+    return redirect("web-seller-product-edit", product_id=product_id)
 
 
 @seller_required
@@ -1247,6 +1371,131 @@ def seller_order_return_resolve_view(request, seller, return_id):
     return redirect("web-seller-order-returns")
 
 
+def _parse_datetime_local(value: str):
+    if not value:
+        return None
+    parsed = datetime.datetime.fromisoformat(value)
+    return timezone.make_aware(parsed) if timezone.is_naive(parsed) else parsed
+
+
+def _save_flash_deal_from_form(request, seller, flash_deal=None):
+    product_id = request.POST.get("product_id")
+    deal_price = request.POST.get("deal_price", "").strip()
+    stock_qty = request.POST.get("stock_qty", "0").strip()
+
+    product = Product.objects.filter(id=product_id, seller=seller).first()
+    if product is None:
+        messages.error(request, "Select one of your own products.")
+        return None
+
+    try:
+        deal_price = Decimal(deal_price)
+    except InvalidOperation:
+        messages.error(request, "Enter a valid deal price.")
+        return None
+    if deal_price <= 0 or deal_price >= product.price:
+        messages.error(request, "The deal price must be positive and less than the regular price.")
+        return None
+
+    try:
+        stock_qty = max(0, int(stock_qty or 0))
+    except ValueError:
+        stock_qty = 0
+
+    try:
+        starts_at = _parse_datetime_local(request.POST.get("starts_at", "").strip())
+        ends_at = _parse_datetime_local(request.POST.get("ends_at", "").strip())
+    except ValueError:
+        messages.error(request, "Enter valid start/end dates.")
+        return None
+    if not starts_at or not ends_at:
+        messages.error(request, "Start and end dates are required.")
+        return None
+    if ends_at <= starts_at:
+        messages.error(request, "End date must be after the start date.")
+        return None
+
+    if flash_deal is None:
+        flash_deal = FlashDeal(product=product)
+    else:
+        flash_deal.product = product
+
+    flash_deal.deal_price = deal_price
+    flash_deal.stock_qty = stock_qty
+    flash_deal.starts_at = starts_at
+    flash_deal.ends_at = ends_at
+    flash_deal.is_active = bool(request.POST.get("is_active", "1"))
+    flash_deal.save()
+    return flash_deal
+
+
+@seller_required
+def seller_flash_deals_view(request, seller):
+    flash_deals = FlashDeal.objects.filter(product__seller=seller).select_related("product").order_by("-starts_at")
+    return render(request, "web/seller_flash_deals.html", {
+        "active_nav": "flash-deals",
+        "seller": seller,
+        "products_count": Product.objects.filter(seller=seller).count(),
+        "orders_count": _seller_order_qs(seller).count(),
+        "flash_deals": flash_deals,
+    })
+
+
+@seller_required
+def seller_flash_deal_add_view(request, seller):
+    if request.method == "POST":
+        flash_deal = _save_flash_deal_from_form(request, seller)
+        if flash_deal is not None:
+            messages.success(request, f"Flash deal for {flash_deal.product.name} was added.")
+            return redirect("web-seller-flash-deals")
+
+    return render(request, "web/seller_flash_deal_form.html", {
+        "active_nav": "flash-deals",
+        "seller": seller,
+        "products_count": Product.objects.filter(seller=seller).count(),
+        "orders_count": _seller_order_qs(seller).count(),
+        "products": Product.objects.filter(seller=seller, is_active=True),
+        "flash_deal": None,
+    })
+
+
+@seller_required
+def seller_flash_deal_edit_view(request, seller, flash_deal_id):
+    flash_deal = get_object_or_404(FlashDeal, id=flash_deal_id, product__seller=seller)
+    if request.method == "POST":
+        saved = _save_flash_deal_from_form(request, seller, flash_deal=flash_deal)
+        if saved is not None:
+            messages.success(request, "Flash deal updated.")
+            return redirect("web-seller-flash-deals")
+
+    return render(request, "web/seller_flash_deal_form.html", {
+        "active_nav": "flash-deals",
+        "seller": seller,
+        "products_count": Product.objects.filter(seller=seller).count(),
+        "orders_count": _seller_order_qs(seller).count(),
+        "products": Product.objects.filter(seller=seller, is_active=True),
+        "flash_deal": flash_deal,
+    })
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_flash_deal_toggle_view(request, seller, flash_deal_id):
+    flash_deal = get_object_or_404(FlashDeal, id=flash_deal_id, product__seller=seller)
+    flash_deal.is_active = not flash_deal.is_active
+    flash_deal.save(update_fields=["is_active"])
+    return redirect("web-seller-flash-deals")
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_flash_deal_delete_view(request, seller, flash_deal_id):
+    flash_deal = get_object_or_404(FlashDeal, id=flash_deal_id, product__seller=seller)
+    flash_deal.delete()
+    messages.success(request, "Flash deal removed.")
+    return redirect("web-seller-flash-deals")
+
+
 @seller_required
 def seller_payouts_view(request, seller):
     payouts = Payout.objects.filter(seller=seller)
@@ -1288,6 +1537,76 @@ def seller_payout_request_view(request, seller):
 
 
 @seller_required
+def seller_subscription_view(request, seller):
+    plans = SubscriptionPlan.objects.filter(is_active=True)
+    current = get_active_subscription(seller)
+    history = seller.subscriptions.exclude(status=SellerSubscription.Status.PENDING)[:10]
+
+    return render(request, "web/seller_subscription.html", {
+        "active_nav": "subscription",
+        "seller": seller,
+        "products_count": Product.objects.filter(seller=seller).count(),
+        "orders_count": _seller_order_qs(seller).count(),
+        "plans": plans,
+        "current_subscription": current,
+        "subscription_history": history,
+    })
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_subscription_checkout_view(request, seller):
+    plan = get_object_or_404(SubscriptionPlan, id=request.POST.get("plan_id"), is_active=True)
+
+    try:
+        subscription = start_subscription_checkout(
+            seller, plan,
+            callback_url=request.build_absolute_uri(reverse("seller-subscription-webhook")),
+            return_url=request.build_absolute_uri(reverse("web-seller-subscription-return")),
+            cancellation_url=request.build_absolute_uri(reverse("web-seller-subscription")),
+        )
+    except SubscriptionError as exc:
+        messages.error(request, exc.message)
+        return redirect("web-seller-subscription")
+
+    if not subscription.checkout_url:
+        messages.error(request, "Couldn't start the subscription checkout. Please try again.")
+        return redirect("web-seller-subscription")
+    return redirect(subscription.checkout_url)
+
+
+@seller_required
+def seller_subscription_return_view(request, seller):
+    """Where the browser lands after Hubtel's hosted checkout page for a
+    subscription purchase. Mirrors web.views.hubtel_return_view."""
+    reference = request.GET.get("clientReference") or request.GET.get("reference")
+    if not reference:
+        messages.error(request, "Missing payment reference.")
+        return redirect("web-seller-subscription")
+
+    subscription = get_object_or_404(SellerSubscription, reference=reference, seller=seller)
+
+    if subscription.status == SellerSubscription.Status.PENDING:
+        try:
+            result = HubtelGateway().check_status(reference)
+        except PaymentGatewayError:
+            result = {"status": "pending"}
+
+        if result["status"] == "success":
+            subscription = finalize_subscription_payment(subscription)
+        elif result["status"] == "failed":
+            subscription = mark_subscription_failed(subscription, "Payment failed or was cancelled.")
+
+    if subscription.status == SellerSubscription.Status.ACTIVE:
+        messages.success(request, f"You're subscribed to {subscription.plan.name}. The POS suite is now unlocked.")
+    elif subscription.status == SellerSubscription.Status.FAILED:
+        messages.error(request, subscription.failure_reason or "Payment failed or was cancelled.")
+    else:
+        messages.info(request, "We're still confirming your payment - check back shortly.")
+    return redirect("web-seller-subscription")
+
+
+@seller_required
 def seller_export_report_view(request, seller):
     import csv
 
@@ -1317,7 +1636,11 @@ def seller_settings_view(request, seller):
             seller.primary_category = get_object_or_404(Category, id=category_id)
         seller.support_phone = request.POST.get("support_phone", "").strip()
         seller.tagline = request.POST.get("tagline", "").strip()
-        seller.save(update_fields=["business_name", "primary_category", "support_phone", "tagline"])
+        update_fields = ["business_name", "primary_category", "support_phone", "tagline"]
+        if request.FILES.get("logo"):
+            seller.logo = request.FILES["logo"]
+            update_fields.append("logo")
+        seller.save(update_fields=update_fields)
         messages.success(request, "Store settings saved.")
         return redirect("web-seller-settings")
 

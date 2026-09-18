@@ -9,8 +9,8 @@ from rest_framework.views import APIView
 from reviews.models import Review
 from reviews.serializers import ReviewSerializer
 
-from .models import Category, Product
-from .serializers import CategorySerializer, ProductDetailSerializer, ProductListSerializer
+from .models import Category, Product, Seller
+from .serializers import CategorySerializer, ProductDetailSerializer, ProductListSerializer, SellerDetailSerializer
 
 SORT_OPTIONS = {
     "price_asc": ["price"],
@@ -115,6 +115,18 @@ class CategoryProductListView(generics.ListAPIView):
 class ProductDetailView(generics.RetrieveAPIView):
     queryset = Product.objects.filter(is_active=True)
     serializer_class = ProductDetailSerializer
+    permission_classes = [permissions.AllowAny]
+    lookup_field = "slug"
+
+
+class SellerDetailView(generics.RetrieveAPIView):
+    """A seller's public storefront profile, e.g. /catalog/sellers/sportmart/
+    - a dedicated alternative to /catalog/products/?seller=sportmart for
+    clients that also need the seller's own profile (rating, logo, tagline,
+    product_count), not just their product listing."""
+
+    queryset = Seller.objects.all()
+    serializer_class = SellerDetailSerializer
     permission_classes = [permissions.AllowAny]
     lookup_field = "slug"
 

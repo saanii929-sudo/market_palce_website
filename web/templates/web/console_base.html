@@ -74,6 +74,15 @@
         <a href="{% url 'web-console-delivery-methods' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'delivery-methods' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-barcode"/></svg>Delivery methods
         </a>
+        <a href="{% url 'web-console-brands' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'brands' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-star"/></svg>Brands
+        </a>
+        <a href="{% url 'web-console-collections' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'collections' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-heart"/></svg>Collections
+        </a>
+        <a href="{% url 'web-console-banners' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'banners' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-mail"/></svg>Banners
+        </a>
         {% endwith %}
       </nav>
     </div>

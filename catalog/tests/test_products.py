@@ -6,7 +6,7 @@ from accounts.tests.factories import UserFactory
 from discovery.models import RecentlyViewed
 from reviews.tests.factories import ReviewFactory
 
-from .factories import BrandFactory, CategoryFactory, ProductFactory, SellerFactory
+from .factories import BrandFactory, CategoryFactory, ProductFactory, ProductImageFactory, SellerFactory
 
 
 @pytest.fixture
@@ -103,6 +103,28 @@ def test_product_detail_includes_related_products():
     assert "Related" in related_names
     assert "Main" not in related_names
     assert "Other category" not in related_names
+
+
+@pytest.mark.django_db
+def test_product_detail_returns_multiple_images_with_absolute_urls():
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    product = ProductFactory()
+    ProductImageFactory(
+        product=product, display_order=0,
+        image=SimpleUploadedFile("shoe-front.jpg", b"fake-image-bytes", content_type="image/jpeg"),
+    )
+    ProductImageFactory(product=product, display_order=1, external_url="https://cdn.example.com/shoe-side.jpg")
+
+    client = APIClient()
+    response = client.get(reverse("product-detail", kwargs={"slug": product.slug}))
+
+    assert response.status_code == 200
+    images = response.data["images"]
+    assert len(images) == 2
+    for entry in images:
+        assert entry["url"].startswith("http")
+    assert images[1]["url"] == "https://cdn.example.com/shoe-side.jpg"
 
 
 @pytest.mark.django_db

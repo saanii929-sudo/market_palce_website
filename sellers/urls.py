@@ -8,6 +8,11 @@ urlpatterns = [
     path("sellers/balance/", views.SellerBalanceView.as_view(), name="seller-balance"),
     path("sellers/payouts/", views.SellerPayoutListCreateView.as_view(), name="seller-payout-list"),
     path(
+        "sellers/subscriptions/webhook/",
+        views.SubscriptionWebhookView.as_view(),
+        name="seller-subscription-webhook",
+    ),
+    path(
         "admin/sellers/applications/",
         views.AdminSellerApplicationListView.as_view(),
         name="admin-seller-application-list",

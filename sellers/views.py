@@ -6,7 +6,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Payout, SellerApplication
+from .models import Payout, SellerApplication, SellerSubscription
 from .serializers import (
     PayoutRequestSerializer,
     PayoutSerializer,
@@ -18,7 +18,9 @@ from .services import (
     PayoutError,
     SellerApplicationError,
     approve_application,
+    finalize_subscription_payment,
     get_available_balance,
+    mark_subscription_failed,
     reject_application,
     request_withdrawal,
     submit_application,
@@ -61,9 +63,6 @@ class SellerApplicationStatusView(APIView):
 
 
 class SellerPayoutListCreateView(generics.ListCreateAPIView):
-    """A seller's own payout/withdrawal history; POST requests a new
-    withdrawal against their available balance."""
-
     permission_classes = [permissions.IsAuthenticated]
 
     def get_serializer_class(self):
@@ -137,3 +136,29 @@ class AdminSellerApplicationReviewView(APIView):
             return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(SellerApplicationSerializer(application).data)
+
+
+class SubscriptionWebhookView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        from orders.services.payment_gateway import HubtelGateway, PaymentGatewayError
+
+        reference = (request.data.get("Data") or request.data).get("ClientReference") or request.data.get(
+            "clientReference"
+        )
+        subscription = SellerSubscription.objects.filter(reference=reference).first()
+        if subscription is None:
+            return Response({"detail": "Unknown reference."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            result = HubtelGateway().check_status(reference)
+        except PaymentGatewayError:
+            result = {"status": "pending"}
+
+        if result["status"] == "success":
+            finalize_subscription_payment(subscription)
+        elif result["status"] == "failed":
+            mark_subscription_failed(subscription, "Payment failed or was cancelled.")
+
+        return Response({"detail": "Webhook processed."})

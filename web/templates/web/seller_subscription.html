@@ -1,0 +1,119 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Subscription{% endblock %}
+{% block seller_subtitle %}Unlock the point-of-sale, inventory, staff and reporting suite{% endblock %}
+{% block seller_actions %}{% endblock %}
+
+{% block seller_content %}
+{% include "web/_icons.html" %}
+
+{% if current_subscription %}
+  <div class="rounded-2xl bg-gradient-to-br from-ink to-ink/90 text-white p-6 flex items-center justify-between flex-wrap gap-4">
+    <div>
+      <p class="text-xs font-bold text-white/50 tracking-widest uppercase">Current plan</p>
+      <p class="display text-2xl mt-1">{{ current_subscription.plan.name }}</p>
+      <p class="text-sm text-white/60 mt-1">
+        Active until {{ current_subscription.expires_at|date:"M d, Y" }}
+        &middot; {{ current_subscription.expires_at|timeuntil }} left
+      </p>
+    </div>
+    <span class="text-xs font-bold px-3 py-1.5 rounded-full bg-green-400/20 text-green-300 flex items-center gap-1.5">
+      <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>Active
+    </span>
+  </div>
+{% else %}
+  <div class="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50 p-6 flex items-center gap-4">
+    <span class="w-11 h-11 rounded-full bg-amber-400 text-white flex items-center justify-center shrink-0">
+      <svg viewBox="0 0 24 24" class="w-6 h-6"><use href="#icon-star"/></svg>
+    </span>
+    <div>
+      <p class="font-bold text-ink">The point-of-sale suite is locked</p>
+      <p class="text-sm text-gray-500 mt-0.5">Subscribe to a plan below to unlock POS terminal, inventory, staff/payroll, invoicing and reporting.</p>
+    </div>
+  </div>
+{% endif %}
+
+<div class="grid gap-6 md:grid-cols-3 mt-8">
+  {% for plan in plans %}
+    <div class="relative rounded-2xl bg-white border-2 {% if plan.is_featured %}border-brand{% else %}border-gray-200{% endif %} p-6 flex flex-col">
+      {% if plan.is_featured %}
+        <span class="absolute -top-3 left-6 text-[10px] font-bold px-3 py-1 rounded-full bg-brand text-white tracking-widest uppercase">Most popular</span>
+      {% endif %}
+      <p class="text-sm font-bold text-gray-400 uppercase tracking-widest">{{ plan.name }}</p>
+      {% if plan.tagline %}<p class="text-sm text-gray-500 mt-1">{{ plan.tagline }}</p>{% endif %}
+      <p class="display text-4xl mt-4">GH₵{{ plan.price }}</p>
+      <p class="text-xs text-gray-400 mt-1">
+        {% if plan.billing_period_days >= 360 %}per year{% elif plan.billing_period_days >= 28 and plan.billing_period_days <= 31 %}per month{% else %}every {{ plan.billing_period_days }} days{% endif %}
+      </p>
+
+      <ul class="space-y-2.5 mt-6 flex-1">
+        {% for feature in plan.features %}
+          <li class="flex items-start gap-2.5 text-sm text-gray-600">
+            <svg viewBox="0 0 24 24" class="w-4 h-4 text-brand shrink-0 mt-0.5"><use href="#icon-check"/></svg>
+            {{ feature }}
+          </li>
+        {% endfor %}
+      </ul>
+
+      {% if current_subscription.plan_id == plan.id %}
+        <form method="post" action="{% url 'web-seller-subscription-checkout' %}" class="mt-6">
+          {% csrf_token %}
+          <input type="hidden" name="plan_id" value="{{ plan.id }}">
+          <button type="submit" class="w-full rounded-xl border border-gray-200 text-ink font-bold text-sm px-5 py-3 hover:border-ink transition-colors">
+            Renew {{ plan.name }}
+          </button>
+        </form>
+      {% else %}
+        <form method="post" action="{% url 'web-seller-subscription-checkout' %}" class="mt-6">
+          {% csrf_token %}
+          <input type="hidden" name="plan_id" value="{{ plan.id }}">
+          <button type="submit" class="w-full rounded-xl {% if plan.is_featured %}bg-brand hover:bg-brand-dark{% else %}bg-ink hover:bg-ink/90{% endif %} text-white font-bold text-sm px-5 py-3 transition-colors">
+            {% if current_subscription %}Switch to {{ plan.name }}{% else %}Subscribe now{% endif %}
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  {% empty %}
+    <div class="col-span-full rounded-2xl bg-white border border-gray-200 p-10 text-center text-gray-400">
+      No subscription plans are available right now. Please check back soon.
+    </div>
+  {% endfor %}
+</div>
+
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden mt-8">
+  <div class="px-5 py-4 border-b border-gray-100">
+    <p class="text-sm font-bold text-ink">Billing history</p>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Date</th>
+          <th class="px-5 py-3">Plan</th>
+          <th class="px-5 py-3">Amount</th>
+          <th class="px-5 py-3">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sub in subscription_history %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4">{{ sub.created_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4 font-bold">{{ sub.plan.name }}</td>
+            <td class="px-5 py-4">GH₵{{ sub.amount }}</td>
+            <td class="px-5 py-4">
+              {% if sub.status == "active" %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Active</span>
+              {% elif sub.status == "expired" %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">Expired</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">Failed</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="px-5 py-10 text-center text-gray-400">No subscription payments yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

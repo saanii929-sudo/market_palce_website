@@ -1,3 +1,6 @@
+import secrets
+from decimal import Decimal
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -62,3 +65,59 @@ class Payout(TimeStampedModel):
 
     def __str__(self):
         return f"Payout({self.seller.business_name}, {self.amount}, {self.status})"
+
+
+class SubscriptionPlan(TimeStampedModel):
+    name = models.CharField(max_length=80)
+    slug = models.SlugField(unique=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    billing_period_days = models.PositiveIntegerField(
+        default=30, help_text="How many days one payment covers, e.g. 30 for monthly, 365 for yearly."
+    )
+    tagline = models.CharField(max_length=150, blank=True)
+    features = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+    is_featured = models.BooleanField(default=False, help_text="Highlighted as the recommended plan.")
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["display_order", "price"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def price_per_day(self) -> Decimal:
+        return (self.price / self.billing_period_days).quantize(Decimal("0.01"))
+
+
+def generate_subscription_reference() -> str:
+    return f"SUB-{secrets.token_hex(6).upper()}"
+
+
+class SellerSubscription(TimeStampedModel):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACTIVE = "active", "Active"
+        EXPIRED = "expired", "Expired"
+        FAILED = "failed", "Failed"
+
+    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name="subscriptions")
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT, related_name="subscriptions")
+    reference = models.CharField(max_length=40, unique=True, default=generate_subscription_reference)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, help_text="Snapshot of the plan price paid.")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    checkout_url = models.URLField(max_length=500, blank=True)
+    starts_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    failure_reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"SellerSubscription({self.seller.business_name}, {self.plan.name}, {self.status})"
+
+    @property
+    def is_current(self) -> bool:
+        return self.status == self.Status.ACTIVE and bool(self.expires_at) and self.expires_at > timezone.now()

@@ -4,8 +4,18 @@
 {% block seller_actions %}{% endblock %}
 
 {% block seller_content %}
-<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-xl space-y-5">
+<form method="post" enctype="multipart/form-data" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-xl space-y-5">
   {% csrf_token %}
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Store logo</label>
+    {% if seller.resolved_logo_url %}
+      <img src="{{ seller.resolved_logo_url }}" alt="" class="w-16 h-16 rounded-full object-cover mb-2 border border-gray-200">
+    {% endif %}
+    <input type="file" name="logo" accept="image/*"
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    <p class="text-xs text-gray-400 mt-1.5">Leave blank to keep the current logo.</p>
+  </div>
 
   <div>
     <label class="block text-sm font-bold mb-2">Business name</label>

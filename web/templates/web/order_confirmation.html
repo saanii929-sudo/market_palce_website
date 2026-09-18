@@ -5,6 +5,25 @@
 {% include "web/_site_header.html" %}
 <main class="max-w-2xl mx-auto px-4 sm:px-6 py-16">
   {% if just_placed %}
+    <div class="flex items-center gap-3 mb-10 text-sm font-semibold overflow-x-auto no-scrollbar">
+      <span class="flex items-center gap-2 text-green-600 shrink-0">
+        <span class="w-6 h-6 rounded-full bg-green-600 text-white flex items-center justify-center text-xs">✓</span>Cart
+      </span>
+      <span class="h-px w-8 bg-gray-200 shrink-0"></span>
+      <span class="flex items-center gap-2 text-green-600 shrink-0">
+        <span class="w-6 h-6 rounded-full bg-green-600 text-white flex items-center justify-center text-xs">✓</span>Address &amp; delivery
+      </span>
+      <span class="h-px w-8 bg-gray-200 shrink-0"></span>
+      <span class="flex items-center gap-2 text-green-600 shrink-0">
+        <span class="w-6 h-6 rounded-full bg-green-600 text-white flex items-center justify-center text-xs">✓</span>Payment
+      </span>
+      <span class="h-px w-8 bg-gray-200 shrink-0"></span>
+      <span class="flex items-center gap-2 text-brand shrink-0">
+        <span class="w-6 h-6 rounded-full bg-brand text-white flex items-center justify-center text-xs">4</span>Review
+      </span>
+    </div>
+  {% endif %}
+  {% if just_placed %}
     <div class="text-center">
       <span class="inline-flex w-16 h-16 rounded-full bg-green-100 text-green-600 items-center justify-center">
         <svg viewBox="0 0 24 24" class="w-7 h-7"><use href="#icon-check"/></svg>
