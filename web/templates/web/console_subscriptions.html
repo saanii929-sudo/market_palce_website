@@ -1,0 +1,70 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Subscriptions{% endblock %}
+{% block console_subtitle %}Seller point-of-sale plan purchases and renewals{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-subscriptions-export' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Export report</a>
+{% endblock %}
+
+{% block console_content %}
+<div class="grid gap-4 md:grid-cols-2 mb-6">
+  <div class="rounded-2xl bg-white border border-gray-200 p-6">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">ACTIVE SUBSCRIBERS</p>
+    <p class="display text-3xl mt-2">{{ active_subscribers_count }}</p>
+    <p class="text-sm text-gray-400 mt-2">Sellers with an unlocked point-of-sale suite right now.</p>
+  </div>
+  <div class="rounded-2xl bg-white border border-gray-200 p-6">
+    <p class="text-xs font-bold text-gray-400 tracking-widest">SUBSCRIPTION REVENUE</p>
+    <p class="display text-3xl mt-2">GH₵{{ subscription_revenue }}</p>
+    <p class="text-sm text-gray-400 mt-2">Total collected from successful plan purchases and renewals.</p>
+  </div>
+</div>
+
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="p-5 flex items-center gap-2 flex-wrap border-b border-gray-100">
+    <a href="?status=active" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'active' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Active</a>
+    <a href="?status=pending" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'pending' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Pending</a>
+    <a href="?status=expired" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'expired' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Expired</a>
+    <a href="?status=failed" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'failed' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Failed</a>
+    <a href="?status=all" class="text-xs font-bold px-4 py-2 rounded-full ml-auto {% if active_tab == 'all' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">All</a>
+  </div>
+
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Seller</th>
+          <th class="px-5 py-3">Plan</th>
+          <th class="px-5 py-3">Amount</th>
+          <th class="px-5 py-3">Purchased</th>
+          <th class="px-5 py-3">Expires</th>
+          <th class="px-5 py-3">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sub in subscriptions %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ sub.seller.business_name }}</td>
+            <td class="px-5 py-4 text-brand font-semibold">{{ sub.plan.name }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ sub.amount }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ sub.created_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ sub.expires_at|date:"M d, Y"|default:"—" }}</td>
+            <td class="px-5 py-4">
+              {% if sub.status == "active" %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Active</span>
+              {% elif sub.status == "pending" %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Pending</span>
+              {% elif sub.status == "expired" %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">Expired</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Failed</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">No subscriptions in this view.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

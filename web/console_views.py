@@ -17,7 +17,7 @@ from accounts.models import User
 from catalog.models import Banner, Brand, Category, Collection, Product, Seller, Subcategory
 from orders.models import DeliveryMethod, Order
 from pos.models import POSSale
-from sellers.models import Payout, SellerApplication
+from sellers.models import Payout, SellerApplication, SellerSubscription
 from sellers.services import (
     PayoutError,
     SellerApplicationError,
@@ -49,6 +49,43 @@ def _base_ctx(active_nav):
         ).count(),
         "pending_payouts_count": Payout.objects.filter(status=Payout.Status.REQUESTED).count(),
     }
+
+
+SUBSCRIPTION_TABS = {"active", "pending", "expired", "failed"}
+
+
+@superadmin_required
+def console_subscriptions_view(request):
+    tab = request.GET.get("status", "active")
+    subscriptions = SellerSubscription.objects.select_related("seller", "plan").order_by("-created_at")
+    if tab in SUBSCRIPTION_TABS:
+        subscriptions = subscriptions.filter(status=tab)
+
+    revenue = SellerSubscription.objects.filter(
+        status__in=[SellerSubscription.Status.ACTIVE, SellerSubscription.Status.EXPIRED]
+    ).aggregate(t=Sum("amount"))["t"] or Decimal("0.00")
+
+    ctx = _base_ctx("subscriptions")
+    ctx.update({
+        "subscriptions": subscriptions,
+        "active_tab": tab,
+        "active_subscribers_count": SellerSubscription.objects.filter(
+            status=SellerSubscription.Status.ACTIVE
+        ).count(),
+        "subscription_revenue": revenue,
+    })
+    return render(request, "web/console_subscriptions.html", ctx)
+
+
+@superadmin_required
+def console_subscriptions_export_view(request):
+    rows = [
+        [s.seller.business_name, s.plan.name, s.amount, s.status, s.created_at.date(), s.expires_at]
+        for s in SellerSubscription.objects.select_related("seller", "plan").order_by("-created_at")
+    ]
+    return _csv_response(
+        "subscriptions.csv", ["Seller", "Plan", "Amount", "Status", "Purchased", "Expires"], rows
+    )
 
 
 def _percent_delta(current, previous) -> float:
