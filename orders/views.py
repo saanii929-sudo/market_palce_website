@@ -2,7 +2,7 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,16 +12,29 @@ import cart.services as cart_services
 from .models import DeliveryMethod, Order, Payment, PendingCheckout
 from .serializers import (
     CheckoutSummarySerializer,
+    DeliveryMethodSerializer,
     OrderDetailSerializer,
     OrderListSerializer,
     OrderTrackingSerializer,
     PendingCheckoutSerializer,
     PlaceOrderSerializer,
+    WebhookResponseSerializer,
 )
 from .services import checkout as checkout_service
 from .services.hubtel_checkout import HubtelCheckoutError, finalize_pending_checkout, mark_pending_checkout_failed, start_hubtel_checkout
 from .services.order_placement import OrderPlacementError, place_order
 from .services.payment_gateway import HUBTEL_PAYMENT_METHOD_CODES, HubtelGateway, PaymentGatewayError, get_gateway
+
+
+class DeliveryMethodListView(generics.ListAPIView):
+    """Active delivery methods a customer can pick at checkout, e.g. to
+    populate a delivery-method selector before calling CheckoutSummaryView
+    with the chosen one's id."""
+
+    queryset = DeliveryMethod.objects.filter(is_active=True)
+    serializer_class = DeliveryMethodSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
 
 
 class CheckoutSummaryView(APIView):
@@ -41,9 +54,6 @@ class CheckoutSummaryView(APIView):
 
 
 class OrderListCreateView(generics.ListAPIView):
-    """GET lists the caller's order history (My Orders); POST places a new
-    order from their current cart - both live at /orders/ per the brief."""
-
     permission_classes = [permissions.IsAuthenticated]
 
     def get_serializer_class(self):
@@ -138,10 +148,6 @@ class OrderTrackingView(generics.RetrieveAPIView):
 
 
 class HubtelCheckoutStatusView(APIView):
-    """Polling fallback for clients that can't rely on the server-to-server
-    webhook alone (e.g. the browser landing back on return_url before the
-    webhook has arrived) - actively re-checks Hubtel if still pending."""
-
     permission_classes = [permissions.IsAuthenticated]
 
     @extend_schema(responses=PendingCheckoutSerializer)
@@ -205,7 +211,35 @@ class OrderBuyAgainView(APIView):
 class PaymentWebhookView(APIView):
     permission_classes = [permissions.AllowAny]
 
-    @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "gateway", str, OpenApiParameter.PATH,
+                description="Payment gateway that sent this callback.",
+                examples=[OpenApiExample("Hubtel", value="hubtel")],
+            ),
+        ],
+        request=OpenApiTypes.OBJECT,
+        examples=[
+            OpenApiExample(
+                "Hubtel callback",
+                description="Hubtel's actual callback shape - see HubtelGateway.parse_webhook_event.",
+                value={"Data": {"ClientReference": "HBT-A1B2C3D4E5F6", "Status": "Success"}},
+                request_only=True,
+            ),
+        ],
+        responses={
+            200: WebhookResponseSerializer,
+            404: WebhookResponseSerializer,
+        },
+        description=(
+            "Hubtel's callback body isn't cryptographically signed, so for `gateway=hubtel` this "
+            "always re-confirms the result against Hubtel's own status API (HubtelGateway.check_status) "
+            "before finalizing the pending checkout, rather than trusting the callback payload directly. "
+            "Order checkout uses this endpoint; a subscription purchase (sellers app) uses its own "
+            "webhook at /sellers/subscriptions/webhook/ instead."
+        ),
+    )
     def post(self, request, gateway):
         try:
             backend = get_gateway(gateway)

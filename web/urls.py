@@ -5,6 +5,7 @@ from . import console_views, invoice_views, pos_views, seller_application_views,
 urlpatterns = [
     path("", views.home, name="web-home"),
     path("login/", views.login_view, name="web-login"),
+    path("auth/google/callback/", views.google_login_callback_view, name="web-google-callback"),
     path("logout/", views.logout_view, name="web-logout"),
     path("register/", views.register_view, name="web-register"),
     path("verify/", views.verify_view, name="web-verify"),

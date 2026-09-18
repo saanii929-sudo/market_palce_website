@@ -8,6 +8,7 @@ Pillow==12.3.0
 celery==5.6.3
 redis==8.1.0
 google-auth==2.58.0
+firebase-admin==7.6.0
 requests
 PyJWT==2.14.0
 cryptography==50.0.1

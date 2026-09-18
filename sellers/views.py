@@ -1,10 +1,12 @@
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema
 from rest_framework import generics, permissions, status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from orders.serializers import WebhookResponseSerializer
 
 from .models import Payout, SellerApplication, SellerSubscription
 from .serializers import (
@@ -139,8 +141,32 @@ class AdminSellerApplicationReviewView(APIView):
 
 
 class SubscriptionWebhookView(APIView):
+    """Hubtel's server-to-server callback for a subscription checkout - the
+    browser-side confirmation lives in web.views.seller_subscription_return_view.
+    Mirrors orders.views.PaymentWebhookView._handle_hubtel_webhook."""
+
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        request=OpenApiTypes.OBJECT,
+        examples=[
+            OpenApiExample(
+                "Hubtel callback",
+                description="Hubtel's actual callback shape - see HubtelGateway.parse_webhook_event.",
+                value={"Data": {"ClientReference": "SUB-A1B2C3D4E5F6", "Status": "Success"}},
+                request_only=True,
+            ),
+        ],
+        responses={
+            200: WebhookResponseSerializer,
+            404: WebhookResponseSerializer,
+        },
+        description=(
+            "Hubtel's callback body isn't cryptographically signed, so this always re-confirms "
+            "the result against Hubtel's own status API (HubtelGateway.check_status) before "
+            "activating the subscription, rather than trusting the callback payload directly."
+        ),
+    )
     def post(self, request):
         from orders.services.payment_gateway import HubtelGateway, PaymentGatewayError
 

@@ -256,6 +256,11 @@ MNOTIFY_SENDER_ID = env("MNOTIFY_SENDER_ID", default="SportShop")
 GOOGLE_OAUTH_CLIENT_ID = env("GOOGLE_OAUTH_CLIENT_ID", default="")
 APPLE_CLIENT_ID = env("APPLE_CLIENT_ID", default="")
 
+# Firebase Admin (Google sign-in for the Flutter app, which authenticates via
+# Firebase Auth and hands us a Firebase ID token rather than a raw Google
+# OAuth one - see accounts.services.social.verify_firebase_token).
+FIREBASE_CREDENTIALS_PATH = env("FIREBASE_CREDENTIALS_PATH", default="")
+
 PAYMENT_DEFAULT_GATEWAY = env("PAYMENT_DEFAULT_GATEWAY", default="paystack")
 PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", default="")
 FLUTTERWAVE_SECRET_HASH = env("FLUTTERWAVE_SECRET_HASH", default="")

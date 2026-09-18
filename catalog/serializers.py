@@ -190,6 +190,31 @@ class SellerDetailSerializer(SellerSerializer):
         return ProductListSerializer(products, many=True, context=self.context).data
 
 
+class BrandDetailSerializer(BrandSerializer):
+    """A brand's storefront page, e.g. /catalog/brands/baseline/ - mirrors
+    SellerDetailSerializer so a client can replicate the website's
+    /brands/<slug>/ page (brand info plus its products) in one request."""
+
+    product_count = serializers.SerializerMethodField()
+    products = serializers.SerializerMethodField()
+
+    class Meta(BrandSerializer.Meta):
+        fields = BrandSerializer.Meta.fields + ["product_count", "products"]
+
+    def get_product_count(self, brand) -> int:
+        return brand.products.filter(is_active=True).count()
+
+    @extend_schema_field(ProductListSerializer(many=True))
+    def get_products(self, brand):
+        products = (
+            brand.products.filter(is_active=True)
+            .select_related("seller", "category")
+            .prefetch_related("images")
+            .order_by("-sold_count")[:SELLER_DETAIL_PRODUCT_LIMIT]
+        )
+        return ProductListSerializer(products, many=True, context=self.context).data
+
+
 class FlashDealSerializer(serializers.ModelSerializer):
     product = ProductListSerializer(read_only=True)
     percent_stock_sold = serializers.ReadOnlyField()

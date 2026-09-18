@@ -19,6 +19,14 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "code"]
 
 
+class WebhookResponseSerializer(serializers.Serializer):
+    """Documents the {"detail": "..."} shape both payment webhooks (order
+    checkout and, in the sellers app, subscription checkout) always return,
+    replacing drf-spectacular's generic free-form object fallback."""
+
+    detail = serializers.CharField()
+
+
 class CheckoutSummarySerializer(serializers.Serializer):
     items = CartItemSerializer(many=True, read_only=True)
     subtotal = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)

@@ -211,6 +211,11 @@ class GoogleAuthView(BaseSocialAuthView):
         return social_service.verify_google_token(token)
 
 
+class FirebaseAuthView(BaseSocialAuthView):
+    def verify(self, token: str) -> dict:
+        return social_service.verify_firebase_token(token)
+
+
 class AppleAuthView(BaseSocialAuthView):
     def verify(self, token: str) -> dict:
         return social_service.verify_apple_token(token)

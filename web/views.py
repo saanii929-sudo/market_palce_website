@@ -27,11 +27,13 @@ from django.utils.http import (
     urlsafe_base64_encode,
 )
 from django.utils.text import slugify
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from accounts.models import Address, OTPCode, User
 from accounts.serializers import AddressSerializer, RegisterSerializer
+from accounts.services import social as social_service
 from accounts.services.otp import OTPVerificationError, send_otp, verify_otp
 from cart import services as cart_services
 from cart.models import CartItem
@@ -122,6 +124,11 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect(_post_login_redirect_target(request.user))
 
+    google_ctx = {
+        "google_client_id": settings.GOOGLE_OAUTH_CLIENT_ID,
+        "google_login_uri": request.build_absolute_uri(reverse("web-google-callback")),
+    }
+
     if request.method == "POST":
         channel = request.POST.get("channel", "email")
         raw_identifier = request.POST.get("identifier") if channel == "email" else request.POST.get("identifier_phone")
@@ -131,11 +138,12 @@ def login_view(request):
         user = authenticate(request, username=identifier, password=password) if identifier and password else None
         if user is None:
             return render(request, "web/login.html", {
-                "errors": "Invalid credentials.", "channel": channel, "identifier": identifier,
+                "errors": "Invalid credentials.", "channel": channel, "identifier": identifier, **google_ctx,
             })
         if not user.is_verified:
             return render(request, "web/login.html", {
                 "errors": "Please verify your account before logging in.", "channel": channel, "identifier": identifier,
+                **google_ctx,
             })
 
         if request.session.session_key:
@@ -147,12 +155,72 @@ def login_view(request):
         messages.success(request, f"Welcome back, {user.full_name or user.email or user.phone}!")
         return redirect(_post_login_redirect_target(user))
 
-    return render(request, "web/login.html", {"channel": "email"})
+    return render(request, "web/login.html", {"channel": "email", **google_ctx})
 
 
 def logout_view(request):
     django_logout(request)
     return redirect("web-home")
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def google_login_callback_view(request):
+    """Where Google's own server - not our page's JS - POSTs the ID token
+    after a successful web Google sign-in, per the `login_uri`/`ux_mode:
+    redirect` config in web/templates/web/login.html. That mode avoids the
+    popup/FedCM callback-into-opener handshake, which Chrome's third-party
+    cookie restrictions can break, leaving the user stuck on Google's
+    "Continue" screen with no way back to this site.
+
+    Because this POST comes from accounts.google.com rather than a form on
+    our own page, Django's normal CSRF token isn't present, so this view is
+    csrf_exempt and instead does Google's documented double-submit-cookie
+    check: the `g_csrf_token` cookie (set by Google's client script before
+    the redirect) must match the `g_csrf_token` POST field.
+
+    Otherwise verifies the token the same way accounts.views.GoogleAuthView
+    does for the API, but logs into a Django session instead of issuing
+    JWTs, matching this app's session-based auth - mirrors login_view's
+    guest-data-merge step."""
+    if request.user.is_authenticated:
+        return redirect(_post_login_redirect_target(request.user))
+
+    csrf_cookie = request.COOKIES.get("g_csrf_token")
+    csrf_body = request.POST.get("g_csrf_token")
+    if not csrf_cookie or not csrf_body or csrf_cookie != csrf_body:
+        messages.error(request, "Google sign-in failed a security check. Please try again.")
+        return redirect("web-login")
+
+    try:
+        profile = social_service.verify_google_token(request.POST.get("credential", ""))
+    except social_service.SocialAuthError as exc:
+        messages.error(request, exc.message)
+        return redirect("web-login")
+
+    email = profile.get("email")
+    if not email:
+        messages.error(request, "Google didn't share an email address for this account.")
+        return redirect("web-login")
+
+    user = User.objects.filter(email__iexact=email).first()
+    if user is None:
+        user = User(email=email, full_name=profile.get("full_name", ""), is_email_verified=True)
+        user.set_unusable_password()
+        user.save()
+    elif not user.is_email_verified:
+        user.is_email_verified = True
+        user.save(update_fields=["is_email_verified"])
+
+    if request.session.session_key:
+        cart_services.merge_guest_cart_into_user_cart(request.session.session_key, user)
+        wishlist_services.merge_guest_wishlist_into_user_wishlist(request.session.session_key, user)
+        discovery_services.merge_guest_recently_viewed_into_user(request.session.session_key, user)
+
+    user.backend = WEB_AUTH_BACKEND
+    django_login(request, user)
+    messages.success(request, f"Welcome, {user.full_name or user.email}!")
+    return redirect(_post_login_redirect_target(user))
 
 
 def register_view(request):

@@ -15,6 +15,7 @@ urlpatterns = [
     path("auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("auth/logout/", views.LogoutView.as_view(), name="logout"),
     path("auth/social/google/", views.GoogleAuthView.as_view(), name="social-google"),
+    path("auth/social/firebase/", views.FirebaseAuthView.as_view(), name="social-firebase"),
     path("auth/social/apple/", views.AppleAuthView.as_view(), name="social-apple"),
     path("auth/password/forgot/", views.PasswordForgotView.as_view(), name="password-forgot"),
     path("auth/password/reset/", views.PasswordResetView.as_view(), name="password-reset"),

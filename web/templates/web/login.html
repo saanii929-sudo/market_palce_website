@@ -1,5 +1,8 @@
 {% extends "web/auth_base.html" %}
 {% block title %}Log in · SportTech{% endblock %}
+{% block extra_head %}
+  {% if google_client_id %}<script src="https://accounts.google.com/gsi/client" async defer></script>{% endif %}
+{% endblock %}
 {% block form_content %}
 <h2 class="display text-3xl sm:text-4xl">Welcome back</h2>
 <p class="mt-2 text-sm text-gray-500">Log in to pick up your gear where you left off.</p>
@@ -56,9 +59,14 @@
   </div>
 
   <div class="grid grid-cols-2 gap-3">
-    <a href="{% url 'web-social-login' 'google' %}" class="flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-3 text-sm font-semibold hover:bg-gray-50">
-      <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-google"/></svg>Google
-    </a>
+    {% if google_client_id %}
+      <div id="google-signin-btn" class="w-full"></div>
+    {% else %}
+      <button type="button" disabled title="Google sign-in isn't configured in this environment yet."
+              class="flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-300 cursor-not-allowed">
+        <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-google"/></svg>Google
+      </button>
+    {% endif %}
     <a href="{% url 'web-social-login' 'apple' %}" class="flex items-center justify-center gap-2 rounded-xl border border-gray-200 py-3 text-sm font-semibold hover:bg-gray-50">
       <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-apple"/></svg>Apple
     </a>
@@ -89,5 +97,33 @@
       btn.innerHTML = `<svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-${showing ? 'eye' : 'eye-off'}"/></svg>`;
     });
   });
+
+  {% if google_client_id %}
+  // window.onload (not DOMContentLoaded) so this only runs once the
+  // deferred https://accounts.google.com/gsi/client script has also
+  // finished loading and window.google is actually available.
+  //
+  // ux_mode: 'redirect' + login_uri (rather than a JS `callback`) makes
+  // Google's own server POST the credential directly to our backend after
+  // sign-in, instead of relying on a popup calling back into this page's JS
+  // - the popup/FedCM handshake back to the opener is what breaks under
+  // Chrome's third-party-cookie restrictions and leaves the user stuck on
+  // Google's "Continue" screen.
+  window.addEventListener('load', function () {
+    if (!window.google || !google.accounts || !google.accounts.id) return;
+
+    google.accounts.id.initialize({
+      client_id: '{{ google_client_id }}',
+      login_uri: '{{ google_login_uri }}',
+      ux_mode: 'redirect',
+    });
+
+    const container = document.getElementById('google-signin-btn');
+    google.accounts.id.renderButton(container, {
+      type: 'standard', theme: 'outline', size: 'large', shape: 'pill',
+      text: 'continue_with', logo_alignment: 'left', width: container.offsetWidth,
+    });
+  });
+  {% endif %}
 </script>
 {% endblock %}
