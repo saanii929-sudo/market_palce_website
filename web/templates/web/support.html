@@ -26,6 +26,31 @@
   <section>
     <h2 class="display text-2xl mb-4">Still need help?</h2>
     {% if request.user.is_authenticated %}
+      <div class="flex flex-wrap gap-3 mb-6">
+        <form method="post" action="{% url 'web-messages-start-support' %}">
+          {% csrf_token %}
+          {% if request.user.seller_profile %}<input type="hidden" name="as" value="seller">{% endif %}
+          <button type="submit" class="flex items-center gap-2 rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-5 py-3 transition-colors">
+            <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-chat"/></svg>Chat with support
+          </button>
+        </form>
+      </div>
+
+      {% if support_contacts %}
+        <div class="grid sm:grid-cols-2 gap-3 mb-8 max-w-lg">
+          {% for contact in support_contacts %}
+            <div class="rounded-xl border border-gray-200 p-4">
+              <p class="text-xs font-bold text-gray-400 uppercase tracking-wide">{{ contact.label }}</p>
+              {% if contact.kind == "email" %}
+                <a href="mailto:{{ contact.value }}" class="text-sm font-semibold text-brand break-all">{{ contact.value }}</a>
+              {% else %}
+                <a href="tel:{{ contact.value }}" class="text-sm font-semibold text-brand">{{ contact.value }}</a>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
       <form method="post" class="space-y-4 max-w-lg">
         {% csrf_token %}
         <select name="channel" class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm">

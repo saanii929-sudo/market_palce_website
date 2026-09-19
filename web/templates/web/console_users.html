@@ -43,14 +43,22 @@
             <td class="px-5 py-4 text-gray-500">{{ user.date_joined|date:"M d, Y" }}</td>
             <td class="px-5 py-4 text-right">
               {% if not user.is_superuser %}
-                <form method="post" action="{% url 'web-console-user-toggle-active' user.id %}" onsubmit="return confirm('{% if user.is_active %}Suspend{% else %}Reactivate{% endif %} this account?');">
-                  {% csrf_token %}
-                  {% if user.is_active %}
-                    <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Suspend</button>
-                  {% else %}
-                    <button type="submit" class="rounded-lg border border-green-200 text-green-700 font-bold text-xs px-4 py-2 hover:bg-green-50 transition-colors">Reactivate</button>
+                <div class="flex gap-2 justify-end flex-wrap">
+                  <form method="post" action="{% url 'web-console-user-toggle-active' user.id %}" onsubmit="return confirm('{% if user.is_active %}Suspend{% else %}Reactivate{% endif %} this account?');">
+                    {% csrf_token %}
+                    {% if user.is_active %}
+                      <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Suspend</button>
+                    {% else %}
+                      <button type="submit" class="rounded-lg border border-green-200 text-green-700 font-bold text-xs px-4 py-2 hover:bg-green-50 transition-colors">Reactivate</button>
+                    {% endif %}
+                  </form>
+                  {% if user.id != request.user.id %}
+                    <form method="post" action="{% url 'web-console-user-delete' user.id %}" onsubmit="return confirm('Permanently delete {{ user.full_name|default:user.email|default:user.phone }}? This can\'t be undone. Accounts with existing orders will be deactivated instead.');">
+                      {% csrf_token %}
+                      <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Delete</button>
+                    </form>
                   {% endif %}
-                </form>
+                </div>
               {% endif %}
             </td>
           </tr>

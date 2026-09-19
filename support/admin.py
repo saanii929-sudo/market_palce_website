@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import FAQ, SupportTicket
+from .models import FAQ, SupportContact, SupportTicket
 
 
 @admin.register(FAQ)
@@ -16,3 +16,9 @@ class SupportTicketAdmin(admin.ModelAdmin):
     list_filter = ["channel", "status"]
     search_fields = ["subject", "user__email"]
     autocomplete_fields = ["user"]
+
+
+@admin.register(SupportContact)
+class SupportContactAdmin(admin.ModelAdmin):
+    list_display = ["label", "kind", "value", "is_active", "display_order"]
+    list_filter = ["kind", "is_active"]

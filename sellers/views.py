@@ -141,10 +141,6 @@ class AdminSellerApplicationReviewView(APIView):
 
 
 class SubscriptionWebhookView(APIView):
-    """Hubtel's server-to-server callback for a subscription checkout - the
-    browser-side confirmation lives in web.views.seller_subscription_return_view.
-    Mirrors orders.views.PaymentWebhookView._handle_hubtel_webhook."""
-
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(

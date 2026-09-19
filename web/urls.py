@@ -1,6 +1,15 @@
 from django.urls import path
 
-from . import console_views, invoice_views, pos_views, seller_application_views, store_ops_views, views
+from . import (
+    console_support_views,
+    console_views,
+    invoice_views,
+    messages_views,
+    pos_views,
+    seller_application_views,
+    store_ops_views,
+    views,
+)
 
 urlpatterns = [
     path("", views.home, name="web-home"),
@@ -24,6 +33,19 @@ urlpatterns = [
     path("products/<slug:slug>/", views.product_detail_view, name="web-product-detail"),
     path("products/<slug:slug>/reviews/add/", views.product_review_add_view, name="web-product-review-add"),
     path("sellers/<slug:slug>/", views.seller_detail_view, name="web-seller-detail"),
+
+    path("account/messages/", messages_views.account_messages_view, name="web-account-messages"),
+    path("seller/messages/", messages_views.seller_messages_view, name="web-seller-messages"),
+    path("console/messages/", console_support_views.console_messages_view, name="web-console-messages"),
+    path("messages/<int:conversation_id>/send/", messages_views.messages_send_view, name="web-messages-send"),
+    path("messages/start/seller/<slug:slug>/", messages_views.messages_start_seller_view, name="web-messages-start-seller"),
+    path("messages/start/support/", messages_views.messages_start_support_view, name="web-messages-start-support"),
+
+    path("console/support-contacts/", console_support_views.console_support_contacts_view, name="web-console-support-contacts"),
+    path("console/support-contacts/add/", console_support_views.console_support_contact_add_view, name="web-console-support-contact-add"),
+    path("console/support-contacts/<int:contact_id>/edit/", console_support_views.console_support_contact_edit_view, name="web-console-support-contact-edit"),
+    path("console/support-contacts/<int:contact_id>/toggle/", console_support_views.console_support_contact_toggle_view, name="web-console-support-contact-toggle"),
+    path("console/support-contacts/<int:contact_id>/delete/", console_support_views.console_support_contact_delete_view, name="web-console-support-contact-delete"),
 
     path("wishlist/", views.wishlist_view, name="web-wishlist"),
     path("wishlist/toggle/", views.wishlist_toggle_view, name="web-wishlist-toggle"),
@@ -161,6 +183,7 @@ urlpatterns = [
     path("console/users/add/", console_views.console_user_add_view, name="web-console-user-add"),
     path("console/users/export/", console_views.console_users_export_view, name="web-console-users-export"),
     path("console/users/<int:user_id>/toggle-active/", console_views.console_user_toggle_active_view, name="web-console-user-toggle-active"),
+    path("console/users/<int:user_id>/delete/", console_views.console_user_delete_view, name="web-console-user-delete"),
     path("console/products/", console_views.console_products_view, name="web-console-products"),
     path("console/products/export/", console_views.console_products_export_view, name="web-console-products-export"),
     path("console/products/<int:product_id>/toggle/", console_views.console_product_toggle_view, name="web-console-product-toggle"),

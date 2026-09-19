@@ -105,21 +105,25 @@ class HubtelGateway(BasePaymentGateway):
         if not (settings.HUBTEL_API_ID and settings.HUBTEL_API_KEY and settings.HUBTEL_MERCHANT_ACCOUNT):
             raise PaymentGatewayError("Hubtel is not configured.")
 
-        response = requests.post(
-            self.CHECKOUT_URL,
-            headers=self._auth_header(),
-            json={
-                "totalAmount": float(amount),
-                "description": description,
-                "callbackUrl": callback_url,
-                "returnUrl": return_url,
-                "cancellationUrl": cancellation_url,
-                "merchantAccountNumber": settings.HUBTEL_MERCHANT_ACCOUNT,
-                "clientReference": reference,
-            },
-            timeout=15,
-        )
-        response.raise_for_status()
+        try:
+            response = requests.post(
+                self.CHECKOUT_URL,
+                headers=self._auth_header(),
+                json={
+                    "totalAmount": float(amount),
+                    "description": description,
+                    "callbackUrl": callback_url,
+                    "returnUrl": return_url,
+                    "cancellationUrl": cancellation_url,
+                    "merchantAccountNumber": settings.HUBTEL_MERCHANT_ACCOUNT,
+                    "clientReference": reference,
+                },
+                timeout=15,
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            raise PaymentGatewayError("Couldn't reach Hubtel to start checkout. Please try again.") from exc
+
         data = response.json()
         if data.get("responseCode") != "0000":
             raise PaymentGatewayError(data.get("message") or "Hubtel checkout initiation failed.")
@@ -132,10 +136,19 @@ class HubtelGateway(BasePaymentGateway):
         import requests
 
         url = self.STATUS_URL_TEMPLATE.format(merchant=settings.HUBTEL_MERCHANT_ACCOUNT)
-        response = requests.get(
-            url, headers=self._auth_header(), params={"clientReference": reference}, timeout=15
-        )
-        response.raise_for_status()
+        try:
+            response = requests.get(
+                url, headers=self._auth_header(), params={"clientReference": reference}, timeout=15
+            )
+            if response.status_code == 404:
+                # Hubtel hasn't indexed this transaction yet (e.g. the status
+                # is being polled moments after checkout was initiated) -
+                # not a real failure, just "check back shortly".
+                return {"status": "pending", "raw_status": "not_found"}
+            response.raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            raise PaymentGatewayError("Couldn't reach Hubtel to check payment status. Please try again.") from exc
+
         data = response.json()
         if data.get("responseCode") != "0000":
             raise PaymentGatewayError(data.get("message") or "Hubtel status check failed.")

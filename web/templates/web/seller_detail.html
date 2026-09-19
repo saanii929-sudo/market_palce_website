@@ -27,7 +27,17 @@
       </div>
     </div>
     {% if request.user.is_authenticated %}
-      <button type="button" class="bg-brand hover:bg-brand-dark text-white font-bold px-6 py-2.5 rounded-xl transition-colors shrink-0">✓ Following</button>
+      <div class="flex items-center gap-3 shrink-0">
+        {% if request.user.seller_profile.id != seller.id %}
+          <form method="post" action="{% url 'web-messages-start-seller' seller.slug %}">
+            {% csrf_token %}
+            <button type="submit" class="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-bold px-5 py-2.5 rounded-xl transition-colors">
+              <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-chat"/></svg>Message seller
+            </button>
+          </form>
+        {% endif %}
+        <button type="button" class="bg-brand hover:bg-brand-dark text-white font-bold px-6 py-2.5 rounded-xl transition-colors">✓ Following</button>
+      </div>
     {% endif %}
   </div>
 

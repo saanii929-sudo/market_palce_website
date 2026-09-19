@@ -1,0 +1,57 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Support contacts{% endblock %}
+{% block console_subtitle %}Email/phone options shown when someone wants support outside of chat{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-support-contact-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">Add contact</a>
+{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Label</th>
+          <th class="px-5 py-3">Kind</th>
+          <th class="px-5 py-3">Value</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for contact in contacts %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ contact.label }}</td>
+            <td class="px-5 py-4 text-brand font-semibold">{{ contact.get_kind_display }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ contact.value }}</td>
+            <td class="px-5 py-4">
+              {% if contact.is_active %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Active</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4">
+              <div class="flex gap-2 justify-end flex-wrap">
+                <a href="{% url 'web-console-support-contact-edit' contact.id %}" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">Edit</a>
+                <form method="post" action="{% url 'web-console-support-contact-toggle' contact.id %}">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">
+                    {% if contact.is_active %}Deactivate{% else %}Activate{% endif %}
+                  </button>
+                </form>
+                <form method="post" action="{% url 'web-console-support-contact-delete' contact.id %}" onsubmit="return confirm('Delete {{ contact.label }}? This can\'t be undone.');">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No support contacts yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

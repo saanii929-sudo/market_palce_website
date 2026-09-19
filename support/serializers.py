@@ -1,12 +1,18 @@
 from rest_framework import serializers
 
-from .models import FAQ, SupportTicket
+from .models import FAQ, SupportContact, SupportTicket
 
 
 class FAQSerializer(serializers.ModelSerializer):
     class Meta:
         model = FAQ
         fields = ["id", "question", "answer", "topic", "display_order"]
+
+
+class SupportContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SupportContact
+        fields = ["id", "kind", "label", "value", "display_order"]
 
 
 class SupportTicketCreateSerializer(serializers.ModelSerializer):

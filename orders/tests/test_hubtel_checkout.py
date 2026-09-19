@@ -201,6 +201,52 @@ def test_status_poll_finalizes_when_still_pending(mock_post, mock_get, settings)
 
 
 @pytest.mark.django_db
+@patch("requests.get")
+@patch("requests.post")
+def test_status_poll_treats_hubtel_404_as_still_pending(mock_post, mock_get, settings):
+    """Hubtel's status API 404s if it hasn't indexed the transaction yet
+    (e.g. polled moments after checkout was initiated) - this must not
+    surface as a 500, just tell the client to keep waiting."""
+    user, address, delivery, payment_method, product = _setup_checkout(settings)
+    mock_post.return_value = _hubtel_initiate_response(reference="HBT-404")
+    mock_get.return_value = Mock(status_code=404, raise_for_status=Mock())
+
+    client = authed_client(user)
+    client.post(reverse("cart-item-add"), {"product_id": product.id, "qty": 1})
+    place_response = client.post(
+        reverse("order-list"),
+        {"address_id": address.id, "delivery_method_id": delivery.id, "payment_method_id": payment_method.id},
+    )
+    reference = place_response.data["reference"]
+
+    response = client.get(reverse("hubtel-checkout-status"), {"reference": reference})
+    assert response.status_code == 200
+    assert response.data["status"] == PendingCheckout.Status.PENDING
+
+
+@pytest.mark.django_db
+@patch("requests.get")
+@patch("requests.post")
+def test_status_poll_returns_clean_error_when_hubtel_unreachable(mock_post, mock_get, settings):
+    import requests
+
+    user, address, delivery, payment_method, product = _setup_checkout(settings)
+    mock_post.return_value = _hubtel_initiate_response(reference="HBT-DOWN")
+    mock_get.side_effect = requests.exceptions.ConnectionError("boom")
+
+    client = authed_client(user)
+    client.post(reverse("cart-item-add"), {"product_id": product.id, "qty": 1})
+    place_response = client.post(
+        reverse("order-list"),
+        {"address_id": address.id, "delivery_method_id": delivery.id, "payment_method_id": payment_method.id},
+    )
+    reference = place_response.data["reference"]
+
+    response = client.get(reverse("hubtel-checkout-status"), {"reference": reference})
+    assert response.status_code == 502
+
+
+@pytest.mark.django_db
 @patch("requests.post")
 def test_insufficient_stock_at_finalize_time_fails_without_creating_order(mock_post, settings):
     user, address, delivery, payment_method, product = _setup_checkout(settings, stock_qty=1)

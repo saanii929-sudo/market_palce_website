@@ -15,4 +15,6 @@ RUN chmod +x docker-entrypoint.sh
 EXPOSE 8000
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["gunicorn", "sports_shop.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "60"]
+# daphne (ASGI) rather than gunicorn (WSGI) - the chat app's WebSocket
+# connections need an ASGI server; daphne serves regular HTTP requests fine too.
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "sports_shop.asgi:application"]

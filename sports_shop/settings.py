@@ -27,6 +27,15 @@ if not DEBUG:
 # Application definition
 
 INSTALLED_APPS = [
+    # daphne must be the very first app: Django resolves a management-
+    # command-name clash (it and django.contrib.staticfiles both define
+    # "runserver") in favor of whichever app appears EARLIER in this list.
+    # daphne's runserver is what actually serves WebSocket upgrades in local
+    # dev (Channels itself stopped shipping a runserver override in 4.x) -
+    # without this ordering, `manage.py runserver` silently falls back to
+    # the plain WSGI server and every /ws/... connection 404s.
+    "daphne",
+    "channels",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -55,6 +64,7 @@ INSTALLED_APPS = [
     "notifications",
     "support",
     "cms",
+    "chat",
     "web",
 ]
 
@@ -88,6 +98,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "sports_shop.wsgi.application"
+ASGI_APPLICATION = "sports_shop.asgi.application"
 
 DATABASES = {
     "default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
@@ -182,6 +193,8 @@ SPECTACULAR_SETTINGS = {
         "PaymentStatusEnum": "orders.models.Payment.Status",
         "OrderPaymentGatewayEnum": "orders.models.Payment.Gateway",
         "SavedPaymentGatewayEnum": "payments.models.PaymentMethodToken.Gateway",
+        "ConversationKindEnum": "chat.models.Conversation.Kind",
+        "SupportContactKindEnum": "support.models.SupportContact.Kind",
     },
 }
 
@@ -214,6 +227,22 @@ CELERY_BROKER_URL = REDIS_URL or "memory://"
 CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_TASK_ALWAYS_EAGER = env("CELERY_TASK_ALWAYS_EAGER")
 CELERY_TASK_EAGER_PROPAGATES = True
+
+
+# Channels (real-time chat) - reuses the same Redis as Celery/cache above as
+# its channel layer so a message broadcast from one process (e.g. a REST
+# request handled by one worker) reaches WebSocket connections open on any
+# other. Falls back to the in-memory layer (single-process only - fine for
+# local dev and tests) when Redis isn't configured.
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [REDIS_URL]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

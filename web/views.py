@@ -68,7 +68,7 @@ from sellers.services import (
     request_withdrawal,
     start_subscription_checkout,
 )
-from support.models import FAQ
+from support.models import FAQ, SupportContact
 from support.serializers import SupportTicketCreateSerializer
 from wishlist import services as wishlist_services
 
@@ -866,7 +866,10 @@ def support_view(request):
     faqs = FAQ.objects.filter(is_active=True)
     if topic:
         faqs = faqs.filter(topic=topic)
-    return render(request, "web/support.html", {"faqs": faqs, "topics": FAQ.Topic.choices, "active_topic": topic})
+    return render(request, "web/support.html", {
+        "faqs": faqs, "topics": FAQ.Topic.choices, "active_topic": topic,
+        "support_contacts": SupportContact.objects.filter(is_active=True),
+    })
 
 
 def static_page_view(request, slug):

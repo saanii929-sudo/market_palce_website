@@ -28,7 +28,7 @@ services:
   web:
     build: .
     restart: unless-stopped
-    command: gunicorn sports_shop.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 60
+    command: daphne -b 0.0.0.0 -p 8000 sports_shop.asgi:application
     env_file:
       - .env
     environment:

@@ -390,6 +390,28 @@ def console_user_toggle_active_view(request, user_id):
 
 
 @superadmin_required
+@require_http_methods(["POST"])
+def console_user_delete_view(request, user_id):
+    user = get_object_or_404(User, id=user_id)
+    if user.is_superuser:
+        messages.error(request, "You can't delete a superadmin account.")
+        return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-users")))
+    if user.id == request.user.id:
+        messages.error(request, "You can't delete your own account.")
+        return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-users")))
+
+    name = user.full_name or user.email or user.phone
+    try:
+        user.delete()
+        messages.success(request, f'"{name}" was deleted.')
+    except ProtectedError:
+        user.is_active = False
+        user.save(update_fields=["is_active"])
+        messages.error(request, f'"{name}" has existing orders, so the account was deactivated instead of deleted.')
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-users")))
+
+
+@superadmin_required
 def console_users_export_view(request):
     rows = []
     for user in User.objects.select_related("seller_profile").order_by("-date_joined"):

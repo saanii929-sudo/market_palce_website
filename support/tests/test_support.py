@@ -4,7 +4,7 @@ from rest_framework.test import APIClient
 
 from accounts.tests.factories import UserFactory
 
-from ..models import FAQ, SupportTicket
+from ..models import FAQ, SupportContact, SupportTicket
 from .factories import FAQFactory
 
 
@@ -62,3 +62,14 @@ def test_submit_support_ticket():
     assert response.status_code == 201
     assert response.data["status"] == SupportTicket.Status.OPEN
     assert SupportTicket.objects.filter(user=user, subject="Order issue").exists()
+
+
+@pytest.mark.django_db
+def test_support_contact_list_is_public_and_active_only(api_client):
+    SupportContact.objects.create(kind="email", label="General", value="help@sporttech.example", is_active=True)
+    SupportContact.objects.create(kind="phone", label="Retired line", value="+233200000000", is_active=False)
+
+    response = api_client.get(reverse("support-contact-list"))
+    assert response.status_code == 200
+    labels = [c["label"] for c in response.data]
+    assert labels == ["General"]

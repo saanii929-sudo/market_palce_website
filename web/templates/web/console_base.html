@@ -61,6 +61,12 @@
         <a href="{% url 'web-console-users' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'users' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-users"/></svg>Users
         </a>
+        <a href="{% url 'web-console-messages' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'messages' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-chat"/></svg>Support inbox
+        </a>
+        <a href="{% url 'web-console-support-contacts' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'support-contacts' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-mail"/></svg>Support contacts
+        </a>
         <a href="{% url 'web-console-products' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'products' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-grid"/></svg>Products
         </a>

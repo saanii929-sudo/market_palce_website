@@ -1,0 +1,51 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}{% if contact %}Edit contact{% else %}Add contact{% endif %}{% endblock %}
+{% block console_subtitle %}{% if contact %}Update {{ contact.label }}{% else %}Add a new support email/phone{% endif %}{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-support-contacts' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to support contacts</a>
+{% endblock %}
+
+{% block console_content %}
+<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl space-y-5">
+  {% csrf_token %}
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Label</label>
+    <input type="text" name="label" value="{{ contact.label|default:'' }}" required placeholder="e.g. General support, Sales, WhatsApp"
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Kind</label>
+    <select name="kind" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      {% for value, label in kinds %}
+        <option value="{{ value }}" {% if contact.kind == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Email address / phone number</label>
+    <input type="text" name="value" value="{{ contact.value|default:'' }}" required placeholder="support@sporttech.com or +233201234567"
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Display order</label>
+    <input type="number" name="display_order" value="{{ contact.display_order|default:0 }}"
+           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+
+  <label class="flex items-center gap-2 text-sm font-semibold">
+    <input type="checkbox" name="is_active" value="1" {% if contact.is_active or not contact %}checked{% endif %} class="rounded border-gray-300">
+    Active (shown to customers and sellers)
+  </label>
+
+  <div class="flex items-center gap-3 pt-2">
+    <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">
+      {% if contact %}Save changes{% else %}Add contact{% endif %}
+    </button>
+    <a href="{% url 'web-console-support-contacts' %}" class="rounded-xl border border-gray-200 font-bold px-6 py-3 hover:border-ink transition-colors">Cancel</a>
+  </div>
+</form>
+{% endblock %}

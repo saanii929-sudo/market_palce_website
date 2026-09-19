@@ -1,0 +1,126 @@
+{% load web_extras %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden flex flex-col md:flex-row" style="height: calc(100vh - 220px); min-height: 480px;">
+
+  <!-- Conversation list -->
+  <div class="w-full md:w-80 shrink-0 border-b md:border-b-0 md:border-r border-gray-100 overflow-y-auto {% if active_conversation %}hidden md:block{% endif %}">
+    {% for c in conversations %}
+      <a href="{{ base_path }}?conversation={{ c.id }}" class="flex items-center gap-3 px-4 py-3.5 border-b border-gray-50 hover:bg-gray-50 {% if active_conversation.id == c.id %}bg-gray-50{% endif %}">
+        <span class="w-10 h-10 rounded-full bg-ink text-white flex items-center justify-center font-bold text-sm shrink-0">
+          {{ c.display_title|initial }}
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="flex items-center justify-between gap-2">
+            <span class="font-bold text-sm truncate">{{ c.display_title }}</span>
+            {% if c.last_message_at %}<span class="text-[11px] text-gray-400 shrink-0">{{ c.last_message_at|date:"M d" }}</span>{% endif %}
+          </span>
+          <span class="flex items-center justify-between gap-2 mt-0.5">
+            <span class="text-xs text-gray-400 truncate">{{ c.preview|default:"No messages yet" }}</span>
+            {% if c.unread %}<span class="text-[10px] font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center shrink-0">{{ c.unread }}</span>{% endif %}
+          </span>
+        </span>
+      </a>
+    {% empty %}
+      <p class="text-sm text-gray-400 text-center py-10 px-4">No conversations yet.</p>
+    {% endfor %}
+  </div>
+
+  <!-- Active thread -->
+  <div class="flex-1 min-w-0 flex flex-col {% if not active_conversation %}hidden md:flex{% endif %}">
+    {% if active_conversation %}
+      <div class="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+        <a href="{{ base_path }}" class="md:hidden w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-arrow-left"/></svg>
+        </a>
+        <span class="w-9 h-9 rounded-full bg-ink text-white flex items-center justify-center font-bold text-sm shrink-0">
+          {{ active_title|initial }}
+        </span>
+        <span class="font-bold text-sm">{{ active_title }}</span>
+      </div>
+
+      <div id="chat-messages" class="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+        {% for m in thread_messages %}
+          <div class="flex {% if m.sender_id == current_user_id %}justify-end{% else %}justify-start{% endif %}" data-message-id="{{ m.id }}">
+            <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm {% if m.sender_id == current_user_id %}bg-brand text-white{% else %}bg-gray-100 text-ink{% endif %}">
+              {{ m.body }}
+              <div class="text-[10px] mt-1 {% if m.sender_id == current_user_id %}text-white/70{% else %}text-gray-400{% endif %}">{{ m.created_at|date:"M d, H:i" }}</div>
+            </div>
+          </div>
+        {% empty %}
+          <p class="text-sm text-gray-400 text-center py-10">Say hello 👋</p>
+        {% endfor %}
+      </div>
+
+      <form id="chat-send-form" class="flex items-center gap-2 px-4 py-3 border-t border-gray-100">
+        <input type="text" id="chat-input" autocomplete="off" placeholder="Type a message..."
+               class="flex-1 rounded-full border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+        <button type="submit" class="w-10 h-10 rounded-full bg-brand hover:bg-brand-dark text-white flex items-center justify-center shrink-0">
+          <svg viewBox="0 0 24 24" class="w-4 h-4"><use href="#icon-arrow-left" style="transform:rotate(180deg);transform-origin:center;"/></svg>
+        </button>
+      </form>
+
+      <script>
+        (function () {
+          const messagesEl = document.getElementById('chat-messages');
+          const form = document.getElementById('chat-send-form');
+          const input = document.getElementById('chat-input');
+          const currentUserId = {{ current_user_id }};
+
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+
+          function appendMessage(m) {
+            const mine = m.sender_id === currentUserId;
+            const wrap = document.createElement('div');
+            wrap.className = 'flex ' + (mine ? 'justify-end' : 'justify-start');
+            wrap.dataset.messageId = m.id;
+            const bubble = document.createElement('div');
+            bubble.className = 'max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ' + (mine ? 'bg-brand text-white' : 'bg-gray-100 text-ink');
+            const time = new Date(m.created_at).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+            bubble.innerHTML = '';
+            const bodyNode = document.createTextNode(m.body);
+            bubble.appendChild(bodyNode);
+            const timeEl = document.createElement('div');
+            timeEl.className = 'text-[10px] mt-1 ' + (mine ? 'text-white/70' : 'text-gray-400');
+            timeEl.textContent = time;
+            bubble.appendChild(timeEl);
+            wrap.appendChild(bubble);
+            messagesEl.appendChild(wrap);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          }
+
+          const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+          let socket = null;
+          try {
+            socket = new WebSocket(proto + location.host + '{{ ws_path }}');
+            socket.onmessage = function (event) {
+              const data = JSON.parse(event.data);
+              if (data.type === 'message') appendMessage(data.message);
+            };
+          } catch (err) {
+            socket = null;
+          }
+
+          form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const body = input.value.trim();
+            if (!body) return;
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({body: body}));
+            } else {
+              fetch('{{ send_url }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+                body: JSON.stringify({body: body}),
+              }).then(r => r.json()).then(appendMessage);
+            }
+            input.value = '';
+          });
+        })();
+      </script>
+    {% else %}
+      <div class="flex-1 flex items-center justify-center text-gray-400 text-sm">
+        Select a conversation to start chatting
+      </div>
+    {% endif %}
+  </div>
+</div>
