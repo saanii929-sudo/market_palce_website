@@ -6,8 +6,6 @@ User = get_user_model()
 
 
 class EmailOrPhoneBackend(ModelBackend):
-    """Authenticates against either the email or phone field."""
-
     def authenticate(self, request, username=None, password=None, **kwargs):
         identifier = username or kwargs.get("identifier")
         if not identifier or not password:

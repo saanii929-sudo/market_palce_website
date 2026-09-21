@@ -163,9 +163,6 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         return ProductListSerializer(related, many=True, context=self.context).data
 
 
-# Storefront-sized product page, matching web/views.py::seller_detail_view's
-# own limit - a client that needs to page through more than this should use
-# GET /catalog/products/?seller=<slug> instead, which is fully paginated.
 SELLER_DETAIL_PRODUCT_LIMIT = 24
 
 
@@ -191,10 +188,6 @@ class SellerDetailSerializer(SellerSerializer):
 
 
 class BrandDetailSerializer(BrandSerializer):
-    """A brand's storefront page, e.g. /catalog/brands/baseline/ - mirrors
-    SellerDetailSerializer so a client can replicate the website's
-    /brands/<slug>/ page (brand info plus its products) in one request."""
-
     product_count = serializers.SerializerMethodField()
     products = serializers.SerializerMethodField()
 

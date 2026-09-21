@@ -16,3 +16,7 @@ htmlcov/
 Dockerfile
 docker-compose.yml
 .dockerignore
+
+# Firebase service account keys - never bake these into an image layer.
+# Use FIREBASE_CREDENTIALS_JSON (env var) in production instead.
+*firebase-adminsdk*.json

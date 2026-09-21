@@ -10,10 +10,11 @@ from .models import Review
 
 
 def recalculate_product_rating(product_id: int) -> None:
-    """Recomputes and caches Product.avg_rating/review_count on every
-    review create/delete, rather than aggregating on each product-detail
-    read."""
-    stats = Review.objects.filter(product_id=product_id).aggregate(avg=Avg("rating"), count=Count("id"))
+    stats = (
+        Review.objects.filter(product_id=product_id)
+        .exclude(status=Review.Status.REMOVED)
+        .aggregate(avg=Avg("rating"), count=Count("id"))
+    )
     avg_rating = stats["avg"] or Decimal("0.00")
     Product.objects.filter(id=product_id).update(
         avg_rating=Decimal(avg_rating).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),

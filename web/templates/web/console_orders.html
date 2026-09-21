@@ -34,7 +34,7 @@
           <tr class="border-b border-gray-50 last:border-0">
             <td class="px-5 py-4 font-bold">{{ order.order_number }}</td>
             <td class="px-5 py-4 text-gray-500">{{ order.delivery_recipient_name }}</td>
-            <td class="px-5 py-4 text-gray-500">{{ order.seller_name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ order.seller.business_name }}</td>
             <td class="px-5 py-4 font-bold">GH₵{{ order.total }}</td>
             <td class="px-5 py-4"><span class="text-xs font-bold px-2.5 py-1 rounded-full {{ order.status|order_status_badge }}">{{ order.status|order_display_status }}</span></td>
           </tr>

@@ -1,0 +1,62 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Subscription plans{% endblock %}
+{% block console_subtitle %}Plan tiers sellers can subscribe to{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-subscription-plan-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">Add plan</a>
+{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Plan</th>
+          <th class="px-5 py-3">Price</th>
+          <th class="px-5 py-3">Billing period</th>
+          <th class="px-5 py-3">Subscribers</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for plan in plans %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4">
+              <p class="font-bold">{{ plan.name }}{% if plan.is_featured %} <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-brand/10 text-brand align-middle">Featured</span>{% endif %}</p>
+              {% if plan.tagline %}<p class="text-xs text-gray-400 mt-0.5">{{ plan.tagline }}</p>{% endif %}
+            </td>
+            <td class="px-5 py-4 font-bold">GH₵{{ plan.price }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ plan.billing_period_days }} days</td>
+            <td class="px-5 py-4 text-gray-500">{{ plan.subscriber_count }}</td>
+            <td class="px-5 py-4">
+              {% if plan.is_active %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Active</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4">
+              <div class="flex gap-2 justify-end flex-wrap">
+                <a href="{% url 'web-console-subscription-plan-edit' plan.id %}" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">Edit</a>
+                <form method="post" action="{% url 'web-console-subscription-plan-toggle' plan.id %}">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">
+                    {% if plan.is_active %}Deactivate{% else %}Activate{% endif %}
+                  </button>
+                </form>
+                <form method="post" action="{% url 'web-console-subscription-plan-delete' plan.id %}" onsubmit="return confirm('Delete {{ plan.name }}? This can\'t be undone.');">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">No subscription plans yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

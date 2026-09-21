@@ -1,0 +1,63 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}KYC queue{% endblock %}
+{% block console_subtitle %}Sellers awaiting payout verification{% endblock %}
+{% block console_actions %}{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Seller</th>
+          <th class="px-5 py-3">Bank details</th>
+          <th class="px-5 py-3">Mobile money</th>
+          <th class="px-5 py-3">Submitted</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for application in applications %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4">
+              <p class="font-bold">{{ application.business_name }}</p>
+              <p class="text-xs text-gray-400">{{ application.user.email|default:application.user.phone }}</p>
+            </td>
+            <td class="px-5 py-4 text-gray-500">
+              {% if application.bank_account_number %}
+                {{ application.bank_name }}<br>
+                {{ application.bank_account_name }} — {{ application.bank_account_number }}
+              {% else %}
+                <span class="text-gray-300">—</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4 text-gray-500">
+              {% if application.momo_number %}
+                {{ application.momo_network }} — {{ application.momo_number }}
+              {% else %}
+                <span class="text-gray-300">—</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4 text-gray-500">{{ application.submitted_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4">
+              <div class="flex gap-2 justify-end flex-wrap">
+                <form method="post" action="{% url 'web-console-kyc-verify' application.id %}">
+                  {% csrf_token %}
+                  <button type="submit" class="rounded-lg border border-green-200 text-green-700 font-bold text-xs px-4 py-2 hover:bg-green-50 transition-colors">Verify</button>
+                </form>
+                <form method="post" action="{% url 'web-console-kyc-reject' application.id %}" class="flex items-center gap-1">
+                  {% csrf_token %}
+                  <input type="text" name="reviewer_note" placeholder="Reason (optional)" class="w-36 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:border-ink">
+                  <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Reject</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No KYC submissions awaiting review.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

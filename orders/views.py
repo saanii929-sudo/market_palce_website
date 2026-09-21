@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from drf_spectacular.types import OpenApiTypes
@@ -9,7 +10,7 @@ from rest_framework.views import APIView
 
 import cart.services as cart_services
 
-from .models import DeliveryMethod, Order, Payment, PendingCheckout
+from .models import DeliveryMethod, Order, OrderItem, Payment, PendingCheckout, RefundRequest, SellerOrder
 from .serializers import (
     CheckoutSummarySerializer,
     DeliveryMethodSerializer,
@@ -18,19 +19,21 @@ from .serializers import (
     OrderTrackingSerializer,
     PendingCheckoutSerializer,
     PlaceOrderSerializer,
+    RefundEscalateSerializer,
+    RefundRequestCreateSerializer,
+    RefundRequestSerializer,
+    RefundRequestStatusUpdateSerializer,
+    SellerOrderTrackingSerializer,
     WebhookResponseSerializer,
 )
 from .services import checkout as checkout_service
 from .services.hubtel_checkout import HubtelCheckoutError, finalize_pending_checkout, mark_pending_checkout_failed, start_hubtel_checkout
 from .services.order_placement import OrderPlacementError, place_order
 from .services.payment_gateway import HUBTEL_PAYMENT_METHOD_CODES, HubtelGateway, PaymentGatewayError, get_gateway
+from .services.refunds import RefundError, advance_refund_request, escalate_refund_request, request_refund
 
 
 class DeliveryMethodListView(generics.ListAPIView):
-    """Active delivery methods a customer can pick at checkout, e.g. to
-    populate a delivery-method selector before calling CheckoutSummaryView
-    with the chosen one's id."""
-
     queryset = DeliveryMethod.objects.filter(is_active=True)
     serializer_class = DeliveryMethodSerializer
     permission_classes = [permissions.AllowAny]
@@ -40,7 +43,16 @@ class DeliveryMethodListView(generics.ListAPIView):
 class CheckoutSummaryView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    @extend_schema(responses=CheckoutSummarySerializer)
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("delivery_method_id", int, description="Selected delivery method, for an accurate delivery fee."),
+            OpenApiParameter(
+                "address_id", int,
+                description="Selected delivery address, for accurate per-seller tax. Defaults to your default address.",
+            ),
+        ],
+        responses=CheckoutSummarySerializer,
+    )
     def get(self, request):
         cart = cart_services.get_or_create_cart(request)
 
@@ -49,7 +61,14 @@ class CheckoutSummaryView(APIView):
         if delivery_method_id:
             delivery_method = DeliveryMethod.objects.filter(id=delivery_method_id, is_active=True).first()
 
-        totals = checkout_service.summarize(cart, delivery_method)
+        address_id = request.query_params.get("address_id")
+        if address_id:
+            address = request.user.addresses.filter(id=address_id).first()
+        else:
+            address = request.user.addresses.filter(is_default=True).first()
+        region = address.region if address else ""
+
+        totals = checkout_service.summarize(cart, delivery_method, region=region)
         return Response(CheckoutSummarySerializer(totals).data)
 
 
@@ -63,10 +82,10 @@ class OrderListCreateView(generics.ListAPIView):
         if getattr(self, "swagger_fake_view", False):
             return Order.objects.none()
 
-        qs = Order.objects.filter(user=self.request.user)
+        qs = Order.objects.filter(user=self.request.user).prefetch_related("seller_orders").order_by("-placed_at")
         status_param = self.request.query_params.get("status")
         if status_param:
-            qs = qs.filter(status=status_param)
+            return [order for order in qs if order.status == status_param]
         return qs
 
     @extend_schema(request=PlaceOrderSerializer, responses=OrderDetailSerializer)
@@ -120,8 +139,6 @@ class OrderListCreateView(generics.ListAPIView):
 
         data = OrderDetailSerializer(order).data
         data["payment_authorization_url"] = getattr(order, "_payment_authorization_url", None)
-        # A retried request with the same key returns the original order
-        # rather than placing a second one.
         return Response(data, status=status.HTTP_200_OK if already_existed else status.HTTP_201_CREATED)
 
 
@@ -133,7 +150,9 @@ class OrderDetailView(generics.RetrieveAPIView):
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Order.objects.none()
-        return Order.objects.filter(user=self.request.user)
+        return Order.objects.filter(user=self.request.user).prefetch_related(
+            "seller_orders__seller", "seller_orders__delivery_method", "seller_orders__items__product", "payments"
+        )
 
 
 class OrderTrackingView(generics.RetrieveAPIView):
@@ -144,7 +163,21 @@ class OrderTrackingView(generics.RetrieveAPIView):
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Order.objects.none()
-        return Order.objects.filter(user=self.request.user).prefetch_related("status_history")
+        return Order.objects.filter(user=self.request.user).prefetch_related("seller_orders__seller")
+
+
+class SellerOrderTrackingView(generics.RetrieveAPIView):
+    serializer_class = SellerOrderTrackingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_url_kwarg = "seller_order_id"
+    lookup_field = "id"
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return SellerOrder.objects.none()
+        return SellerOrder.objects.filter(
+            order__order_number=self.kwargs["order_number"], order__user=self.request.user,
+        ).select_related("seller", "shipment").prefetch_related("status_history")
 
 
 class HubtelCheckoutStatusView(APIView):
@@ -177,15 +210,20 @@ class OrderCancelView(APIView):
 
     @extend_schema(request=None, responses=OrderDetailSerializer)
     def post(self, request, order_number):
-        order = get_object_or_404(Order, order_number=order_number, user=request.user)
+        order = get_object_or_404(
+            Order.objects.prefetch_related("seller_orders"), order_number=order_number, user=request.user
+        )
 
-        if order.status != Order.Status.PROCESSING:
+        seller_orders = list(order.seller_orders.all())
+        cancellable = [so for so in seller_orders if so.status == SellerOrder.Status.PROCESSING]
+        if not cancellable:
             return Response(
                 {"detail": "Only orders that are still processing can be cancelled."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        order.transition_to(Order.Status.CANCELLED, note="Cancelled by customer.")
+        for seller_order in cancellable:
+            seller_order.transition_to(SellerOrder.Status.CANCELLED, note="Cancelled by customer.")
         return Response(OrderDetailSerializer(order).data)
 
 
@@ -198,7 +236,8 @@ class OrderBuyAgainView(APIView):
         cart = cart_services.get_or_create_cart(request)
 
         added, skipped = [], []
-        for item in order.items.select_related("product", "variant"):
+        items = OrderItem.objects.filter(seller_order__order=order).select_related("product", "variant")
+        for item in items:
             if not item.product.is_active:
                 skipped.append(item.product.name)
                 continue
@@ -206,6 +245,97 @@ class OrderBuyAgainView(APIView):
             added.append(item.product.name)
 
         return Response({"added": added, "skipped": skipped})
+
+
+class RefundRequestCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(request=RefundRequestCreateSerializer, responses=RefundRequestSerializer)
+    def post(self, request, order_number, item_id):
+        order_item = get_object_or_404(
+            OrderItem.objects.select_related("seller_order__order"),
+            id=item_id, seller_order__order__order_number=order_number, seller_order__order__user=request.user,
+        )
+
+        serializer = RefundRequestCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            refund_request = request_refund(
+                order_item=order_item,
+                user=request.user,
+                reason=serializer.validated_data["reason"],
+                reason_detail=serializer.validated_data["reason_detail"],
+                photos=serializer.validated_data["photos"],
+                refund_type=serializer.validated_data["refund_type"],
+            )
+        except RefundError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(RefundRequestSerializer(refund_request).data, status=status.HTTP_201_CREATED)
+
+
+class RefundRequestListView(generics.ListAPIView):
+    serializer_class = RefundRequestSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return RefundRequest.objects.none()
+
+        user = self.request.user
+        qs = RefundRequest.objects.select_related(
+            "order_item__seller_order__order", "order_item__seller_order__seller", "order_item__product", "requested_by",
+        ).prefetch_related("status_history")
+
+        seller = getattr(user, "seller_profile", None)
+        if seller is not None:
+            return qs.filter(order_item__seller_order__seller=seller)
+        if user.is_staff or user.is_superuser:
+            return qs
+        return qs.filter(requested_by=user)
+
+
+class RefundRequestStatusUpdateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(request=RefundRequestStatusUpdateSerializer, responses=RefundRequestSerializer)
+    def patch(self, request, refund_request_id):
+        refund_request = get_object_or_404(RefundRequest, id=refund_request_id)
+
+        serializer = RefundRequestStatusUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            refund_request = advance_refund_request(
+                refund_request=refund_request,
+                new_status=serializer.validated_data["status"],
+                actor=request.user,
+                note=serializer.validated_data["note"],
+                refund_amount=serializer.validated_data["refund_amount"],
+            )
+        except RefundError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(RefundRequestSerializer(refund_request).data)
+
+
+class RefundRequestEscalateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(request=RefundEscalateSerializer, responses=RefundRequestSerializer)
+    def post(self, request, refund_request_id):
+        refund_request = get_object_or_404(RefundRequest, id=refund_request_id)
+
+        serializer = RefundEscalateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            escalate_refund_request(refund_request=refund_request, user=request.user, reason=serializer.validated_data["reason"])
+        except RefundError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(RefundRequestSerializer(refund_request).data)
 
 
 class PaymentWebhookView(APIView):
@@ -260,9 +390,15 @@ class PaymentWebhookView(APIView):
         payment.status = Payment.Status.SUCCESS if event["status"] == "success" else Payment.Status.FAILED
         payment.save(update_fields=["status"])
 
+        if event["status"] == "success":
+            from risk.tasks import check_payment_anomaly
+
+            transaction.on_commit(lambda: check_payment_anomaly.delay(payment.id))
+
         order = payment.order
-        if event["status"] != "success" and order.status == Order.Status.PROCESSING:
-            order.transition_to(Order.Status.CANCELLED, note="Payment failed.")
+        if event["status"] != "success":
+            for seller_order in order.seller_orders.filter(status=SellerOrder.Status.PROCESSING):
+                seller_order.transition_to(SellerOrder.Status.CANCELLED, note="Payment failed.")
 
         return Response({"detail": "Webhook processed."})
 
@@ -273,9 +409,6 @@ class PaymentWebhookView(APIView):
         if pending is None:
             return Response({"detail": "Unknown reference."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Hubtel's callback body isn't cryptographically signed, so it's
-        # only a trigger to check - the actual result is confirmed against
-        # Hubtel's own status API before anything is finalized.
         try:
             result = backend.check_status(reference)
         except PaymentGatewayError:

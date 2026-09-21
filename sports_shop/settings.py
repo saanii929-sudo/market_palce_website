@@ -57,11 +57,13 @@ INSTALLED_APPS = [
     "cart",
     "wishlist",
     "orders",
+    "disputes",
     "payments",
     "sellers",
     "pos",
     "reviews",
     "notifications",
+    "risk",
     "support",
     "cms",
     "chat",
@@ -253,6 +255,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "catalog.tasks.deactivate_expired_flash_deals",
         "schedule": 60.0,
     },
+    "dispatch-scheduled-broadcasts": {
+        "task": "notifications.tasks.dispatch_scheduled_broadcasts",
+        "schedule": 60.0,
+    },
 }
 
 _email_port = env.int("SMTP_PORT", default=env.int("EMAIL_PORT", default=587))
@@ -287,8 +293,17 @@ APPLE_CLIENT_ID = env("APPLE_CLIENT_ID", default="")
 
 # Firebase Admin (Google sign-in for the Flutter app, which authenticates via
 # Firebase Auth and hands us a Firebase ID token rather than a raw Google
-# OAuth one - see accounts.services.social.verify_firebase_token).
+# OAuth one - see accounts.services.social.verify_firebase_token; also used
+# for real FCM push notifications - see notifications.push). Two ways to
+# supply the service-account key, see core.firebase.get_firebase_app():
+# - FIREBASE_CREDENTIALS_PATH: path to the downloaded JSON file on disk.
+#   Simplest for local dev / a host where you can also deploy the file.
+# - FIREBASE_CREDENTIALS_JSON: the file's contents pasted directly as a
+#   single env var. Preferred on PaaS platforms (Coolify, Render, etc.)
+#   where setting an env var is easy but mounting an extra file isn't -
+#   nothing extra to deploy alongside the container.
 FIREBASE_CREDENTIALS_PATH = env("FIREBASE_CREDENTIALS_PATH", default="")
+FIREBASE_CREDENTIALS_JSON = env("FIREBASE_CREDENTIALS_JSON", default="")
 
 PAYMENT_DEFAULT_GATEWAY = env("PAYMENT_DEFAULT_GATEWAY", default="paystack")
 PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", default="")

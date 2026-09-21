@@ -97,11 +97,6 @@ class ProductListView(generics.ListAPIView):
     )
 )
 class CategoryProductListView(generics.ListAPIView):
-    """Products scoped to one category via the URL, e.g.
-    /catalog/categories/football/products/ - a dedicated alternative to
-    /catalog/products/?category=football for clients that prefer a
-    resource-nested URL over a query param."""
-
     serializer_class = ProductListSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -126,11 +121,6 @@ class ProductDetailView(generics.RetrieveAPIView):
 
 
 class SellerDetailView(generics.RetrieveAPIView):
-    """A seller's public storefront profile, e.g. /catalog/sellers/sportmart/
-    - a dedicated alternative to /catalog/products/?seller=sportmart for
-    clients that also need the seller's own profile (rating, logo, tagline,
-    product_count), not just their product listing."""
-
     queryset = Seller.objects.all()
     serializer_class = SellerDetailSerializer
     permission_classes = [permissions.AllowAny]
@@ -138,11 +128,6 @@ class SellerDetailView(generics.RetrieveAPIView):
 
 
 class BrandDetailView(generics.RetrieveAPIView):
-    """A brand's public storefront page, e.g. /catalog/brands/baseline/ - a
-    dedicated alternative to /catalog/products/?brand=baseline for clients
-    that also need the brand's own profile (name, logo, product_count), not
-    just its product listing. Mirrors SellerDetailView."""
-
     queryset = Brand.objects.filter(is_active=True)
     serializer_class = BrandDetailSerializer
     permission_classes = [permissions.AllowAny]
@@ -160,7 +145,11 @@ class ProductReviewListView(generics.ListAPIView):
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Review.objects.none()
-        return Review.objects.filter(product=self.get_product()).select_related("user")
+        return (
+            Review.objects.filter(product=self.get_product())
+            .exclude(status=Review.Status.REMOVED)
+            .select_related("user")
+        )
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())

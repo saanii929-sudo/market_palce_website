@@ -182,11 +182,29 @@
       {% endfor %}
       {% for review in reviews %}
         <div class="border-b border-gray-100 pb-5">
-          <div class="flex items-center gap-2">
-            <div class="flex text-amber-500">
-              {% for _ in review.rating|stars %}<svg viewBox="0 0 24 24" class="w-3.5 h-3.5"><use href="#icon-star"/></svg>{% endfor %}
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="flex text-amber-500">
+                {% for _ in review.rating|stars %}<svg viewBox="0 0 24 24" class="w-3.5 h-3.5"><use href="#icon-star"/></svg>{% endfor %}
+              </div>
+              <span class="text-sm font-semibold">{{ review.user.full_name|default:"SportTech shopper" }}</span>
             </div>
-            <span class="text-sm font-semibold">{{ review.user.full_name|default:"SportTech shopper" }}</span>
+            {% if request.user.is_authenticated %}
+              <details class="relative">
+                <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600 list-none px-1">Report</summary>
+                <form method="post" action="{% url 'web-review-flag' review.id %}" class="absolute right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-10 w-48 space-y-2">
+                  {% csrf_token %}
+                  <p class="text-xs font-bold text-gray-500">Report this review</p>
+                  <select name="reason" class="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs">
+                    <option value="spam">Spam</option>
+                    <option value="fake">Fake</option>
+                    <option value="offensive">Offensive</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <button type="submit" class="w-full rounded-lg bg-ink text-white text-xs font-bold px-3 py-1.5">Submit report</button>
+                </form>
+              </details>
+            {% endif %}
           </div>
           {% if review.comment %}<p class="text-sm text-gray-500 mt-1.5">{{ review.comment }}</p>{% endif %}
         </div>

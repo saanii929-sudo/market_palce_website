@@ -1,0 +1,54 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Flagged reviews{% endblock %}
+{% block console_subtitle %}Reviews that crossed the report threshold, pending your decision{% endblock %}
+{% block console_actions %}{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Product</th>
+          <th class="px-5 py-3">Reviewer</th>
+          <th class="px-5 py-3">Rating</th>
+          <th class="px-5 py-3">Comment</th>
+          <th class="px-5 py-3">Flags</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for review in reviews %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ review.product.name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ review.user.full_name|default:review.user.email }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ review.rating }}/5</td>
+            <td class="px-5 py-4 text-gray-500 max-w-xs truncate">{{ review.comment|default:"—" }}</td>
+            <td class="px-5 py-4 text-gray-500">
+              {{ review.flagged_count }} report{{ review.flagged_count|pluralize }}
+              <div class="text-xs text-gray-400">{% for flag in review.flags.all %}{{ flag.get_reason_display }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
+            </td>
+            <td class="px-5 py-4">
+              <div class="flex gap-2 justify-end flex-wrap">
+                <form method="post" action="{% url 'web-console-review-moderate' review.id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="keep">
+                  <button type="submit" class="rounded-lg border border-green-200 text-green-700 font-bold text-xs px-4 py-2 hover:bg-green-50 transition-colors">Keep</button>
+                </form>
+                <form method="post" action="{% url 'web-console-review-moderate' review.id %}" class="flex items-center gap-1">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="remove">
+                  <input type="text" name="moderation_note" placeholder="Note (optional)" class="w-32 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:border-ink">
+                  <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Remove</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">No flagged reviews right now.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

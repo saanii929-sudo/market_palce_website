@@ -9,3 +9,7 @@ staticfiles/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Firebase service account keys - never commit these
+*firebase-adminsdk*.json
+ecommerce-market-place-firebase-adminsdk-fbsvc-f2dcb98b6e.json

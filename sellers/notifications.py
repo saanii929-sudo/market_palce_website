@@ -1,9 +1,7 @@
-"""Seller application notifications, now backed by the real notifications
-app (Phase 7)."""
-
+from notifications.services import notify
 
 def notify_application_reviewed(application) -> None:
-    from notifications.services import notify
+    
 
     if application.status == "approved":
         title = "Your seller application was approved!"
@@ -15,8 +13,18 @@ def notify_application_reviewed(application) -> None:
     notify(application.user, "system", title, body)
 
 
+def notify_kyc_resolved(application) -> None:
+    if application.kyc_status == "verified":
+        title = "You're verified for payouts"
+        body = "Your KYC details were verified - you can now receive payouts to your bank/mobile money account."
+    else:
+        title = "KYC verification declined"
+        body = application.reviewer_note or "Your payout details couldn't be verified. Please review and resubmit."
+
+    notify(application.user, "system", title, body)
+
+
 def notify_payout_requested(payout) -> None:
-    from notifications.services import notify
 
     seller_user = payout.seller.user
     if seller_user is None:
@@ -28,7 +36,6 @@ def notify_payout_requested(payout) -> None:
 
 
 def notify_payout_resolved(payout) -> None:
-    from notifications.services import notify
 
     seller_user = payout.seller.user
     if seller_user is None:
@@ -51,7 +58,7 @@ def notify_payout_resolved(payout) -> None:
 
 
 def notify_subscription_activated(subscription) -> None:
-    from notifications.services import notify
+    
 
     seller_user = subscription.seller.user
     if seller_user is None:
@@ -65,7 +72,7 @@ def notify_subscription_activated(subscription) -> None:
 
 
 def notify_subscription_failed(subscription) -> None:
-    from notifications.services import notify
+    
 
     seller_user = subscription.seller.user
     if seller_user is None:

@@ -2,9 +2,10 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from cart.models import Coupon
 from catalog.models import Category
 
-from .models import Payout, SellerApplication
+from .models import BulkUploadJob, Payout, SellerApplication
 
 
 class SellerApplicationSerializer(serializers.ModelSerializer):
@@ -24,8 +25,29 @@ class SellerApplicationSerializer(serializers.ModelSerializer):
             "submitted_at",
             "reviewed_at",
             "reviewer_note",
+            "bank_account_name",
+            "bank_account_number",
+            "bank_name",
+            "momo_number",
+            "momo_network",
+            "kyc_status",
+            "kyc_reviewed_at",
         ]
-        read_only_fields = ["id", "status", "submitted_at", "reviewed_at", "reviewer_note"]
+        read_only_fields = [
+            "id", "status", "submitted_at", "reviewed_at", "reviewer_note", "kyc_status", "kyc_reviewed_at",
+        ]
+
+
+class SellerKYCSubmitSerializer(serializers.Serializer):
+    bank_account_name = serializers.CharField(required=False, allow_blank=True, default="")
+    bank_account_number = serializers.CharField(required=False, allow_blank=True, default="")
+    bank_name = serializers.CharField(required=False, allow_blank=True, default="")
+    momo_number = serializers.CharField(required=False, allow_blank=True, default="")
+    momo_network = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class SellerKYCReviewSerializer(serializers.Serializer):
+    reviewer_note = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class SellerApplicationCreateSerializer(serializers.Serializer):
@@ -61,3 +83,64 @@ class PayoutRequestSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
     method = serializers.CharField(max_length=50)
     account_details = serializers.CharField(max_length=255)
+
+
+class SellerCouponSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Coupon
+        fields = [
+            "id",
+            "code",
+            "scope",
+            "discount_type",
+            "value",
+            "min_order_amount",
+            "max_discount_amount",
+            "valid_from",
+            "valid_to",
+            "usage_limit",
+            "per_user_limit",
+            "times_used",
+            "is_active",
+            "is_public",
+            "title",
+            "description",
+            "banner_image",
+            "created_at",
+        ]
+        read_only_fields = ["id", "scope", "times_used", "created_at"]
+
+
+class SellerCouponCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Coupon
+        fields = [
+            "code",
+            "discount_type",
+            "value",
+            "min_order_amount",
+            "max_discount_amount",
+            "valid_from",
+            "valid_to",
+            "usage_limit",
+            "per_user_limit",
+            "is_active",
+            "is_public",
+            "title",
+            "description",
+            "banner_image",
+        ]
+
+    def validate_code(self, value):
+        if Coupon.objects.filter(code__iexact=value).exists():
+            raise serializers.ValidationError("This coupon code is already in use.")
+        return value
+
+
+class BulkUploadJobSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BulkUploadJob
+        fields = [
+            "id", "status", "total_rows", "success_count", "error_count", "error_report", "created_at",
+        ]
+        read_only_fields = fields

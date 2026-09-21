@@ -15,17 +15,27 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
 from catalog.models import Banner, Brand, Category, Collection, Product, Seller, Subcategory
-from orders.models import DeliveryMethod, Order
+from disputes.models import Dispute
+from disputes.services import DisputeError, add_message, resolve_dispute
+from notifications.models import Broadcast
+from notifications.tasks import send_broadcast
+from orders.models import DeliveryMethod, Order, SellerOrder
 from pos.models import POSSale
-from sellers.models import Payout, SellerApplication, SellerSubscription
+from reviews.models import Review
+from reviews.services import ReviewModerationError, moderate_review
+from risk.models import RiskFlag
+from risk.services import RiskFlagError, review_risk_flag
+from sellers.models import Payout, SellerApplication, SellerSubscription, SubscriptionPlan
 from sellers.services import (
     PayoutError,
     SellerApplicationError,
     approve_application,
     mark_payout_paid,
     reject_application,
+    reject_kyc,
     reject_payout,
     schedule_payout,
+    verify_kyc,
 )
 
 from .views import _safe_redirect_target, superadmin_required
@@ -48,6 +58,14 @@ def _base_ctx(active_nav):
             status=SellerApplication.Status.PENDING
         ).count(),
         "pending_payouts_count": Payout.objects.filter(status=Payout.Status.REQUESTED).count(),
+        "pending_kyc_count": SellerApplication.objects.filter(
+            status=SellerApplication.Status.APPROVED, kyc_status=SellerApplication.KYCStatus.PENDING,
+        ).exclude(bank_account_number="", momo_number="").count(),
+        "open_disputes_count": Dispute.objects.filter(
+            status__in=[Dispute.Status.OPEN, Dispute.Status.INVESTIGATING]
+        ).count(),
+        "flagged_reviews_count": Review.objects.filter(status=Review.Status.FLAGGED).count(),
+        "unreviewed_risk_flags_count": RiskFlag.objects.filter(reviewed=False).count(),
     }
 
 
@@ -88,6 +106,117 @@ def console_subscriptions_export_view(request):
     )
 
 
+# -- Subscription plans --------------------------------------------------
+
+def _save_subscription_plan_from_form(request, plan=None):
+    name = request.POST.get("name", "").strip()
+    price = request.POST.get("price", "").strip()
+    billing_period_days = request.POST.get("billing_period_days", "").strip()
+    tagline = request.POST.get("tagline", "").strip()
+    features_raw = request.POST.get("features", "")
+    display_order = request.POST.get("display_order", "0").strip()
+
+    if not name:
+        messages.error(request, "Plan name is required.")
+        return None
+
+    try:
+        price = Decimal(price) if price else Decimal("0.00")
+    except InvalidOperation:
+        messages.error(request, "Enter a valid price.")
+        return None
+
+    try:
+        billing_period_days = int(billing_period_days or 30)
+    except ValueError:
+        messages.error(request, "Enter a valid billing period.")
+        return None
+
+    try:
+        display_order = int(display_order or 0)
+    except ValueError:
+        display_order = 0
+
+    features = [line.strip() for line in features_raw.splitlines() if line.strip()]
+
+    if plan is None:
+        plan = SubscriptionPlan(slug=_unique_slug(SubscriptionPlan, name, "plan"))
+
+    plan.name = name
+    plan.price = price
+    plan.billing_period_days = billing_period_days
+    plan.tagline = tagline
+    plan.features = features
+    plan.display_order = display_order
+    plan.is_active = bool(request.POST.get("is_active", "1"))
+    plan.is_featured = bool(request.POST.get("is_featured"))
+    plan.save()
+    return plan
+
+
+@superadmin_required
+def console_subscription_plans_view(request):
+    ctx = _base_ctx("subscription-plans")
+    ctx["plans"] = SubscriptionPlan.objects.annotate(subscriber_count=Count("subscriptions")).order_by(
+        "display_order", "price"
+    )
+    return render(request, "web/console_subscription_plans.html", ctx)
+
+
+@superadmin_required
+def console_subscription_plan_add_view(request):
+    if request.method == "POST":
+        plan = _save_subscription_plan_from_form(request)
+        if plan is not None:
+            messages.success(request, f'"{plan.name}" was added.')
+            return redirect("web-console-subscription-plans")
+
+    ctx = _base_ctx("subscription-plans")
+    ctx["plan"] = None
+    return render(request, "web/console_subscription_plan_form.html", ctx)
+
+
+@superadmin_required
+def console_subscription_plan_edit_view(request, plan_id):
+    plan = get_object_or_404(SubscriptionPlan, id=plan_id)
+    if request.method == "POST":
+        saved = _save_subscription_plan_from_form(request, plan=plan)
+        if saved is not None:
+            messages.success(request, f'"{saved.name}" was updated.')
+            return redirect("web-console-subscription-plans")
+
+    ctx = _base_ctx("subscription-plans")
+    ctx["plan"] = plan
+    return render(request, "web/console_subscription_plan_form.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_subscription_plan_toggle_view(request, plan_id):
+    plan = get_object_or_404(SubscriptionPlan, id=plan_id)
+    plan.is_active = not plan.is_active
+    plan.save(update_fields=["is_active"])
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-subscription-plans")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_subscription_plan_delete_view(request, plan_id):
+    # SellerSubscription.plan is PROTECT, so a plan with existing
+    # subscribers can't be hard-deleted - deactivate it instead so it
+    # simply stops being offered to new sellers.
+    plan = get_object_or_404(SubscriptionPlan, id=plan_id)
+    name = plan.name
+    try:
+        plan.delete()
+        messages.success(request, f'"{name}" was deleted.')
+    except ProtectedError:
+        plan.is_active = False
+        plan.save(update_fields=["is_active"])
+        messages.error(request, f'"{name}" has existing subscribers, so it was deactivated instead of deleted.')
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-subscription-plans")))
+
+
 def _percent_delta(current, previous) -> float:
     if not previous:
         return 100.0 if current else 0.0
@@ -111,15 +240,15 @@ def console_overview_view(request):
     active_sellers = Seller.objects.count()
     sellers_this_week = Seller.objects.filter(created_at__date__gte=week_ago).count()
 
-    online_gmv_30d = Order.objects.filter(placed_at__gte=window_start).exclude(
-        status=Order.Status.CANCELLED
+    online_gmv_30d = SellerOrder.objects.filter(order__placed_at__gte=window_start).exclude(
+        status=SellerOrder.Status.CANCELLED
     ).aggregate(t=Sum("total"))["t"] or Decimal("0.00")
     pos_gmv_30d = POSSale.objects.filter(sold_at__gte=window_start).aggregate(t=Sum("total"))["t"] or Decimal("0.00")
     gmv_30d = online_gmv_30d + pos_gmv_30d
 
-    online_gmv_prev = Order.objects.filter(
-        placed_at__gte=prev_window_start, placed_at__lt=window_start
-    ).exclude(status=Order.Status.CANCELLED).aggregate(t=Sum("total"))["t"] or Decimal("0.00")
+    online_gmv_prev = SellerOrder.objects.filter(
+        order__placed_at__gte=prev_window_start, order__placed_at__lt=window_start
+    ).exclude(status=SellerOrder.Status.CANCELLED).aggregate(t=Sum("total"))["t"] or Decimal("0.00")
     pos_gmv_prev = POSSale.objects.filter(
         sold_at__gte=prev_window_start, sold_at__lt=window_start
     ).aggregate(t=Sum("total"))["t"] or Decimal("0.00")
@@ -144,7 +273,7 @@ def console_overview_view(request):
         if app.reviewed_at:
             verb = "was approved as a seller" if app.status == SellerApplication.Status.APPROVED else "was rejected"
             activity.append({"text": f"{app.business_name} {verb}", "at": app.reviewed_at})
-    for order in Order.objects.order_by("-placed_at")[:8]:
+    for order in Order.objects.prefetch_related("seller_orders").order_by("-placed_at")[:8]:
         activity.append({"text": f"Order {order.order_number} was placed for GH₵{order.total}", "at": order.placed_at})
         if order.status == Order.Status.CANCELLED:
             activity.append({"text": f"Order {order.order_number} was cancelled", "at": order.updated_at})
@@ -180,7 +309,7 @@ def console_overview_export_view(request):
         ["Active sellers", Seller.objects.count()],
         [
             "GMV (30 days, GHS)",
-            (Order.objects.filter(placed_at__gte=window_start).exclude(status=Order.Status.CANCELLED)
+            (SellerOrder.objects.filter(order__placed_at__gte=window_start).exclude(status=SellerOrder.Status.CANCELLED)
              .aggregate(t=Sum("total"))["t"] or Decimal("0.00"))
             + (POSSale.objects.filter(sold_at__gte=window_start).aggregate(t=Sum("total"))["t"] or Decimal("0.00")),
         ],
@@ -247,37 +376,37 @@ def console_seller_applications_export_view(request):
 
 
 # -- Orders ---------------------------------------------------------------
+# One row per seller sub-order (not per parent Order) - each seller ships
+# independently, so this is the actual fulfillment unit an admin would act
+# on, and it's the only level that has a single definite seller/status/total.
 
 @superadmin_required
 def console_orders_view(request):
     query = request.GET.get("q", "").strip()
-    orders = Order.objects.prefetch_related("items__product__seller").order_by("-placed_at")
+    orders = SellerOrder.objects.select_related("order", "seller").order_by("-created_at")
     if query:
-        orders = orders.filter(Q(order_number__icontains=query) | Q(delivery_recipient_name__icontains=query))
-
-    orders = list(orders[:200])
-    for order in orders:
-        first_item = order.items.first()
-        order.seller_name = first_item.product.seller.business_name if first_item else "—"
+        orders = orders.filter(
+            Q(suborder_number__icontains=query) | Q(order__order_number__icontains=query)
+            | Q(order__delivery_recipient_name__icontains=query)
+        )
 
     ctx = _base_ctx("orders")
-    ctx["orders"] = orders
+    ctx["orders"] = orders[:200]
     ctx["query"] = query
     return render(request, "web/console_orders.html", ctx)
 
 
 @superadmin_required
 def console_orders_export_view(request):
-    rows = []
-    for order in Order.objects.prefetch_related("items__product__seller").order_by("-placed_at"):
-        first_item = order.items.first()
-        seller_name = first_item.product.seller.business_name if first_item else "—"
-        rows.append([
-            order.order_number, order.delivery_recipient_name, seller_name,
-            order.placed_at.date(), order.status, order.total,
-        ])
+    rows = [
+        [
+            so.order.order_number, so.suborder_number, so.order.delivery_recipient_name, so.seller.business_name,
+            so.order.placed_at.date(), so.get_status_display(), so.total,
+        ]
+        for so in SellerOrder.objects.select_related("order", "seller").order_by("-created_at")
+    ]
     return _csv_response(
-        "orders.csv", ["Order", "Customer", "Seller", "Date", "Status", "Total"], rows
+        "orders.csv", ["Order", "Sub-order", "Customer", "Seller", "Date", "Status", "Total"], rows
     )
 
 
@@ -1051,3 +1180,228 @@ def console_collection_delete_view(request, collection_id):
     collection.delete()
     messages.success(request, f'"{collection.title}" was deleted.')
     return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-collections")))
+
+
+# -- Disputes ---------------------------------------------------------------
+
+DISPUTE_TABS = {
+    "open": [Dispute.Status.OPEN],
+    "investigating": [Dispute.Status.INVESTIGATING],
+    "resolved": [
+        Dispute.Status.RESOLVED_BUYER_FAVOR,
+        Dispute.Status.RESOLVED_SELLER_FAVOR,
+        Dispute.Status.RESOLVED_PARTIAL,
+    ],
+}
+
+
+@superadmin_required
+def console_disputes_view(request):
+    tab = request.GET.get("status", "open")
+    disputes = Dispute.objects.select_related("order", "raised_by", "against", "assigned_admin").order_by(
+        "-created_at"
+    )
+    if tab in DISPUTE_TABS:
+        disputes = disputes.filter(status__in=DISPUTE_TABS[tab])
+
+    category = request.GET.get("category", "")
+    if category:
+        disputes = disputes.filter(category=category)
+
+    ctx = _base_ctx("disputes")
+    ctx.update({
+        "disputes": disputes,
+        "active_tab": tab,
+        "active_category": category,
+        "categories": Dispute.Category.choices,
+    })
+    return render(request, "web/console_disputes.html", ctx)
+
+
+@superadmin_required
+def console_dispute_detail_view(request, dispute_id):
+    dispute = get_object_or_404(
+        Dispute.objects.select_related(
+            "order", "refund_request", "raised_by", "against", "assigned_admin"
+        ).prefetch_related("messages__sender"),
+        id=dispute_id,
+    )
+    ctx = _base_ctx("disputes")
+    ctx["dispute"] = dispute
+    return render(request, "web/console_dispute_detail.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_dispute_message_view(request, dispute_id):
+    dispute = get_object_or_404(Dispute, id=dispute_id)
+    try:
+        add_message(dispute=dispute, sender=request.user, message=request.POST.get("message", "").strip())
+    except DisputeError as exc:
+        messages.error(request, exc.message)
+    return redirect("web-console-dispute-detail", dispute_id=dispute.id)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_dispute_resolve_view(request, dispute_id):
+    dispute = get_object_or_404(Dispute, id=dispute_id)
+    status_map = {
+        "buyer_favor": Dispute.Status.RESOLVED_BUYER_FAVOR,
+        "seller_favor": Dispute.Status.RESOLVED_SELLER_FAVOR,
+        "partial": Dispute.Status.RESOLVED_PARTIAL,
+    }
+    new_status = status_map.get(request.POST.get("resolution"))
+    if new_status is None:
+        messages.error(request, "Select a resolution.")
+        return redirect("web-console-dispute-detail", dispute_id=dispute.id)
+
+    try:
+        resolve_dispute(
+            dispute=dispute, admin_user=request.user, new_status=new_status,
+            resolution_note=request.POST.get("resolution_note", "").strip(),
+        )
+        messages.success(request, "Dispute resolved.")
+    except DisputeError as exc:
+        messages.error(request, exc.message)
+    return redirect("web-console-dispute-detail", dispute_id=dispute.id)
+
+
+# -- Flagged reviews ----------------------------------------------------------
+
+@superadmin_required
+def console_flagged_reviews_view(request):
+    ctx = _base_ctx("flagged-reviews")
+    ctx["reviews"] = (
+        Review.objects.filter(status=Review.Status.FLAGGED)
+        .select_related("user", "product")
+        .prefetch_related("flags")
+        .order_by("-flagged_count", "-created_at")
+    )
+    return render(request, "web/console_flagged_reviews.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_review_moderate_view(request, review_id):
+    review = get_object_or_404(Review, id=review_id)
+    action = request.POST.get("action")
+    try:
+        moderate_review(review=review, action=action, moderation_note=request.POST.get("moderation_note", "").strip())
+        messages.success(request, f"Review {'kept' if action == 'keep' else 'removed'}.")
+    except ReviewModerationError as exc:
+        messages.error(request, exc.message)
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-flagged-reviews")))
+
+
+# -- Risk flags ---------------------------------------------------------------
+
+@superadmin_required
+def console_risk_flags_view(request):
+    reviewed_param = request.GET.get("reviewed", "0")
+    flag_type = request.GET.get("flag_type", "")
+
+    risk_flags = RiskFlag.objects.select_related("content_type", "reviewed_by").order_by("-created_at")
+    if reviewed_param in ("0", "1"):
+        risk_flags = risk_flags.filter(reviewed=(reviewed_param == "1"))
+    if flag_type:
+        risk_flags = risk_flags.filter(flag_type=flag_type)
+
+    ctx = _base_ctx("risk-flags")
+    ctx.update({
+        "risk_flags": risk_flags,
+        "active_reviewed": reviewed_param,
+        "active_flag_type": flag_type,
+        "flag_types": RiskFlag.FlagType.choices,
+    })
+    return render(request, "web/console_risk_flags.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_risk_flag_review_view(request, risk_flag_id):
+    risk_flag = get_object_or_404(RiskFlag, id=risk_flag_id)
+    try:
+        review_risk_flag(risk_flag=risk_flag, admin_user=request.user, action=request.POST.get("action", "none"))
+        messages.success(request, "Risk flag reviewed.")
+    except RiskFlagError as exc:
+        messages.error(request, exc.message)
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-risk-flags")))
+
+
+# -- Seller KYC ---------------------------------------------------------
+
+@superadmin_required
+def console_kyc_queue_view(request):
+    applications = (
+        SellerApplication.objects.filter(
+            status=SellerApplication.Status.APPROVED, kyc_status=SellerApplication.KYCStatus.PENDING,
+        )
+        .exclude(bank_account_number="", momo_number="")
+        .select_related("user", "category")
+        .order_by("submitted_at")
+    )
+
+    ctx = _base_ctx("kyc-queue")
+    ctx["applications"] = applications
+    return render(request, "web/console_kyc_queue.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_kyc_verify_view(request, application_id):
+    application = get_object_or_404(SellerApplication, id=application_id)
+    try:
+        verify_kyc(application)
+        messages.success(request, f"{application.business_name}'s KYC was verified.")
+    except SellerApplicationError as exc:
+        messages.error(request, exc.message)
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-kyc-queue")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_kyc_reject_view(request, application_id):
+    application = get_object_or_404(SellerApplication, id=application_id)
+    try:
+        reject_kyc(application, reviewer_note=request.POST.get("reviewer_note", "").strip())
+        messages.success(request, f"{application.business_name}'s KYC was rejected.")
+    except SellerApplicationError as exc:
+        messages.error(request, exc.message)
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-kyc-queue")))
+
+
+# -- Broadcasts -----------------------------------------------------------
+
+@superadmin_required
+def console_broadcasts_view(request):
+    if request.method == "POST":
+        title = request.POST.get("title", "").strip()
+        body = request.POST.get("body", "").strip()
+        audience = request.POST.get("audience", Broadcast.Audience.ALL)
+        scheduled_for_raw = request.POST.get("scheduled_for", "").strip()
+
+        if not title:
+            messages.error(request, "Title is required.")
+            return redirect("web-console-broadcasts")
+
+        scheduled_for = None
+        if scheduled_for_raw:
+            scheduled_for = _parse_datetime_local(scheduled_for_raw)
+            if scheduled_for and scheduled_for <= timezone.now():
+                messages.error(request, "Scheduled time must be in the future.")
+                return redirect("web-console-broadcasts")
+
+        broadcast = Broadcast.objects.create(
+            title=title, body=body, audience=audience, scheduled_for=scheduled_for, created_by=request.user,
+        )
+        if scheduled_for is None:
+            send_broadcast.delay(broadcast.id)
+            messages.success(request, "Broadcast sent.")
+        else:
+            messages.success(request, f"Broadcast scheduled for {scheduled_for:%b %d, %Y %H:%M}.")
+        return redirect("web-console-broadcasts")
+
+    ctx = _base_ctx("broadcasts")
+    ctx["broadcasts"] = Broadcast.objects.select_related("created_by").order_by("-created_at")[:50]
+    return render(request, "web/console_broadcasts.html", ctx)

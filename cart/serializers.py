@@ -71,12 +71,46 @@ class CouponApplySerializer(serializers.Serializer):
             raise serializers.ValidationError("Invalid coupon code.")
 
 
-class CartSerializer(serializers.Serializer):
+class PromotionSerializer(serializers.ModelSerializer):
+    seller_name = serializers.CharField(source="seller.business_name", read_only=True, default=None)
+    seller_slug = serializers.CharField(source="seller.slug", read_only=True, default=None)
+
+    class Meta:
+        model = Coupon
+        fields = [
+            "code",
+            "scope",
+            "seller_name",
+            "seller_slug",
+            "title",
+            "description",
+            "banner_image",
+            "discount_type",
+            "value",
+            "min_order_amount",
+            "max_discount_amount",
+            "valid_to",
+        ]
+        read_only_fields = fields
+
+
+class SellerCartGroupSerializer(serializers.Serializer):
+    seller_id = serializers.IntegerField(source="seller.id")
+    seller_name = serializers.CharField(source="seller.business_name")
+    seller_slug = serializers.CharField(source="seller.slug")
     items = CartItemSerializer(many=True, read_only=True)
     subtotal = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    delivery_fee = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    free_delivery_threshold_met = serializers.BooleanField(read_only=True)
+
+
+class CartSerializer(serializers.Serializer):
+    items = CartItemSerializer(many=True, read_only=True)
+    seller_groups = SellerCartGroupSerializer(many=True, read_only=True)
+    grand_subtotal = serializers.DecimalField(source="subtotal", max_digits=10, decimal_places=2, read_only=True)
     discount_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     delivery_fee = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    grand_total = serializers.DecimalField(source="total", max_digits=10, decimal_places=2, read_only=True)
     coupon_code = serializers.SerializerMethodField()
     coupon_error = serializers.CharField(read_only=True, allow_null=True)
 

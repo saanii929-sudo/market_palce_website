@@ -1,0 +1,69 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Disputes{% endblock %}
+{% block console_subtitle %}Cases escalated for admin resolution{% endblock %}
+{% block console_actions %}{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="p-5 flex items-center gap-2 flex-wrap border-b border-gray-100">
+    <a href="?status=open" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'open' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Open</a>
+    <a href="?status=investigating" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'investigating' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Investigating</a>
+    <a href="?status=resolved" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'resolved' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Resolved</a>
+    <a href="?status=all" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'all' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">All</a>
+
+    <select onchange="window.location.href='?status={{ active_tab }}&category='+this.value" class="ml-auto text-xs font-bold rounded-full border border-gray-200 px-4 py-2 text-gray-500">
+      <option value="">All categories</option>
+      {% for value, label in categories %}
+        <option value="{{ value }}" {% if active_category == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Order</th>
+          <th class="px-5 py-3">Category</th>
+          <th class="px-5 py-3">Raised by</th>
+          <th class="px-5 py-3">Against</th>
+          <th class="px-5 py-3">Assigned</th>
+          <th class="px-5 py-3">Opened</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for dispute in disputes %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ dispute.order.order_number }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ dispute.get_category_display }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ dispute.raised_by.full_name|default:dispute.raised_by.email }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ dispute.against.full_name|default:dispute.against.email|default:"—" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ dispute.assigned_admin.full_name|default:"Unassigned" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ dispute.created_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4">
+              {% if dispute.status == 'open' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Open</span>
+              {% elif dispute.status == 'investigating' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">Investigating</span>
+              {% elif dispute.status == 'resolved_buyer_favor' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Buyer favor</span>
+              {% elif dispute.status == 'resolved_seller_favor' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-teal-100 text-teal-700">Seller favor</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">Partial</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4">
+              <a href="{% url 'web-console-dispute-detail' dispute.id %}" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">View</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8" class="px-5 py-10 text-center text-gray-400">No disputes in this view.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

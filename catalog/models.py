@@ -86,6 +86,10 @@ class Seller(TimeStampedModel):
         "catalog.Category", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
     support_phone = models.CharField(max_length=20, blank=True)
+    min_free_delivery_threshold = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Cart subtotal (for this seller's items) above which delivery is free. Leave blank to use the platform default.",
+    )
 
     class Meta:
         ordering = ["business_name"]
@@ -160,10 +164,6 @@ class Product(TimeStampedModel):
 
 
 class ProductImage(TimeStampedModel):
-    """`image` holds an uploaded file; `external_url` lets seed/demo data (or
-    a seller pasting a hosted photo link) reference an image without our
-    storage backend - resolved_url prefers whichever is set."""
-
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
     image = models.ImageField(upload_to="products/", blank=True)
     external_url = models.URLField(blank=True, max_length=500)

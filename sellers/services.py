@@ -1,6 +1,7 @@
 import datetime
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -9,9 +10,10 @@ from django.utils.text import slugify
 from accounts.models import User
 from catalog.models import Seller
 
-from .models import Payout, SellerApplication, SellerSubscription, SubscriptionPlan
+from .models import Payout, PayoutAccount, SellerApplication, SellerSubscription, SubscriptionPlan
 from .notifications import (
     notify_application_reviewed,
+    notify_kyc_resolved,
     notify_payout_requested,
     notify_payout_resolved,
     notify_subscription_activated,
@@ -93,25 +95,101 @@ def reject_application(application: SellerApplication, reviewer_note: str = "") 
     return application
 
 
+def submit_kyc(
+    application: SellerApplication, *,
+    bank_account_name: str = "", bank_account_number: str = "", bank_name: str = "",
+    momo_number: str = "", momo_network: str = "",
+) -> SellerApplication:
+    if application.status != SellerApplication.Status.APPROVED:
+        raise SellerApplicationError("KYC can only be submitted once your seller application is approved.")
+    if not (bank_account_number.strip() or momo_number.strip()):
+        raise SellerApplicationError("Provide either bank account details or a mobile money number.")
+
+    application.bank_account_name = bank_account_name.strip()
+    application.bank_account_number = bank_account_number.strip()
+    application.bank_name = bank_name.strip()
+    application.momo_number = momo_number.strip()
+    application.momo_network = momo_network.strip()
+    application.kyc_status = SellerApplication.KYCStatus.PENDING
+    application.kyc_reviewed_at = None
+    application.save(update_fields=[
+        "bank_account_name", "bank_account_number", "bank_name",
+        "momo_number", "momo_network", "kyc_status", "kyc_reviewed_at",
+    ])
+    return application
+
+
+@transaction.atomic
+def verify_kyc(application: SellerApplication) -> SellerApplication:
+    from orders.services.payment_gateway import PaymentGatewayError, get_gateway
+
+    if application.kyc_status == SellerApplication.KYCStatus.VERIFIED:
+        raise SellerApplicationError("This application's KYC is already verified.")
+    if not (application.bank_account_number or application.momo_number):
+        raise SellerApplicationError("No payout details have been submitted yet.")
+
+    seller = getattr(application.user, "seller_profile", None)
+    if seller is None:
+        raise SellerApplicationError("This user doesn't have a seller account yet.")
+
+    if application.momo_number:
+        payout_type = PayoutAccount.Type.MOMO
+        account_number, bank_code = application.momo_number, application.momo_network
+    else:
+        payout_type = PayoutAccount.Type.BANK
+        account_number, bank_code = application.bank_account_number, application.bank_name
+
+    gateway_name = getattr(settings, "PAYMENT_DEFAULT_GATEWAY", "paystack")
+    try:
+        reference = get_gateway(gateway_name).tokenize_payout_destination(
+            type=payout_type, account_number=account_number, bank_code=bank_code,
+            account_name=application.bank_account_name,
+        )
+    except PaymentGatewayError as exc:
+        raise SellerApplicationError(str(exc)) from exc
+
+    PayoutAccount.objects.filter(seller=seller, is_active=True).update(is_active=False)
+    PayoutAccount.objects.create(seller=seller, type=payout_type, account_reference=reference)
+
+    application.kyc_status = SellerApplication.KYCStatus.VERIFIED
+    application.kyc_reviewed_at = timezone.now()
+    application.save(update_fields=["kyc_status", "kyc_reviewed_at"])
+
+    notify_kyc_resolved(application)
+    return application
+
+
+def reject_kyc(application: SellerApplication, reviewer_note: str = "") -> SellerApplication:
+    if application.kyc_status == SellerApplication.KYCStatus.VERIFIED:
+        raise SellerApplicationError("This application's KYC is already verified.")
+
+    application.kyc_status = SellerApplication.KYCStatus.REJECTED
+    application.kyc_reviewed_at = timezone.now()
+    if reviewer_note:
+        application.reviewer_note = reviewer_note
+    application.save(update_fields=["kyc_status", "kyc_reviewed_at", "reviewer_note"])
+
+    notify_kyc_resolved(application)
+    return application
+
+
 COMMISSION_INTRODUCED_ON = datetime.date(2026, 9, 15)
 
 
 def _net_line_total(item) -> Decimal:
     gross = item.unit_price * item.qty
-    if item.order.updated_at.date() < COMMISSION_INTRODUCED_ON:
+    if item.seller_order.updated_at.date() < COMMISSION_INTRODUCED_ON:
         return gross
     rate = item.product.category.commission_rate
     return (gross * (Decimal("100") - rate) / Decimal("100")).quantize(Decimal("0.01"))
 
 
 def get_lifetime_earnings(seller: Seller) -> Decimal:
-    """Net revenue from this seller's delivered order items, after platform
-    commission per product category (see COMMISSION_INTRODUCED_ON)."""
-    from orders.models import Order, OrderItem
+    from orders.models import OrderItem, SellerOrder
 
     items = OrderItem.objects.filter(
-        product__seller=seller, order__status=Order.Status.DELIVERED
-    ).select_related("product__category", "order")
+        product__seller=seller, seller_order__status=SellerOrder.Status.DELIVERED
+    ).select_related("product__category", "seller_order")
     return sum((_net_line_total(item) for item in items), Decimal("0.00"))
 
 
@@ -166,6 +244,8 @@ def schedule_payout(payout: Payout, payout_date, admin_note: str = "") -> Payout
 def mark_payout_paid(payout: Payout) -> Payout:
     if payout.status not in (Payout.Status.REQUESTED, Payout.Status.SCHEDULED):
         raise PayoutError("Only requested or scheduled payouts can be marked as paid.")
+    if not PayoutAccount.objects.filter(seller=payout.seller, is_active=True).exists():
+        raise PayoutError("This seller hasn't completed KYC verification - no payout destination on file.")
 
     payout.status = Payout.Status.PAID
     payout.payout_date = payout.payout_date or timezone.now().date()

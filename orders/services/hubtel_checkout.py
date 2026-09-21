@@ -1,10 +1,12 @@
+from decimal import Decimal
+
 from django.db import transaction
 from django.db.models import F
 
 import cart.services as cart_services
 from accounts.models import Address
-from cart.models import Cart, Coupon
-from catalog.models import Product, ProductVariant
+from cart.models import Cart, Coupon, CouponRedemption
+from catalog.models import Product
 
 from ..models import (
     DeliveryMethod,
@@ -14,8 +16,10 @@ from ..models import (
     Payment,
     PaymentMethod,
     PendingCheckout,
+    SellerOrder,
 )
 from ..notifications import notify_order_placed
+from . import pricing
 from .payment_gateway import HubtelGateway, PaymentGatewayError
 
 
@@ -38,21 +42,27 @@ def start_hubtel_checkout(
     cancellation_url: str,
     idempotency_key: str | None = None,
 ) -> PendingCheckout:
-    """Snapshots the cart and starts a Hubtel hosted-checkout session. No
-    Order exists yet - it's only created once payment is confirmed, by
-    finalize_pending_checkout()."""
     if idempotency_key:
         existing = PendingCheckout.objects.filter(user=user, idempotency_key=idempotency_key).first()
         if existing is not None:
             return existing
 
-    totals = cart_services.compute_totals(cart, delivery_fee=delivery_method.price)
+    totals = cart_services.compute_totals(cart, delivery_fee=0)
     items = totals["items"]
 
     if not items:
         raise HubtelCheckoutError("Your cart is empty.")
     if cart.applied_coupon and totals["coupon_error"]:
         raise HubtelCheckoutError(totals["coupon_error"])
+
+    seller_groups = pricing.price_seller_groups(
+        items, delivery_method=delivery_method, region=address.region,
+        cart_subtotal=totals["subtotal"], coupon=cart.applied_coupon, user=user,
+    )
+    delivery_fee = sum((g["delivery_fee"] for g in seller_groups), Decimal("0.00"))
+    tax_amount = sum((g["tax_amount"] for g in seller_groups), Decimal("0.00"))
+    discount_amount = sum((g["discount_amount"] for g in seller_groups), Decimal("0.00"))
+    total = totals["subtotal"] - discount_amount + delivery_fee + tax_amount
 
     snapshot = [
         {
@@ -72,9 +82,9 @@ def start_hubtel_checkout(
         coupon=cart.applied_coupon,
         cart_snapshot=snapshot,
         subtotal=totals["subtotal"],
-        delivery_fee=totals["delivery_fee"],
-        discount_amount=totals["discount_amount"],
-        total=totals["total"],
+        delivery_fee=delivery_fee,
+        discount_amount=discount_amount,
+        total=total,
         idempotency_key=idempotency_key,
     )
 
@@ -100,9 +110,6 @@ def start_hubtel_checkout(
 
 @transaction.atomic
 def finalize_pending_checkout(pending: PendingCheckout) -> PendingCheckout:
-    """Creates the real Order from a paid PendingCheckout. Idempotent - safe
-    to call more than once (a webhook delivery and a client status-poll can
-    both race to finalize the same reference)."""
     pending = PendingCheckout.objects.select_for_update().get(pk=pending.pk)
     if pending.status != PendingCheckout.Status.PENDING:
         return pending
@@ -110,53 +117,77 @@ def finalize_pending_checkout(pending: PendingCheckout) -> PendingCheckout:
     order = Order(
         user=pending.user,
         idempotency_key=pending.idempotency_key,
-        subtotal=pending.subtotal,
-        delivery_fee=pending.delivery_fee,
-        discount_amount=pending.discount_amount,
-        total=pending.total,
         coupon=pending.coupon,
-        delivery_method=pending.delivery_method,
         payment_method=pending.payment_method,
     )
     order.snapshot_address(pending.address)
     order.save()
 
-    for line in pending.cart_snapshot:
-        product = Product.objects.get(id=line["product_id"])
-        variant = ProductVariant.objects.get(id=line["variant_id"]) if line["variant_id"] else None
-        stock_target = variant or product
-        stock_model = type(stock_target)
-        decremented = stock_model.objects.filter(id=stock_target.id, stock_qty__gte=line["qty"]).update(
-            stock_qty=F("stock_qty") - line["qty"]
-        )
-        if not decremented:
-            # Payment already succeeded but stock ran out in the meantime -
-            # this needs a human to sort out (refund or restock), so we
-            # don't silently create an unfulfillable order.
-            order.delete()
-            pending.status = PendingCheckout.Status.FAILED
-            pending.failure_reason = (
-                f"Payment for {pending.reference} succeeded but {product.name} is out of stock - needs manual refund."
-            )
-            pending.save(update_fields=["status", "failure_reason"])
-            return pending
+    items = [pricing.SnapshotLine.from_snapshot(line) for line in pending.cart_snapshot]
+    seller_groups = pricing.price_seller_groups(
+        items,
+        delivery_method=pending.delivery_method,
+        region=pending.address.region,
+        cart_subtotal=pending.subtotal,
+        coupon=pending.coupon,
+        user=pending.user,
+    )
 
-        Product.objects.filter(id=product.id).update(sold_count=F("sold_count") + line["qty"])
-        OrderItem.objects.create(
-            order=order, product=product, variant=variant, qty=line["qty"], unit_price=line["unit_price"]
+    for group in seller_groups:
+        seller_order = SellerOrder.objects.create(
+            order=order,
+            seller=group["seller"],
+            subtotal=group["subtotal"],
+            tax_amount=group["tax_amount"],
+            delivery_fee=group["delivery_fee"],
+            discount_amount=group["discount_amount"],
+            total=group["total"],
+            delivery_method=pending.delivery_method,
+        )
+
+        for item in group["items"]:
+            stock_target = item.variant or item.product
+            stock_model = type(stock_target)
+            decremented = stock_model.objects.filter(id=stock_target.id, stock_qty__gte=item.qty).update(
+                stock_qty=F("stock_qty") - item.qty
+            )
+            if not decremented:
+                order.delete()
+                pending.status = PendingCheckout.Status.FAILED
+                pending.failure_reason = (
+                    f"Payment for {pending.reference} succeeded but {item.product.name} is out of "
+                    "stock - needs manual refund."
+                )
+                pending.save(update_fields=["status", "failure_reason"])
+                return pending
+
+            Product.objects.filter(id=item.product.id).update(sold_count=F("sold_count") + item.qty)
+            OrderItem.objects.create(
+                seller_order=seller_order, product=item.product, variant=item.variant,
+                qty=item.qty, unit_price=item.unit_price,
+            )
+
+        OrderStatusHistory.objects.create(
+            seller_order=seller_order, status=Order.Status.PROCESSING, note="Order placed via Hubtel payment."
         )
 
     if pending.coupon:
         Coupon.objects.filter(id=pending.coupon_id).update(times_used=F("times_used") + 1)
+        CouponRedemption.objects.create(coupon=pending.coupon, user=pending.user, order=order)
+        from risk.tasks import check_coupon_abuse
 
-    Payment.objects.create(
+        transaction.on_commit(lambda: check_coupon_abuse.delay(order.id))
+
+    payment = Payment.objects.create(
         order=order,
         gateway=Payment.Gateway.HUBTEL,
         gateway_reference=pending.reference,
         amount=order.total,
         status=Payment.Status.SUCCESS,
     )
-    OrderStatusHistory.objects.create(order=order, status=Order.Status.PROCESSING, note="Order placed via Hubtel payment.")
+    from risk.tasks import check_payment_anomaly
+
+    transaction.on_commit(lambda: check_payment_anomaly.delay(payment.id))
 
     cart = Cart.objects.filter(user=pending.user).first()
     if cart is not None:

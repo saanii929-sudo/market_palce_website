@@ -1,0 +1,90 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Refund requests{% endblock %}
+{% block seller_subtitle %}Per-item refund requests awaiting your decision{% endblock %}
+{% block seller_actions %}{% endblock %}
+
+{% block seller_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="p-5 flex items-center gap-2 flex-wrap border-b border-gray-100">
+    <a href="?status=requested" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'requested' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Requested</a>
+    <a href="?status=under_review" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'under_review' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Under review</a>
+    <a href="?status=approved" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'approved' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Approved</a>
+    <a href="?status=refunded" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'refunded' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Refunded</a>
+    <a href="?status=rejected" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'rejected' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Rejected</a>
+  </div>
+
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Order</th>
+          <th class="px-5 py-3">Item</th>
+          <th class="px-5 py-3">Reason</th>
+          <th class="px-5 py-3">Amount</th>
+          <th class="px-5 py-3">Requested</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rr in refund_requests %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ rr.order_item.seller_order.order.order_number }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ rr.order_item.qty }}× {{ rr.order_item.product.name }}</td>
+            <td class="px-5 py-4 text-gray-500 max-w-xs truncate">{{ rr.get_reason_display }}{% if rr.reason_detail %} — {{ rr.reason_detail }}{% endif %}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ rr.refund_amount }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ rr.requested_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4">
+              {% if rr.status == 'requested' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Requested</span>
+              {% elif rr.status == 'under_review' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">Under review</span>
+              {% elif rr.status == 'approved' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-teal-100 text-teal-700">Approved</span>
+              {% elif rr.status == 'refunded' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Refunded</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Rejected</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4">
+              <div class="flex gap-2 justify-end flex-wrap items-center">
+                {% if rr.is_escalated %}
+                  <span class="text-xs font-bold text-red-600">Escalated - admin only</span>
+                {% elif rr.status == 'requested' %}
+                  <form method="post" action="{% url 'web-seller-refund-request-action' rr.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="start_review">
+                    <button type="submit" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">Start review</button>
+                  </form>
+                {% elif rr.status == 'under_review' %}
+                  <form method="post" action="{% url 'web-seller-refund-request-action' rr.id %}" class="flex items-center gap-1">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="approve">
+                    <input type="number" step="0.01" min="0" name="refund_amount" value="{{ rr.refund_amount }}" class="w-20 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:border-ink">
+                    <button type="submit" class="rounded-lg border border-green-200 text-green-700 font-bold text-xs px-4 py-2 hover:bg-green-50 transition-colors">Approve</button>
+                  </form>
+                  <form method="post" action="{% url 'web-seller-refund-request-action' rr.id %}" class="flex items-center gap-1">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="reject">
+                    <input type="text" name="note" placeholder="Reason (optional)" class="w-32 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:border-ink">
+                    <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Reject</button>
+                  </form>
+                {% elif rr.status == 'approved' %}
+                  <form method="post" action="{% url 'web-seller-refund-request-action' rr.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="refund">
+                    <button type="submit" class="rounded-lg border border-green-200 text-green-700 font-bold text-xs px-4 py-2 hover:bg-green-50 transition-colors">Issue refund</button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="px-5 py-10 text-center text-gray-400">No refund requests in this view.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

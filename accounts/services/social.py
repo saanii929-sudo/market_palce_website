@@ -1,12 +1,9 @@
-"""Verifies provider tokens for social sign-in and returns normalized profile data.
-
-{"email": str | None, "full_name": str, "provider_id": str}
-"""
 import jwt
 from django.conf import settings
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
-
+from firebase_admin import auth as firebase_auth
+from firebase_admin.exceptions import FirebaseError
 
 class SocialAuthError(Exception):
     def __init__(self, message: str):
@@ -29,36 +26,16 @@ def verify_google_token(token: str) -> dict:
     }
 
 
-_firebase_app = None
-
-
 def _get_firebase_app():
-    """Lazily initializes the Firebase Admin app from a service-account key
-    file, once per process. Kept behind a function (rather than module-level
-    initialization) so importing this module never requires credentials to
-    be configured - only actually calling verify_firebase_token does, and
-    tests can monkeypatch this to avoid needing real credentials at all."""
-    global _firebase_app
-    if _firebase_app is None:
-        if not settings.FIREBASE_CREDENTIALS_PATH:
-            raise SocialAuthError("Google sign-in via Firebase is not configured on the server.")
+    from core.firebase import get_firebase_app
 
-        import firebase_admin
-        from firebase_admin import credentials
-
-        cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
-        _firebase_app = firebase_admin.initialize_app(cred, name="sportshop")
-    return _firebase_app
+    app = get_firebase_app()
+    if app is None:
+        raise SocialAuthError("Google sign-in via Firebase is not configured on the server.")
+    return app
 
 
 def verify_firebase_token(token: str) -> dict:
-    """Verifies a Firebase ID token - what the Flutter app gets back from
-    firebase_auth after GoogleAuthProvider sign-in - as opposed to
-    verify_google_token(), which verifies a raw Google OAuth id_token
-    (different issuer/audience, since Firebase re-signs its own tokens)."""
-    from firebase_admin import auth as firebase_auth
-    from firebase_admin.exceptions import FirebaseError
-
     try:
         payload = firebase_auth.verify_id_token(token, app=_get_firebase_app())
     except SocialAuthError:

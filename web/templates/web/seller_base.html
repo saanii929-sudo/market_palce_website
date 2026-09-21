@@ -57,6 +57,9 @@
         <a href="{% url 'web-seller-order-returns' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'order-returns' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-arrow-left"/></svg>Return requests
         </a>
+        <a href="{% url 'web-seller-refund-requests' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'refund-requests' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-card"/></svg>Refund requests
+        </a>
         <a href="{% url 'web-seller-messages' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'messages' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-chat"/></svg>Messages
         </a>

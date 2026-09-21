@@ -56,6 +56,7 @@ _ORDER_DISPLAY_STATUS = {
     "out_for_delivery": "In Transit",
     "delivered": "Delivered",
     "cancelled": "Cancelled",
+    "partial": "Partially delivered",
 }
 
 _ORDER_STATUS_BADGE = {
@@ -64,6 +65,7 @@ _ORDER_STATUS_BADGE = {
     "out_for_delivery": "bg-amber-100 text-amber-700",
     "delivered": "bg-green-100 text-green-700",
     "cancelled": "bg-red-100 text-red-600",
+    "partial": "bg-blue-100 text-blue-700",
 }
 
 

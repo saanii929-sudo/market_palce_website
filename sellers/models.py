@@ -15,6 +15,11 @@ class SellerApplication(TimeStampedModel):
         APPROVED = "approved", "Approved"
         REJECTED = "rejected", "Rejected"
 
+    class KYCStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        VERIFIED = "verified", "Verified"
+        REJECTED = "rejected", "Rejected"
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="seller_applications"
     )
@@ -36,11 +41,44 @@ class SellerApplication(TimeStampedModel):
     reviewed_at = models.DateTimeField(null=True, blank=True)
     reviewer_note = models.CharField(max_length=255, blank=True)
 
+    # KYC / payout verification - submitted separately, after the seller
+    # application itself has already been approved (see submit_kyc()).
+    bank_account_name = models.CharField(max_length=150, blank=True)
+    bank_account_number = models.CharField(max_length=50, blank=True)
+    bank_name = models.CharField(max_length=100, blank=True)
+    momo_number = models.CharField(max_length=20, blank=True)
+    momo_network = models.CharField(max_length=30, blank=True)
+    kyc_status = models.CharField(max_length=20, choices=KYCStatus.choices, default=KYCStatus.PENDING)
+    kyc_reviewed_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["-submitted_at"]
 
     def __str__(self):
         return f"{self.business_name} ({self.status})"
+
+
+class PayoutAccount(TimeStampedModel):
+    """The seller's actual, gateway-tokenized payout destination - kept
+    separate from SellerApplication so it can be updated later (e.g. the
+    seller switches banks) without re-running the whole KYC application.
+    account_reference is a Paystack/Flutterwave transfer-recipient token,
+    never a raw account/MoMo number."""
+
+    class Type(models.TextChoices):
+        BANK = "bank", "Bank account"
+        MOMO = "momo", "Mobile money"
+
+    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name="payout_accounts")
+    type = models.CharField(max_length=20, choices=Type.choices)
+    account_reference = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"PayoutAccount({self.seller.business_name}, {self.type})"
 
 
 class Payout(TimeStampedModel):
@@ -117,6 +155,29 @@ class SellerSubscription(TimeStampedModel):
 
     def __str__(self):
         return f"SellerSubscription({self.seller.business_name}, {self.plan.name}, {self.status})"
+
+
+class BulkUploadJob(TimeStampedModel):
+    class Status(models.TextChoices):
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name="bulk_upload_jobs")
+    file = models.FileField(upload_to="sellers/bulk_uploads/%Y/%m/")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROCESSING)
+    total_rows = models.PositiveIntegerField(default=0)
+    success_count = models.PositiveIntegerField(default=0)
+    error_count = models.PositiveIntegerField(default=0)
+    error_report = models.JSONField(
+        default=list, blank=True, help_text="List of {row, errors} entries for rows that failed validation."
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"BulkUploadJob({self.seller.business_name}, {self.status})"
 
     @property
     def is_current(self) -> bool:

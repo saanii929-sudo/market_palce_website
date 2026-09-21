@@ -1,0 +1,82 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Broadcasts{% endblock %}
+{% block console_subtitle %}Send a notification to all users, customers, or sellers{% endblock %}
+{% block console_actions %}{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl">
+  <h2 class="display text-lg mb-4">New broadcast</h2>
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+    <div>
+      <label class="block text-sm font-bold mb-2">Title</label>
+      <input type="text" name="title" required maxlength="150"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Message</label>
+      <textarea name="body" rows="3" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink"></textarea>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-bold mb-2">Audience</label>
+        <select name="audience" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm">
+          <option value="all">All users</option>
+          <option value="customers">Customers</option>
+          <option value="sellers">Sellers</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-bold mb-2">Schedule for (optional)</label>
+        <input type="datetime-local" name="scheduled_for"
+               class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+        <p class="text-xs text-gray-400 mt-1.5">Leave blank to send immediately.</p>
+      </div>
+    </div>
+    <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Send / schedule</button>
+  </form>
+</div>
+
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden mt-6">
+  <div class="p-5 border-b border-gray-100">
+    <h2 class="display text-lg">History</h2>
+  </div>
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Title</th>
+          <th class="px-5 py-3">Audience</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3">Created by</th>
+          <th class="px-5 py-3">Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for broadcast in broadcasts %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4">
+              <p class="font-bold">{{ broadcast.title }}</p>
+              {% if broadcast.body %}<p class="text-xs text-gray-400 mt-0.5 max-w-sm truncate">{{ broadcast.body }}</p>{% endif %}
+            </td>
+            <td class="px-5 py-4 text-gray-500 capitalize">{{ broadcast.audience }}</td>
+            <td class="px-5 py-4">
+              {% if broadcast.is_sent %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Sent {{ broadcast.sent_at|date:"M d, g:i A" }}</span>
+              {% elif broadcast.scheduled_for %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">Scheduled for {{ broadcast.scheduled_for|date:"M d, g:i A" }}</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Pending</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4 text-gray-500">{{ broadcast.created_by.full_name|default:broadcast.created_by.email|default:"—" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ broadcast.created_at|date:"M d, Y" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No broadcasts yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

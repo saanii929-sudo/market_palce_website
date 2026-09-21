@@ -18,29 +18,31 @@ class PaymentGatewayError(Exception):
         super().__init__(message)
 
 
-# PaymentMethod codes that pay online through Hubtel's hosted checkout (card
-# and mobile money are both handled on Hubtel's own payment page) - these
-# use the deferred, order-created-only-on-payment-success flow in
-# orders.services.hubtel_checkout instead of the immediate place_order() path.
 HUBTEL_PAYMENT_METHOD_CODES = {"card", "mobile_money", "hubtel"}
 
 
 class BasePaymentGateway:
     def initiate(self, order) -> dict:
-        """Returns {"reference": str, "authorization_url": str | None}."""
         raise NotImplementedError
 
     def verify_webhook_signature(self, request) -> bool:
         raise NotImplementedError
 
     def parse_webhook_event(self, request) -> dict:
-        """Returns {"reference": str, "status": "success" | "failed"}."""
+        raise NotImplementedError
+
+    def refund(self, payment, amount: Decimal) -> dict:
+        raise NotImplementedError
+
+    def tokenize_payout_destination(self, *, type: str, account_number: str, bank_code: str = "", account_name: str = "") -> str:
+        """Returns a tokenized transfer-recipient reference for a seller
+        payout destination. Raises PaymentGatewayError on failure. Never
+        pass this the raw number back to the caller to store - only the
+        returned reference is meant to be persisted."""
         raise NotImplementedError
 
 
 class MockPaymentGateway(BasePaymentGateway):
-    """Simulates an always-successful gateway for dev/test/cash-on-delivery."""
-
     def initiate(self, order) -> dict:
         return {"reference": generate_payment_reference(), "authorization_url": None}
 
@@ -50,10 +52,22 @@ class MockPaymentGateway(BasePaymentGateway):
     def parse_webhook_event(self, request) -> dict:
         return {"reference": request.data.get("reference"), "status": request.data.get("status", "success")}
 
+    def refund(self, payment, amount: Decimal) -> dict:
+        return {"reference": f"RFD-{generate_payment_reference()}"}
+
+    def tokenize_payout_destination(self, *, type: str, account_number: str, bank_code: str = "", account_name: str = "") -> str:
+        return f"RCP-{generate_payment_reference()}"
+
 
 class PaystackGateway(BasePaymentGateway):
     def initiate(self, order) -> dict:
         raise PaymentGatewayError("Paystack integration is not configured yet.")
+
+    def refund(self, payment, amount: Decimal) -> dict:
+        raise PaymentGatewayError("Paystack refunds are not configured yet.")
+
+    def tokenize_payout_destination(self, *, type: str, account_number: str, bank_code: str = "", account_name: str = "") -> str:
+        raise PaymentGatewayError("Paystack transfer-recipient tokenization is not configured yet.")
 
     def verify_webhook_signature(self, request) -> bool:
         signature = request.headers.get("X-Paystack-Signature", "")
@@ -72,6 +86,12 @@ class FlutterwaveGateway(BasePaymentGateway):
     def initiate(self, order) -> dict:
         raise PaymentGatewayError("Flutterwave integration is not configured yet.")
 
+    def refund(self, payment, amount: Decimal) -> dict:
+        raise PaymentGatewayError("Flutterwave refunds are not configured yet.")
+
+    def tokenize_payout_destination(self, *, type: str, account_number: str, bank_code: str = "", account_name: str = "") -> str:
+        raise PaymentGatewayError("Flutterwave transfer-recipient tokenization is not configured yet.")
+
     def verify_webhook_signature(self, request) -> bool:
         signature = request.headers.get("verif-hash", "")
         return hmac.compare_digest(signature, settings.FLUTTERWAVE_SECRET_HASH)
@@ -83,13 +103,6 @@ class FlutterwaveGateway(BasePaymentGateway):
 
 
 class HubtelGateway(BasePaymentGateway):
-    """Hubtel's hosted Checkout API. Unlike the other gateways here, the
-    order doesn't exist yet when checkout is initiated - see
-    orders.services.hubtel_checkout for the deferred create-on-payment-success
-    flow that drives this class's initiate_checkout/check_status directly
-    (its initiate()/parse_webhook_event() satisfy BasePaymentGateway only for
-    the webhook dispatch path in views.PaymentWebhookView)."""
-
     CHECKOUT_URL = "https://payproxyapi.hubtel.com/items/initiate"
     STATUS_URL_TEMPLATE = "https://api-txnstatus.hubtel.com/transactions/{merchant}/status"
 
@@ -132,7 +145,6 @@ class HubtelGateway(BasePaymentGateway):
         return {"reference": reference, "authorization_url": checkout_data.get("checkoutUrl")}
 
     def check_status(self, reference: str) -> dict:
-        """Returns {"status": "success" | "failed" | "pending", "raw_status": str}."""
         import requests
 
         url = self.STATUS_URL_TEMPLATE.format(merchant=settings.HUBTEL_MERCHANT_ACCOUNT)
@@ -141,9 +153,6 @@ class HubtelGateway(BasePaymentGateway):
                 url, headers=self._auth_header(), params={"clientReference": reference}, timeout=15
             )
             if response.status_code == 404:
-                # Hubtel hasn't indexed this transaction yet (e.g. the status
-                # is being polled moments after checkout was initiated) -
-                # not a real failure, just "check back shortly".
                 return {"status": "pending", "raw_status": "not_found"}
             response.raise_for_status()
         except requests.exceptions.RequestException as exc:
@@ -166,9 +175,10 @@ class HubtelGateway(BasePaymentGateway):
     def initiate(self, order) -> dict:
         raise PaymentGatewayError("Hubtel checkout must be started via hubtel_checkout.start_hubtel_checkout, not initiate().")
 
+    def refund(self, payment, amount: Decimal) -> dict:
+        raise PaymentGatewayError("Hubtel refunds are not configured yet.")
+
     def verify_webhook_signature(self, request) -> bool:
-        # Hubtel's callback isn't cryptographically signed, so the webhook
-        # handler always re-confirms via check_status() before trusting it.
         return True
 
     def parse_webhook_event(self, request) -> dict:

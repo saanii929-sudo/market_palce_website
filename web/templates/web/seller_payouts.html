@@ -3,6 +3,67 @@
 {% block seller_subtitle %}Your earnings history{% endblock %}
 
 {% block seller_content %}
+{% if kyc_application %}
+  <div class="rounded-2xl border p-6 mb-6 {% if kyc_application.kyc_status == 'verified' %}border-green-200 bg-green-50{% elif kyc_application.kyc_status == 'rejected' %}border-red-200 bg-red-50{% else %}border-amber-200 bg-amber-50{% endif %}">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h2 class="display text-lg">Payout verification (KYC)</h2>
+      {% if kyc_application.kyc_status == 'verified' %}
+        <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Verified</span>
+      {% elif kyc_application.kyc_status == 'rejected' %}
+        <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Rejected</span>
+      {% else %}
+        <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Pending</span>
+      {% endif %}
+    </div>
+
+    {% if kyc_application.kyc_status == 'verified' %}
+      <p class="text-sm text-gray-600 mt-2">
+        Your payouts go to your {{ payout_account.get_type_display|default:"verified" }} account. You can submit new details below to switch it.
+      </p>
+    {% elif kyc_application.kyc_status == 'rejected' %}
+      <p class="text-sm text-gray-600 mt-2">{{ kyc_application.reviewer_note|default:"Your payout details couldn't be verified. Please check them and resubmit." }}</p>
+    {% else %}
+      <p class="text-sm text-gray-600 mt-2">Withdrawals can't be paid out until your bank/mobile money details are verified. Submit them below.</p>
+    {% endif %}
+
+    <form method="post" action="{% url 'web-seller-kyc-submit' %}" class="mt-4 grid sm:grid-cols-2 gap-4">
+      {% csrf_token %}
+      <div class="sm:col-span-2">
+        <label class="text-xs font-bold text-gray-500">Account holder name</label>
+        <input type="text" name="bank_account_name" value="{{ kyc_application.bank_account_name }}"
+               class="mt-1 w-full rounded-lg border border-gray-200 text-sm px-3 py-2 focus:outline-none focus:border-ink">
+      </div>
+      <div>
+        <label class="text-xs font-bold text-gray-500">Bank name</label>
+        <input type="text" name="bank_name" value="{{ kyc_application.bank_name }}"
+               class="mt-1 w-full rounded-lg border border-gray-200 text-sm px-3 py-2 focus:outline-none focus:border-ink">
+      </div>
+      <div>
+        <label class="text-xs font-bold text-gray-500">Bank account number</label>
+        <input type="text" name="bank_account_number" value="{{ kyc_application.bank_account_number }}"
+               class="mt-1 w-full rounded-lg border border-gray-200 text-sm px-3 py-2 focus:outline-none focus:border-ink">
+      </div>
+      <div>
+        <label class="text-xs font-bold text-gray-500">Mobile money network</label>
+        <select name="momo_network" class="mt-1 w-full rounded-lg border border-gray-200 text-sm px-3 py-2 focus:outline-none focus:border-ink">
+          <option value="" {% if not kyc_application.momo_network %}selected{% endif %}>None</option>
+          <option value="MTN" {% if kyc_application.momo_network == "MTN" %}selected{% endif %}>MTN</option>
+          <option value="Vodafone" {% if kyc_application.momo_network == "Vodafone" %}selected{% endif %}>Vodafone</option>
+          <option value="AirtelTigo" {% if kyc_application.momo_network == "AirtelTigo" %}selected{% endif %}>AirtelTigo</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-bold text-gray-500">Mobile money number</label>
+        <input type="text" name="momo_number" value="{{ kyc_application.momo_number }}"
+               class="mt-1 w-full rounded-lg border border-gray-200 text-sm px-3 py-2 focus:outline-none focus:border-ink">
+      </div>
+      <div class="sm:col-span-2">
+        <button type="submit" class="text-xs font-bold px-4 py-2.5 rounded-lg bg-ink text-white">Submit for verification</button>
+      </div>
+    </form>
+  </div>
+{% endif %}
+
 <div class="grid gap-4 md:grid-cols-2">
   <div class="rounded-2xl bg-white border border-gray-200 p-6">
     <p class="text-xs font-bold text-gray-400 tracking-widest">AVAILABLE BALANCE</p>
@@ -21,6 +82,11 @@
 
 <div class="rounded-2xl bg-white border border-gray-200 p-6 mt-6 max-w-lg">
   <p class="text-sm font-bold text-ink mb-4">Request a withdrawal</p>
+  {% if not payout_account %}
+    <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+      You can request a withdrawal now, but it can't be paid out until your KYC details above are verified.
+    </p>
+  {% endif %}
   {% if pending_request %}
     <p class="text-sm text-gray-500">You have a withdrawal request for GH₵{{ pending_request.amount }} awaiting review, submitted {{ pending_request.created_at|date:"M d, Y" }}.</p>
   {% else %}

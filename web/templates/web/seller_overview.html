@@ -85,7 +85,7 @@
             <td class="px-5 py-4 text-gray-500">{{ order.delivery_recipient_name }}</td>
             <td class="px-5 py-4">{% include "web/_order_item_icons.html" %}</td>
             <td class="px-5 py-4"><span class="text-xs font-bold px-2.5 py-1 rounded-full {{ order.status|order_status_badge }}">{{ order.status|order_display_status }}</span></td>
-            <td class="px-5 py-4 font-bold">GH₵{{ order.seller_total }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ order.subtotal }}</td>
           </tr>
         {% empty %}
           <tr><td colspan="5" class="px-5 py-6 text-center text-gray-400">No orders yet.</td></tr>

@@ -1,0 +1,71 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}{% if plan %}Edit subscription plan{% else %}Add subscription plan{% endif %}{% endblock %}
+{% block console_subtitle %}{% if plan %}Update details for {{ plan.name }}{% else %}Create a new plan tier for sellers{% endif %}{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-subscription-plans' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to subscription plans</a>
+{% endblock %}
+
+{% block console_content %}
+<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl space-y-5">
+  {% csrf_token %}
+
+  <div class="grid sm:grid-cols-2 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Name</label>
+      <input type="text" name="name" value="{{ plan.name|default:'' }}" required placeholder="e.g. Growth"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Tagline</label>
+      <input type="text" name="tagline" value="{{ plan.tagline|default:'' }}" placeholder="e.g. For growing stores"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+  </div>
+
+  <div class="grid sm:grid-cols-3 gap-5">
+    <div>
+      <label class="block text-sm font-bold mb-2">Price (GH₵)</label>
+      <input type="number" step="0.01" min="0" name="price" value="{{ plan.price|default:'0.00' }}" required
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Billing period (days)</label>
+      <input type="number" min="1" name="billing_period_days" value="{{ plan.billing_period_days|default:30 }}" required
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      <p class="text-xs text-gray-400 mt-1.5">e.g. 30 for monthly, 365 for yearly.</p>
+    </div>
+    <div>
+      <label class="block text-sm font-bold mb-2">Display order</label>
+      <input type="number" min="0" name="display_order" value="{{ plan.display_order|default:0 }}"
+             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      <p class="text-xs text-gray-400 mt-1.5">Lower numbers show first.</p>
+    </div>
+  </div>
+
+  <div>
+    <label class="block text-sm font-bold mb-2">Features</label>
+    <textarea name="features" rows="5" placeholder="One feature per line, e.g.&#10;Unlimited product listings&#10;Priority support"
+              class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">{% for feature in plan.features %}{{ feature }}
+{% endfor %}</textarea>
+    <p class="text-xs text-gray-400 mt-1.5">One feature per line - shown as a bullet list to sellers.</p>
+  </div>
+
+  <div class="flex flex-wrap gap-6">
+    <label class="flex items-center gap-2 text-sm font-semibold">
+      <input type="checkbox" name="is_active" value="1" {% if plan.is_active or not plan %}checked{% endif %} class="rounded border-gray-300">
+      Active (offered to sellers)
+    </label>
+    <label class="flex items-center gap-2 text-sm font-semibold">
+      <input type="checkbox" name="is_featured" value="1" {% if plan.is_featured %}checked{% endif %} class="rounded border-gray-300">
+      Featured (highlighted as recommended)
+    </label>
+  </div>
+
+  <div class="flex items-center gap-3 pt-2">
+    <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">
+      {% if plan %}Save changes{% else %}Add plan{% endif %}
+    </button>
+    <a href="{% url 'web-console-subscription-plans' %}" class="rounded-xl border border-gray-200 font-bold px-6 py-3 hover:border-ink transition-colors">Cancel</a>
+  </div>
+</form>
+{% endblock %}

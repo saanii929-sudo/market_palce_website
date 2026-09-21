@@ -2,15 +2,17 @@ from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.html import format_html
 
-from .models import Payout, SellerApplication, SellerSubscription, SubscriptionPlan
+from .models import BulkUploadJob, Payout, PayoutAccount, SellerApplication, SellerSubscription, SubscriptionPlan
 from .services import (
     PayoutError,
     SellerApplicationError,
     approve_application,
     mark_payout_paid,
     reject_application,
+    reject_kyc,
     reject_payout,
     schedule_payout,
+    verify_kyc,
 )
 
 
@@ -86,13 +88,16 @@ class SellerApplicationAdmin(admin.ModelAdmin):
     autocomplete_fields = ["user", "category"]
     readonly_fields = [
         "submitted_at", "reviewed_at", "status", "reviewer_note", "document_links",
+        "kyc_status", "kyc_reviewed_at",
     ]
     fields = [
         "user", "business_name", "category", "phone",
         "id_document", "business_certificate", "document_links",
         "status", "reviewer_note", "submitted_at", "reviewed_at",
+        "bank_account_name", "bank_account_number", "bank_name", "momo_number", "momo_network",
+        "kyc_status", "kyc_reviewed_at",
     ]
-    actions = ["approve_applications", "reject_applications"]
+    actions = ["approve_applications", "reject_applications", "verify_kyc_selected", "reject_kyc_selected"]
 
     @admin.display(description="Documents")
     def documents_uploaded(self, obj):
@@ -137,3 +142,45 @@ class SellerApplicationAdmin(admin.ModelAdmin):
                 self.message_user(request, f"{application}: {exc.message}", level=messages.WARNING)
         if rejected:
             self.message_user(request, f"Rejected {rejected} application(s).", level=messages.SUCCESS)
+
+    @admin.action(description="Verify KYC for selected")
+    def verify_kyc_selected(self, request, queryset):
+        verified = 0
+        for application in queryset:
+            try:
+                verify_kyc(application)
+                verified += 1
+            except SellerApplicationError as exc:
+                self.message_user(request, f"{application}: {exc.message}", level=messages.WARNING)
+        if verified:
+            self.message_user(request, f"Verified KYC for {verified} application(s).", level=messages.SUCCESS)
+
+    @admin.action(description="Reject KYC for selected")
+    def reject_kyc_selected(self, request, queryset):
+        rejected = 0
+        for application in queryset:
+            try:
+                reject_kyc(application, reviewer_note=f"KYC rejected by {request.user}")
+                rejected += 1
+            except SellerApplicationError as exc:
+                self.message_user(request, f"{application}: {exc.message}", level=messages.WARNING)
+        if rejected:
+            self.message_user(request, f"Rejected KYC for {rejected} application(s).", level=messages.SUCCESS)
+
+
+@admin.register(PayoutAccount)
+class PayoutAccountAdmin(admin.ModelAdmin):
+    list_display = ["seller", "type", "is_active", "created_at"]
+    list_filter = ["type", "is_active"]
+    search_fields = ["seller__business_name"]
+    autocomplete_fields = ["seller"]
+    readonly_fields = ["account_reference"]
+
+
+@admin.register(BulkUploadJob)
+class BulkUploadJobAdmin(admin.ModelAdmin):
+    list_display = ["id", "seller", "status", "total_rows", "success_count", "error_count", "created_at"]
+    list_filter = ["status"]
+    search_fields = ["seller__business_name"]
+    autocomplete_fields = ["seller"]
+    readonly_fields = ["status", "total_rows", "success_count", "error_count", "error_report"]

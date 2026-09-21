@@ -51,12 +51,6 @@ class OTPVerificationError(Exception):
 
 
 def verify_otp(destination: str, purpose: str, raw_code: str, consume: bool = True) -> OTPCode:
-    """Validates a code against the latest unused OTP for (destination, purpose).
-
-    `consume=False` lets a caller check validity without spending the code -
-    used by the password-reset flow, where the code is checked once at the
-    "enter code" step and again (consumed) at the "set new password" step.
-    """
     otp = get_active_otp(destination, purpose)
     if otp is None:
         raise OTPVerificationError("not_found", "No active verification code found. Please request a new one.")

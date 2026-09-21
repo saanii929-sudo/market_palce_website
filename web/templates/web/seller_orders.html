@@ -32,7 +32,7 @@
             <td class="px-5 py-4 text-gray-500">{{ order.delivery_recipient_name }}</td>
             <td class="px-5 py-4">{% include "web/_order_item_icons.html" %}</td>
             <td class="px-5 py-4 text-gray-500">{{ order.placed_at|date:"M d, Y" }}</td>
-            <td class="px-5 py-4 font-bold">GH₵{{ order.seller_total }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ order.subtotal }}</td>
             <td class="px-5 py-4">
               <form method="post" action="{% url 'web-seller-order-status' order.order_number %}" class="flex flex-col gap-1.5 items-start">
                 {% csrf_token %}

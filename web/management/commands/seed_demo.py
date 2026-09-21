@@ -21,7 +21,8 @@ from catalog.models import (
 )
 from cms.models import StaticPage
 from notifications.models import Notification
-from orders.models import DeliveryMethod, Order, OrderItem, Payment, PaymentMethod, ReturnRequest, Shipment
+from orders.models import DeliveryMethod, Order, OrderItem, Payment, PaymentMethod, ReturnRequest, SellerOrder, Shipment
+from orders.services import pricing
 from orders.services.returns import ReturnError, request_return
 from payments.models import PaymentMethodToken
 from pos.models import (
@@ -588,6 +589,35 @@ class Command(BaseCommand):
         self._seed_return_request(user)
         self._seed_notifications(user)
 
+    def _seed_seller_order(self, user, address, delivery, payment_method, product, qty, placed_at=None):
+        """Create an Order with a single SellerOrder/OrderItem for `product`,
+        priced through the same pricing service checkout uses."""
+        line = pricing.SnapshotLine(product=product, variant=None, qty=qty, unit_price=product.price)
+        [priced] = pricing.price_seller_groups(
+            [line], delivery_method=delivery, region=address.region,
+            cart_subtotal=line.line_total, cart_discount_amount=Decimal("0.00"),
+        )
+
+        order = Order(user=user, payment_method=payment_method, placed_at=placed_at or timezone.now())
+        order.snapshot_address(address)
+        order.save()
+        if placed_at:
+            Order.objects.filter(id=order.id).update(placed_at=placed_at)
+
+        seller_order = SellerOrder.objects.create(
+            order=order, seller=product.seller, delivery_method=delivery,
+            subtotal=priced["subtotal"], tax_amount=priced["tax_amount"],
+            delivery_fee=priced["delivery_fee"], discount_amount=priced["discount_amount"],
+            total=priced["total"],
+        )
+        item = OrderItem.objects.create(seller_order=seller_order, product=product, qty=qty, unit_price=product.price)
+
+        Payment.objects.create(
+            order=order, gateway=Payment.Gateway.PAYSTACK, status=Payment.Status.SUCCESS, amount=seller_order.total,
+            gateway_reference=f"PAY-DEMO-{order.id}",
+        )
+        return order, seller_order, item
+
     def _seed_orders_and_reviews(self, user, products_by_slug):
         delivery = DeliveryMethod.objects.get(code="standard")
         payment_method = PaymentMethod.objects.get(code="card")
@@ -606,38 +636,23 @@ class Command(BaseCommand):
             if not product:
                 continue
 
-            order = Order(
-                user=user, subtotal=product.price, delivery_fee=delivery.price,
-                total=str(float(product.price) + float(delivery.price)),
-                delivery_method=delivery, payment_method=payment_method,
-                placed_at=timezone.now() - datetime.timedelta(days=days_ago),
-            )
-            order.snapshot_address(address)
-            order.save()
-            Order.objects.filter(id=order.id).update(placed_at=timezone.now() - datetime.timedelta(days=days_ago))
-            item = OrderItem.objects.create(order=order, product=product, qty=qty, unit_price=product.price)
+            placed_at = timezone.now() - datetime.timedelta(days=days_ago)
+            order, seller_order, item = self._seed_seller_order(user, address, delivery, payment_method, product, qty, placed_at)
 
-            payment_status = Payment.Status.FAILED if target_status == Order.Status.CANCELLED else Payment.Status.SUCCESS
-            Payment.objects.create(
-                order=order, gateway=Payment.Gateway.PAYSTACK, status=payment_status, amount=order.total,
-                gateway_reference=f"PAY-DEMO-{order.id}",
-            )
-
-            if target_status == Order.Status.SHIPPED:
-                order.transition_to(Order.Status.SHIPPED, note="Left the warehouse.")
-                Shipment.objects.get_or_create(
-                    order=order, defaults=dict(courier_name="Speedaf", tracking_number=f"SPD{order.id:08d}",
-                                                current_status="In transit"),
+            if target_status == Order.Status.CANCELLED:
+                Payment.objects.filter(order=order).update(status=Payment.Status.FAILED)
+                seller_order.transition_to(Order.Status.CANCELLED, note="Cancelled by customer.")
+            elif target_status == Order.Status.SHIPPED:
+                seller_order.transition_to(Order.Status.SHIPPED, note="Left the warehouse.")
+                Shipment.objects.filter(seller_order=seller_order).update(
+                    courier_name="Speedaf", tracking_number=f"SPD{order.id:08d}", current_status="In transit",
                 )
-            elif target_status == Order.Status.CANCELLED:
-                order.transition_to(Order.Status.CANCELLED, note="Cancelled by customer.")
             elif target_status == Order.Status.DELIVERED:
-                order.transition_to(Order.Status.SHIPPED, note="Left the warehouse.")
-                order.transition_to(Order.Status.OUT_FOR_DELIVERY, note="Out with courier.")
-                order.transition_to(Order.Status.DELIVERED, note="Delivered.")
-                Shipment.objects.get_or_create(
-                    order=order, defaults=dict(courier_name="Speedaf", tracking_number=f"SPD{order.id:08d}",
-                                                current_status="Delivered"),
+                seller_order.transition_to(Order.Status.SHIPPED, note="Left the warehouse.")
+                seller_order.transition_to(Order.Status.OUT_FOR_DELIVERY, note="Out with courier.")
+                seller_order.transition_to(Order.Status.DELIVERED, note="Delivered.")
+                Shipment.objects.filter(seller_order=seller_order).update(
+                    courier_name="Speedaf", tracking_number=f"SPD{order.id:08d}", current_status="Delivered",
                 )
                 Review.objects.get_or_create(
                     order_item=item,
@@ -653,33 +668,27 @@ class Command(BaseCommand):
         if boots:
             for email, rating, comment in reviewer_specs:
                 reviewer, _ = User.objects.get_or_create(email=email, defaults={"is_email_verified": True, "full_name": email.split("@")[0].title()})
-                order = Order(
-                    user=reviewer, subtotal=boots.price, delivery_fee=delivery.price,
-                    total=str(float(boots.price) + float(delivery.price)),
-                    delivery_method=delivery, payment_method=payment_method,
-                )
-                order.snapshot_address(address)
-                order.save()
-                item = OrderItem.objects.create(order=order, product=boots, qty=1, unit_price=boots.price)
-                order.transition_to(Order.Status.SHIPPED)
-                order.transition_to(Order.Status.OUT_FOR_DELIVERY)
-                order.transition_to(Order.Status.DELIVERED)
+                reviewer_address = reviewer.addresses.filter(is_default=True).first() or address
+                order, seller_order, item = self._seed_seller_order(reviewer, reviewer_address, delivery, payment_method, boots, 1)
+                seller_order.transition_to(Order.Status.SHIPPED)
+                seller_order.transition_to(Order.Status.OUT_FOR_DELIVERY)
+                seller_order.transition_to(Order.Status.DELIVERED)
                 Review.objects.get_or_create(order_item=item, defaults=dict(user=reviewer, product=boots, rating=rating, comment=comment))
 
     def _seed_return_request(self, user):
         if ReturnRequest.objects.filter(user=user).exists():
             return
 
-        order = Order.objects.filter(user=user, status=Order.Status.DELIVERED).first()
-        if order is None:
+        seller_order = SellerOrder.objects.filter(order__user=user, status=Order.Status.DELIVERED).first()
+        if seller_order is None:
             return
-        item = order.items.first()
+        item = seller_order.items.first()
         if item is None:
             return
 
         try:
             request_return(
-                order=order, user=user,
+                seller_order=seller_order, user=user,
                 reason="These run a size too small - would like a refund.",
                 lines=[{"order_item_id": item.id, "qty": 1}],
             )

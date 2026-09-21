@@ -1,11 +1,8 @@
-"""Pure calculation helpers for the seller's financial reports - no models are
-written here, only aggregated read-side numbers for the P&L statement."""
-
 from decimal import Decimal
 
 from django.db.models import DecimalField, ExpressionWrapper, F, Sum
 
-from orders.models import Order, OrderItem
+from orders.models import OrderItem, SellerOrder
 
 from .models import Expense, POSReturn, POSReturnItem, POSSale, POSSaleItem
 
@@ -22,9 +19,9 @@ def _line_value_sum(qs, price_field: str, qty_field: str = "qty") -> Decimal:
 def compute_pnl(seller, start_date, end_date) -> dict:
     online_items = OrderItem.objects.filter(
         product__seller=seller,
-        order__placed_at__date__gte=start_date,
-        order__placed_at__date__lte=end_date,
-    ).exclude(order__status=Order.Status.CANCELLED)
+        seller_order__order__placed_at__date__gte=start_date,
+        seller_order__order__placed_at__date__lte=end_date,
+    ).exclude(seller_order__status=SellerOrder.Status.CANCELLED)
 
     online_revenue = _line_value_sum(online_items, "unit_price")
     online_cogs = _line_value_sum(online_items, "product__cost_price")

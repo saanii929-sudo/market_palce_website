@@ -77,6 +77,9 @@
         <a href="{% url 'web-console-subscriptions' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'subscriptions' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-star"/></svg>Subscriptions
         </a>
+        <a href="{% url 'web-console-subscription-plans' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'subscription-plans' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-settings"/></svg>Subscription plans
+        </a>
         <a href="{% url 'web-console-categories' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'categories' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-pin"/></svg>Categories
         </a>
@@ -91,6 +94,25 @@
         </a>
         <a href="{% url 'web-console-banners' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'banners' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-mail"/></svg>Banners
+        </a>
+        <a href="{% url 'web-console-disputes' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'disputes' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-chat"/></svg>Disputes</span>
+          {% if open_disputes_count %}<span class="text-xs font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center">{{ open_disputes_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'web-console-flagged-reviews' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'flagged-reviews' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-help"/></svg>Flagged reviews</span>
+          {% if flagged_reviews_count %}<span class="text-xs font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center">{{ flagged_reviews_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'web-console-risk-flags' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'risk-flags' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-calculator"/></svg>Risk flags</span>
+          {% if unreviewed_risk_flags_count %}<span class="text-xs font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center">{{ unreviewed_risk_flags_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'web-console-kyc-queue' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'kyc-queue' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-check"/></svg>KYC queue</span>
+          {% if pending_kyc_count %}<span class="text-xs font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center">{{ pending_kyc_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'web-console-broadcasts' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'broadcasts' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-bell"/></svg>Broadcasts
         </a>
         {% endwith %}
       </nav>

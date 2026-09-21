@@ -32,6 +32,7 @@ urlpatterns = [
     path("new-arrivals/", views.new_arrivals_view, name="web-new-arrivals"),
     path("products/<slug:slug>/", views.product_detail_view, name="web-product-detail"),
     path("products/<slug:slug>/reviews/add/", views.product_review_add_view, name="web-product-review-add"),
+    path("reviews/<int:review_id>/flag/", views.review_flag_view, name="web-review-flag"),
     path("sellers/<slug:slug>/", views.seller_detail_view, name="web-seller-detail"),
 
     path("account/messages/", messages_views.account_messages_view, name="web-account-messages"),
@@ -59,7 +60,14 @@ urlpatterns = [
     path("checkout/hubtel/return/", views.hubtel_return_view, name="web-hubtel-return"),
     path("addresses/add/", views.address_add_view, name="web-address-add"),
     path("orders/<str:order_number>/confirmation/", views.order_confirmation_view, name="web-order-confirmation"),
-    path("orders/<str:order_number>/request-return/", views.order_request_return_view, name="web-order-request-return"),
+    path(
+        "orders/<str:order_number>/seller-orders/<int:seller_order_id>/request-return/",
+        views.order_request_return_view, name="web-order-request-return",
+    ),
+    path(
+        "orders/<str:order_number>/items/<int:item_id>/refund-request/",
+        views.order_item_refund_request_view, name="web-order-item-refund-request",
+    ),
 
     path("become-seller/", seller_application_views.become_seller_view, name="web-become-seller"),
 
@@ -82,6 +90,11 @@ urlpatterns = [
 
     path("seller/", views.seller_overview_view, name="web-seller-overview"),
     path("seller/products/", views.seller_products_view, name="web-seller-products"),
+    path("seller/products/bulk-upload/", views.seller_bulk_upload_view, name="web-seller-bulk-upload"),
+    path(
+        "seller/products/bulk-upload/<int:job_id>/errors.csv",
+        views.seller_bulk_upload_errors_view, name="web-seller-bulk-upload-errors",
+    ),
     path("seller/products/add/", views.seller_product_add_view, name="web-seller-product-add"),
     path("seller/products/<int:product_id>/edit/", views.seller_product_edit_view, name="web-seller-product-edit"),
     path("seller/products/<int:product_id>/toggle/", views.seller_product_toggle_view, name="web-seller-product-toggle"),
@@ -90,9 +103,11 @@ urlpatterns = [
     path("seller/products/<int:product_id>/variants/<int:variant_id>/delete/", views.seller_product_variant_delete_view, name="web-seller-product-variant-delete"),
     path("seller/products/<int:product_id>/images/<int:image_id>/delete/", views.seller_product_image_delete_view, name="web-seller-product-image-delete"),
     path("seller/orders/", views.seller_orders_view, name="web-seller-orders"),
-    path("seller/orders/<str:order_number>/status/", views.seller_order_status_update_view, name="web-seller-order-status"),
+    path("seller/orders/<str:suborder_number>/status/", views.seller_order_status_update_view, name="web-seller-order-status"),
     path("seller/order-returns/", views.seller_order_returns_view, name="web-seller-order-returns"),
     path("seller/order-returns/<int:return_id>/resolve/", views.seller_order_return_resolve_view, name="web-seller-order-return-resolve"),
+    path("seller/refund-requests/", views.seller_refund_requests_view, name="web-seller-refund-requests"),
+    path("seller/refund-requests/<int:refund_request_id>/action/", views.seller_refund_request_action_view, name="web-seller-refund-request-action"),
     path("seller/flash-deals/", views.seller_flash_deals_view, name="web-seller-flash-deals"),
     path("seller/flash-deals/add/", views.seller_flash_deal_add_view, name="web-seller-flash-deal-add"),
     path("seller/flash-deals/<int:flash_deal_id>/edit/", views.seller_flash_deal_edit_view, name="web-seller-flash-deal-edit"),
@@ -101,6 +116,7 @@ urlpatterns = [
     path("seller/export/", views.seller_export_report_view, name="web-seller-export"),
     path("seller/payouts/", views.seller_payouts_view, name="web-seller-payouts"),
     path("seller/payouts/request/", views.seller_payout_request_view, name="web-seller-payout-request"),
+    path("seller/payouts/kyc/", views.seller_kyc_submit_view, name="web-seller-kyc-submit"),
     path("seller/settings/", views.seller_settings_view, name="web-seller-settings"),
     path("seller/subscription/", views.seller_subscription_view, name="web-seller-subscription"),
     path("seller/subscription/checkout/", views.seller_subscription_checkout_view, name="web-seller-subscription-checkout"),
@@ -194,6 +210,11 @@ urlpatterns = [
     path("console/payouts/<int:payout_id>/reject/", console_views.console_payout_reject_view, name="web-console-payout-reject"),
     path("console/subscriptions/", console_views.console_subscriptions_view, name="web-console-subscriptions"),
     path("console/subscriptions/export/", console_views.console_subscriptions_export_view, name="web-console-subscriptions-export"),
+    path("console/subscription-plans/", console_views.console_subscription_plans_view, name="web-console-subscription-plans"),
+    path("console/subscription-plans/add/", console_views.console_subscription_plan_add_view, name="web-console-subscription-plan-add"),
+    path("console/subscription-plans/<int:plan_id>/edit/", console_views.console_subscription_plan_edit_view, name="web-console-subscription-plan-edit"),
+    path("console/subscription-plans/<int:plan_id>/toggle/", console_views.console_subscription_plan_toggle_view, name="web-console-subscription-plan-toggle"),
+    path("console/subscription-plans/<int:plan_id>/delete/", console_views.console_subscription_plan_delete_view, name="web-console-subscription-plan-delete"),
     path("console/categories/", console_views.console_categories_view, name="web-console-categories"),
     path("console/categories/add/", console_views.console_category_add_view, name="web-console-category-add"),
     path("console/categories/<int:category_id>/edit/", console_views.console_category_edit_view, name="web-console-category-edit"),
@@ -222,4 +243,21 @@ urlpatterns = [
     path("console/collections/<int:collection_id>/edit/", console_views.console_collection_edit_view, name="web-console-collection-edit"),
     path("console/collections/<int:collection_id>/toggle/", console_views.console_collection_toggle_view, name="web-console-collection-toggle"),
     path("console/collections/<int:collection_id>/delete/", console_views.console_collection_delete_view, name="web-console-collection-delete"),
+
+    path("console/disputes/", console_views.console_disputes_view, name="web-console-disputes"),
+    path("console/disputes/<int:dispute_id>/", console_views.console_dispute_detail_view, name="web-console-dispute-detail"),
+    path("console/disputes/<int:dispute_id>/message/", console_views.console_dispute_message_view, name="web-console-dispute-message"),
+    path("console/disputes/<int:dispute_id>/resolve/", console_views.console_dispute_resolve_view, name="web-console-dispute-resolve"),
+
+    path("console/reviews/flagged/", console_views.console_flagged_reviews_view, name="web-console-flagged-reviews"),
+    path("console/reviews/<int:review_id>/moderate/", console_views.console_review_moderate_view, name="web-console-review-moderate"),
+
+    path("console/risk-flags/", console_views.console_risk_flags_view, name="web-console-risk-flags"),
+    path("console/risk-flags/<int:risk_flag_id>/review/", console_views.console_risk_flag_review_view, name="web-console-risk-flag-review"),
+
+    path("console/kyc-queue/", console_views.console_kyc_queue_view, name="web-console-kyc-queue"),
+    path("console/kyc-queue/<int:application_id>/verify/", console_views.console_kyc_verify_view, name="web-console-kyc-verify"),
+    path("console/kyc-queue/<int:application_id>/reject/", console_views.console_kyc_reject_view, name="web-console-kyc-reject"),
+
+    path("console/broadcasts/", console_views.console_broadcasts_view, name="web-console-broadcasts"),
 ]

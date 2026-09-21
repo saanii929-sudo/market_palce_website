@@ -5,8 +5,20 @@ from . import views
 urlpatterns = [
     path("sellers/apply/", views.SellerApplyView.as_view(), name="seller-apply"),
     path("sellers/apply/status/", views.SellerApplicationStatusView.as_view(), name="seller-apply-status"),
+    path("sellers/apply/kyc/", views.SellerKYCSubmitView.as_view(), name="seller-apply-kyc"),
     path("sellers/balance/", views.SellerBalanceView.as_view(), name="seller-balance"),
     path("sellers/payouts/", views.SellerPayoutListCreateView.as_view(), name="seller-payout-list"),
+    path("seller/coupons/", views.SellerCouponListCreateView.as_view(), name="seller-coupon-list"),
+    path(
+        "seller/products/bulk-upload/",
+        views.SellerBulkUploadCreateView.as_view(),
+        name="seller-bulk-upload-create",
+    ),
+    path(
+        "seller/products/bulk-upload/<int:job_id>/",
+        views.SellerBulkUploadDetailView.as_view(),
+        name="seller-bulk-upload-detail",
+    ),
     path(
         "sellers/subscriptions/webhook/",
         views.SubscriptionWebhookView.as_view(),
@@ -22,4 +34,7 @@ urlpatterns = [
         views.AdminSellerApplicationReviewView.as_view(),
         name="admin-seller-application-review",
     ),
+    path("admin/sellers/kyc-queue/", views.AdminSellerKYCQueueView.as_view(), name="admin-seller-kyc-queue"),
+    path("admin/sellers/<int:pk>/kyc/verify/", views.AdminSellerKYCVerifyView.as_view(), name="admin-seller-kyc-verify"),
+    path("admin/sellers/<int:pk>/kyc/reject/", views.AdminSellerKYCRejectView.as_view(), name="admin-seller-kyc-reject"),
 ]

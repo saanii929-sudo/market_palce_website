@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
-from ..models import Order, OrderItem, Payment, ReturnRequest, ReturnRequestItem
+from ..models import OrderItem, Payment, ReturnRequest, ReturnRequestItem, SellerOrder
 from ..notifications import notify_return_requested, notify_return_resolved
 
 
@@ -15,24 +15,22 @@ class ReturnError(Exception):
         super().__init__(message)
 
 
-def _delivered_at(order: Order):
-    event = order.status_history.filter(status=Order.Status.DELIVERED).order_by("-created_at").first()
+def _delivered_at(seller_order: SellerOrder):
+    event = seller_order.status_history.filter(status=SellerOrder.Status.DELIVERED).order_by("-created_at").first()
     return event.created_at if event else None
 
 
-def eligible_order_items(order: Order) -> list[dict]:
-    """Order items still eligible for a return request right now, with the
-    remaining returnable qty and the return deadline."""
-    if order.status != Order.Status.DELIVERED:
+def eligible_order_items(seller_order: SellerOrder) -> list[dict]:
+    if seller_order.status != SellerOrder.Status.DELIVERED:
         return []
 
-    delivered_at = _delivered_at(order)
+    delivered_at = _delivered_at(seller_order)
     if delivered_at is None:
         return []
 
     now = timezone.now()
     results = []
-    for item in order.items.select_related("product").all():
+    for item in seller_order.items.select_related("product").all():
         if not item.product.is_returnable:
             continue
         deadline = delivered_at + datetime.timedelta(days=item.product.return_window_days)
@@ -51,18 +49,17 @@ def eligible_order_items(order: Order) -> list[dict]:
 
 
 @transaction.atomic
-def request_return(*, order: Order, user, lines: list[dict], reason: str) -> ReturnRequest:
-    """lines: [{"order_item_id": int, "qty": int}, ...]"""
-    if order.user_id != user.id:
+def request_return(*, seller_order: SellerOrder, user, lines: list[dict], reason: str) -> ReturnRequest:
+    if seller_order.order.user_id != user.id:
         raise ReturnError("This isn't your order.")
     if not reason.strip():
         raise ReturnError("Please tell us why you're returning this.")
 
-    eligible = {e["item"].id: e["remaining"] for e in eligible_order_items(order)}
+    eligible = {e["item"].id: e["remaining"] for e in eligible_order_items(seller_order)}
     if not eligible:
         raise ReturnError("This order isn't eligible for a return right now.")
 
-    return_request = ReturnRequest.objects.create(order=order, user=user, reason=reason.strip())
+    return_request = ReturnRequest.objects.create(seller_order=seller_order, user=user, reason=reason.strip())
     any_line = False
     for line in lines:
         qty = int(line.get("qty") or 0)
@@ -75,7 +72,7 @@ def request_return(*, order: Order, user, lines: list[dict], reason: str) -> Ret
         if qty > eligible[order_item_id]:
             raise ReturnError("You can't return more than you bought.")
 
-        order_item = OrderItem.objects.get(id=order_item_id, order=order)
+        order_item = OrderItem.objects.get(id=order_item_id, seller_order=seller_order)
         ReturnRequestItem.objects.create(return_request=return_request, order_item=order_item, qty=qty)
         any_line = True
 
