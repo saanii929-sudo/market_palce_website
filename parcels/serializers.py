@@ -64,6 +64,6 @@ class ParcelSerializer(serializers.ModelSerializer):
             "id", "recipient_name", "recipient_phone",
             "pickup_line1", "pickup_city", "dropoff_line1", "dropoff_city",
             "package_size", "description", "photo", "declared_value",
-            "status", "price", "created_at",
+            "status", "price", "payment_status", "checkout_url", "created_at",
         ]
         read_only_fields = fields

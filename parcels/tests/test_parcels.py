@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -9,19 +10,28 @@ from parcels.models import Parcel
 from parcels.services import (
     ParcelError,
     cancel_parcel,
+    check_and_finalize_parcel_payment,
     compute_parcel_price,
     create_parcel,
     find_rider_for_parcel,
     get_delivery_for_parcel,
     get_parcel_quote,
+    initiate_parcel_checkout,
 )
 from riders.tests.factories import RiderProfileFactory
+
+
+def _mark_paid(parcel):
+    parcel.payment_status = Parcel.PaymentStatus.PAID
+    parcel.save(update_fields=["payment_status"])
+    return parcel
 
 
 def _create_dispatched_parcel():
     """A parcel with a rider already online and in range, then an explicit
     find-rider call - creation itself no longer auto-dispatches (see
-    parcels.services.create_parcel / find_rider_for_parcel)."""
+    parcels.services.create_parcel / find_rider_for_parcel). Payment must be
+    settled before find-rider will run (see TestParcelPayment)."""
     rider = RiderProfileFactory(current_lat=Decimal("5.6100"), current_lng=Decimal("-0.1900"))
     sender = UserFactory()
     parcel = create_parcel(
@@ -29,10 +39,30 @@ def _create_dispatched_parcel():
         pickup_line1="1 A St", pickup_city="Accra", pickup_lat=Decimal("5.6100"), pickup_lng=Decimal("-0.1900"),
         dropoff_line1="2 B St", dropoff_city="Accra", dropoff_lat=Decimal("5.6050"), dropoff_lng=Decimal("-0.1880"),
     )
+    _mark_paid(parcel)
     find_rider_for_parcel(parcel, sender)
     delivery = get_delivery_for_parcel(parcel)
     offer = DeliveryOffer.objects.get(delivery=delivery)
     return parcel, delivery, offer, rider
+
+
+def _hubtel_initiate_response(reference="PCL-TEST", checkout_url="https://pay.hubtel.com/checkout/parcel"):
+    return Mock(
+        status_code=200,
+        json=lambda: {
+            "responseCode": "0000",
+            "data": {"checkoutUrl": checkout_url, "checkoutId": "abc", "clientReference": reference},
+        },
+        raise_for_status=Mock(),
+    )
+
+
+def _hubtel_status_response(hubtel_status="Paid"):
+    return Mock(
+        status_code=200,
+        json=lambda: {"responseCode": "0000", "data": {"status": hubtel_status}},
+        raise_for_status=Mock(),
+    )
 
 
 @pytest.mark.django_db
@@ -106,6 +136,7 @@ class TestFindRiderForParcel:
             pickup_line1="1 A St", pickup_city="Accra", pickup_lat=Decimal("5.6100"), pickup_lng=Decimal("-0.1900"),
             dropoff_line1="2 B St", dropoff_city="Accra", dropoff_lat=Decimal("5.6050"), dropoff_lng=Decimal("-0.1880"),
         )
+        _mark_paid(parcel)
 
         payload = find_rider_for_parcel(parcel, sender)
 
@@ -146,6 +177,7 @@ class TestFindRiderForParcel:
             pickup_line1="1 A St", pickup_city="Accra", pickup_lat=Decimal("5.6100"), pickup_lng=Decimal("-0.1900"),
             dropoff_line1="2 B St", dropoff_city="Accra", dropoff_lat=Decimal("5.6050"), dropoff_lng=Decimal("-0.1880"),
         )
+        _mark_paid(parcel)
         find_rider_for_parcel(parcel, sender)
 
         with pytest.raises(ParcelError):
@@ -167,6 +199,7 @@ class TestFindRiderForParcel:
         delivery.dispatch_attempts = MAX_DISPATCH_ATTEMPTS
         delivery.save(update_fields=["dispatch_attempts"])
         assert delivery.no_riders_available
+        _mark_paid(parcel)
 
         # Now bring a rider online and retry - a stale exhausted counter
         # must not silently block the retry from ever finding them.
@@ -176,6 +209,123 @@ class TestFindRiderForParcel:
         delivery.refresh_from_db()
         assert delivery.status == Delivery.Status.OFFERED
         assert DeliveryOffer.objects.get(delivery=delivery).rider_id == rider.id
+
+
+@pytest.mark.django_db
+class TestParcelPayment:
+    def test_find_rider_is_blocked_until_payment_is_paid(self):
+        RiderProfileFactory(current_lat=Decimal("5.6100"), current_lng=Decimal("-0.1900"))
+        sender = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", pickup_lat=Decimal("5.6100"), pickup_lng=Decimal("-0.1900"),
+            dropoff_line1="2 B St", dropoff_city="Accra", dropoff_lat=Decimal("5.6050"), dropoff_lng=Decimal("-0.1880"),
+        )
+        assert parcel.payment_status == Parcel.PaymentStatus.UNPAID
+
+        with pytest.raises(ParcelError):
+            find_rider_for_parcel(parcel, sender)
+
+        delivery = get_delivery_for_parcel(parcel)
+        assert not DeliveryOffer.objects.filter(delivery=delivery).exists()
+
+    @patch("requests.post")
+    def test_initiate_checkout_sets_the_checkout_url(self, mock_post, settings):
+        settings.HUBTEL_API_ID = "id"
+        settings.HUBTEL_API_KEY = "key"
+        settings.HUBTEL_MERCHANT_ACCOUNT = "merchant"
+        mock_post.return_value = _hubtel_initiate_response(checkout_url="https://pay.hubtel.com/checkout/parcel-1")
+
+        sender = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", dropoff_line1="2 B St", dropoff_city="Accra",
+        )
+
+        parcel = initiate_parcel_checkout(
+            parcel, sender,
+            callback_url="https://api.example.com/parcels/payment-webhook/",
+            return_url="https://app.example.com/return",
+            cancellation_url="https://app.example.com/cancel",
+        )
+
+        assert parcel.checkout_url == "https://pay.hubtel.com/checkout/parcel-1"
+        assert parcel.payment_status == Parcel.PaymentStatus.UNPAID  # still unpaid until confirmed
+
+    def test_only_the_sender_can_initiate_checkout(self):
+        sender = UserFactory()
+        other_user = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", dropoff_line1="2 B St", dropoff_city="Accra",
+        )
+
+        with pytest.raises(ParcelError):
+            initiate_parcel_checkout(
+                parcel, other_user,
+                callback_url="https://api.example.com/parcels/payment-webhook/",
+                return_url="https://app.example.com/return",
+                cancellation_url="https://app.example.com/cancel",
+            )
+
+    @patch("requests.get")
+    def test_check_and_finalize_marks_paid_on_success_and_unblocks_find_rider(self, mock_get, settings):
+        settings.HUBTEL_API_ID = "id"
+        settings.HUBTEL_API_KEY = "key"
+        settings.HUBTEL_MERCHANT_ACCOUNT = "merchant"
+        mock_get.return_value = _hubtel_status_response("Paid")
+
+        rider = RiderProfileFactory(current_lat=Decimal("5.6100"), current_lng=Decimal("-0.1900"))
+        sender = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", pickup_lat=Decimal("5.6100"), pickup_lng=Decimal("-0.1900"),
+            dropoff_line1="2 B St", dropoff_city="Accra", dropoff_lat=Decimal("5.6050"), dropoff_lng=Decimal("-0.1880"),
+        )
+
+        parcel = check_and_finalize_parcel_payment(parcel)
+        assert parcel.payment_status == Parcel.PaymentStatus.PAID
+
+        find_rider_for_parcel(parcel, sender)
+        delivery = get_delivery_for_parcel(parcel)
+        assert DeliveryOffer.objects.get(delivery=delivery).rider_id == rider.id
+
+    @patch("requests.get")
+    def test_check_and_finalize_marks_failed_and_keeps_blocking_find_rider(self, mock_get, settings):
+        settings.HUBTEL_API_ID = "id"
+        settings.HUBTEL_API_KEY = "key"
+        settings.HUBTEL_MERCHANT_ACCOUNT = "merchant"
+        mock_get.return_value = _hubtel_status_response("Unpaid")
+
+        sender = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", dropoff_line1="2 B St", dropoff_city="Accra",
+        )
+
+        parcel = check_and_finalize_parcel_payment(parcel)
+        assert parcel.payment_status == Parcel.PaymentStatus.FAILED
+
+        with pytest.raises(ParcelError):
+            find_rider_for_parcel(parcel, sender)
+
+    @patch("requests.get")
+    def test_check_and_finalize_is_a_no_op_once_already_resolved(self, mock_get, settings):
+        settings.HUBTEL_API_ID = "id"
+        settings.HUBTEL_API_KEY = "key"
+        settings.HUBTEL_MERCHANT_ACCOUNT = "merchant"
+        mock_get.return_value = _hubtel_status_response("Paid")
+
+        sender = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", dropoff_line1="2 B St", dropoff_city="Accra",
+        )
+        _mark_paid(parcel)
+
+        check_and_finalize_parcel_payment(parcel)
+
+        mock_get.assert_not_called()
 
 
 @pytest.mark.django_db

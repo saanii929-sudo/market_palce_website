@@ -80,6 +80,62 @@ def get_delivery_for_parcel(parcel: Parcel):
     return get_delivery_for(parcel)
 
 
+def initiate_parcel_checkout(
+    parcel: Parcel, user, *, callback_url: str, return_url: str, cancellation_url: str
+) -> Parcel:
+    """POST /parcels/{id}/checkout/ - starts a Hubtel checkout for this
+    parcel's price. A parcel already exists as a real row at creation (no
+    stock/cart to protect the way orders.PendingCheckout does), so payment
+    state lives directly on the Parcel instead of a separate snapshot model."""
+    from orders.services.payment_gateway import HubtelGateway, PaymentGatewayError
+
+    if parcel.sender_id != user.id:
+        raise ParcelError("This isn't your package.")
+    if parcel.payment_status == Parcel.PaymentStatus.PAID:
+        raise ParcelError("This package has already been paid for.")
+
+    try:
+        result = HubtelGateway().initiate_checkout(
+            reference=parcel.payment_reference,
+            amount=parcel.price,
+            description=f"SportShop parcel delivery #{parcel.pk}",
+            callback_url=callback_url,
+            return_url=return_url,
+            cancellation_url=cancellation_url,
+        )
+    except PaymentGatewayError as exc:
+        raise ParcelError(str(exc)) from exc
+
+    parcel.checkout_url = result["authorization_url"] or ""
+    parcel.save(update_fields=["checkout_url"])
+    return parcel
+
+
+def check_and_finalize_parcel_payment(parcel: Parcel) -> Parcel:
+    """Polled by GET /parcels/{id}/checkout/status/ and pushed by the Hubtel
+    webhook - re-confirms against Hubtel's own status API (never trusts a
+    webhook body directly, same rule as orders.views.PaymentWebhookView) and
+    marks the parcel paid/failed. A no-op once payment_status has already
+    left UNPAID."""
+    from orders.services.payment_gateway import HubtelGateway, PaymentGatewayError
+
+    if parcel.payment_status != Parcel.PaymentStatus.UNPAID:
+        return parcel
+
+    try:
+        result = HubtelGateway().check_status(parcel.payment_reference)
+    except PaymentGatewayError as exc:
+        raise ParcelError(str(exc)) from exc
+
+    if result["status"] == "success":
+        parcel.payment_status = Parcel.PaymentStatus.PAID
+        parcel.save(update_fields=["payment_status"])
+    elif result["status"] == "failed":
+        parcel.payment_status = Parcel.PaymentStatus.FAILED
+        parcel.save(update_fields=["payment_status"])
+    return parcel
+
+
 def find_rider_for_parcel(parcel: Parcel, user) -> dict:
     """POST /parcels/{id}/find-rider/ - starts (or retries) the nearest-
     match search for this parcel's Delivery. A manual retry after
@@ -94,6 +150,8 @@ def find_rider_for_parcel(parcel: Parcel, user) -> dict:
 
     if parcel.sender_id != user.id:
         raise ParcelError("This isn't your package.")
+    if parcel.payment_status != Parcel.PaymentStatus.PAID:
+        raise ParcelError("Please complete payment before we can find you a rider.")
     if parcel.status != Parcel.Status.PENDING:
         raise ParcelError("This package already has a rider assigned, or is no longer searching.")
 

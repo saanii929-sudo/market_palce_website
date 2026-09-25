@@ -359,6 +359,7 @@ class Command(BaseCommand):
 
     def _seed_riders(self):
         from riders.models import RiderProfile, Vehicle
+        from riders.services import required_document_types, review_document, upload_document
 
         # Cluster riders a few hundred metres around wherever the demo
         # seller's own pickup point currently is (set in Store settings, or
@@ -391,19 +392,50 @@ class Command(BaseCommand):
             user.save(update_fields=["password", "is_email_verified", "role"])
 
             rider_profile, _ = RiderProfile.objects.get_or_create(user=user)
-            rider_profile.is_online = True
-            rider_profile.is_verified = True
             rider_profile.current_lat = lat
             rider_profile.current_lng = lng
             rider_profile.rating_avg = Decimal("4.80")
-            rider_profile.save(
-                update_fields=["is_online", "is_verified", "current_lat", "current_lng", "rating_avg"]
-            )
+            rider_profile.save(update_fields=["current_lat", "current_lng", "rating_avg"])
 
             Vehicle.objects.get_or_create(
                 rider=rider_profile, type=vehicle_type,
                 defaults={"make": "Demo", "model": "Model", "plate_number": plate, "color": "White"},
             )
+
+            # Real RiderDocument rows (verified), not just is_verified=True
+            # set directly - so the admin console/Django admin document
+            # review pages have real, consistent records behind these
+            # riders instead of a bypassed shortcut.
+            for doc_type in required_document_types(rider_profile):
+                document = upload_document(rider_profile, doc_type=doc_type, file="demo-placeholder.pdf")
+                if document.status != document.Status.VERIFIED:
+                    review_document(document, action="verify", reviewer_note="Auto-verified demo account.")
+
+            rider_profile.is_online = True
+            rider_profile.save(update_fields=["is_online"])
+
+        # A fifth rider stuck mid-application - documents uploaded but still
+        # pending, and therefore not verified/online - so the admin KYC
+        # queue (web/console/rider-kyc-queue/ and /admin/riders/riderdocument/)
+        # always has something real to demonstrate reviewing, instead of
+        # looking permanently empty (and therefore "broken") in a fresh demo.
+        applicant_email = "rider5@example.com"
+        applicant_user, _ = User.objects.get_or_create(
+            email=applicant_email,
+            defaults={"is_email_verified": True, "full_name": "Yaw Darko", "role": User.Role.RIDER},
+        )
+        applicant_user.set_password("StrongPass123!")
+        applicant_user.is_email_verified = True
+        applicant_user.role = User.Role.RIDER
+        applicant_user.save(update_fields=["password", "is_email_verified", "role"])
+
+        applicant_profile, _ = RiderProfile.objects.get_or_create(user=applicant_user)
+        Vehicle.objects.get_or_create(
+            rider=applicant_profile, type=Vehicle.Type.MOTORCYCLE,
+            defaults={"make": "Demo", "model": "Model", "plate_number": "GT-7890-24", "color": "Black"},
+        )
+        for doc_type in required_document_types(applicant_profile):
+            upload_document(applicant_profile, doc_type=doc_type, file="demo-placeholder.pdf")
 
     def _seed_pos(self, products_by_slug):
         seller = Seller.objects.filter(slug="northmark-store").first()

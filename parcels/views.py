@@ -14,10 +14,12 @@ from .serializers import (
 from .services import (
     ParcelError,
     cancel_parcel,
+    check_and_finalize_parcel_payment,
     create_parcel,
     find_rider_for_parcel,
     get_delivery_for_parcel,
     get_parcel_quote,
+    initiate_parcel_checkout,
 )
 
 
@@ -55,6 +57,74 @@ class ParcelListCreateView(generics.ListCreateAPIView):
             return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(ParcelSerializer(parcel).data, status=status.HTTP_201_CREATED)
+
+
+class ParcelCheckoutView(APIView):
+    """POST /parcels/{id}/checkout/ - starts a Hubtel checkout for the
+    parcel's price. The client should open the returned checkout_url, then
+    poll ParcelCheckoutStatusView (or wait for find-rider to unblock once
+    the webhook lands)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        from django.conf import settings
+        from django.urls import reverse
+
+        parcel = get_object_or_404(Parcel, pk=pk)
+        try:
+            parcel = initiate_parcel_checkout(
+                parcel, request.user,
+                callback_url=request.build_absolute_uri(reverse("parcel-payment-webhook")),
+                return_url=request.data.get("return_url") or settings.HUBTEL_RETURN_URL,
+                cancellation_url=request.data.get("cancellation_url") or settings.HUBTEL_CANCELLATION_URL,
+            )
+        except ParcelError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(ParcelSerializer(parcel).data)
+
+
+class ParcelCheckoutStatusView(APIView):
+    """GET /parcels/{id}/checkout/status/ - the client polls this after
+    opening checkout_url; it re-confirms against Hubtel directly rather than
+    waiting on the webhook."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk):
+        parcel = get_object_or_404(Parcel, pk=pk, sender=request.user)
+        try:
+            parcel = check_and_finalize_parcel_payment(parcel)
+        except ParcelError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response(ParcelSerializer(parcel).data)
+
+
+class ParcelPaymentWebhookView(APIView):
+    """Hubtel's callback for parcel payments - a parcel isn't a
+    PendingCheckout/Order so this is separate from orders' generic
+    /payments/webhook/<gateway>/ endpoint. Same rule as that one: the
+    callback body isn't trusted directly, always re-confirmed via
+    HubtelGateway.check_status first."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        from orders.services.payment_gateway import HubtelGateway
+
+        event = HubtelGateway().parse_webhook_event(request)
+        parcel = Parcel.objects.filter(payment_reference=event.get("reference")).first()
+        if parcel is None:
+            return Response({"detail": "Unknown reference."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            check_and_finalize_parcel_payment(parcel)
+        except ParcelError:
+            pass
+
+        return Response({"detail": "Webhook processed."})
 
 
 class ParcelFindRiderView(APIView):

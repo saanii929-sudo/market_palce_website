@@ -1,8 +1,14 @@
+import secrets
+
 from django.conf import settings
 from django.db import models
 
 from accounts.models import Address
 from core.models import TimeStampedModel
+
+
+def generate_parcel_payment_reference() -> str:
+    return f"PCL-{secrets.token_hex(6).upper()}"
 
 
 class Parcel(TimeStampedModel):
@@ -49,6 +55,15 @@ class Parcel(TimeStampedModel):
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class PaymentStatus(models.TextChoices):
+        UNPAID = "unpaid", "Unpaid"
+        PAID = "paid", "Paid"
+        FAILED = "failed", "Failed"
+
+    payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.UNPAID)
+    payment_reference = models.CharField(max_length=40, blank=True, default=generate_parcel_payment_reference)
+    checkout_url = models.URLField(max_length=500, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

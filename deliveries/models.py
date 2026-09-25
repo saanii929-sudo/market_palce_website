@@ -13,8 +13,14 @@ from parcels.models import Parcel
 OFFER_TTL_SECONDS = 12
 MAX_DISPATCH_ATTEMPTS = 5
 
-RIDER_BASE_FARE = Decimal("5.00")
-RIDER_PER_KM_RATE = Decimal("2.00")
+# The rider's pay is a straight split of what was actually charged for
+# this delivery (self.price - a SellerOrder's delivery_fee, or a Parcel's
+# price) - not an independent distance-based formula. The rider keeps
+# RIDER_COMMISSION_RATE of that, floored at RIDER_MINIMUM_FARE so a very
+# cheap/short delivery still pays something reasonable; the platform keeps
+# the rest.
+RIDER_COMMISSION_RATE = Decimal("0.75")
+RIDER_MINIMUM_FARE = Decimal("5.00")
 RIDER_SURGE_MULTIPLIER = Decimal("1.00")
 
 
@@ -92,16 +98,23 @@ class Delivery(TimeStampedModel):
         return self.status == self.Status.PENDING and self.dispatch_attempts >= MAX_DISPATCH_ATTEMPTS
 
     def lock_rider_fare(self) -> None:
+        """Computes and freezes the rider's payout for this delivery the
+        first time it's offered - a percentage split of self.price (see
+        RIDER_COMMISSION_RATE above), never recomputed afterwards even
+        across retries to different riders or if the price/distance
+        estimate shifts. rider_distance_bonus is always 0.00 now (kept for
+        schema/earnings-breakdown compatibility) - pay is a price split,
+        not a distance-based formula."""
         if self.rider_fare is not None:
             return
 
-        distance_bonus = RIDER_PER_KM_RATE * (self.distance_km or Decimal("0.00"))
-        total = (RIDER_BASE_FARE + distance_bonus) * RIDER_SURGE_MULTIPLIER
+        commission = (self.price * RIDER_COMMISSION_RATE).quantize(Decimal("0.01"))
+        total = (max(commission, RIDER_MINIMUM_FARE) * RIDER_SURGE_MULTIPLIER).quantize(Decimal("0.01"))
 
-        self.rider_base_fare = RIDER_BASE_FARE
-        self.rider_distance_bonus = distance_bonus.quantize(Decimal("0.01"))
+        self.rider_base_fare = total
+        self.rider_distance_bonus = Decimal("0.00")
         self.rider_surge_multiplier = RIDER_SURGE_MULTIPLIER
-        self.rider_fare = total.quantize(Decimal("0.01"))
+        self.rider_fare = total
         self.save(update_fields=["rider_base_fare", "rider_distance_bonus", "rider_surge_multiplier", "rider_fare"])
 
     @property
