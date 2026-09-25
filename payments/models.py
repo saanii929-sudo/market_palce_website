@@ -9,6 +9,7 @@ class PaymentMethodToken(TimeStampedModel):
     class Gateway(models.TextChoices):
         PAYSTACK = "paystack", "Paystack"
         FLUTTERWAVE = "flutterwave", "Flutterwave"
+        HUBTEL = "hubtel", "Hubtel"
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="payment_methods")
     gateway = models.CharField(max_length=20, choices=Gateway.choices)
