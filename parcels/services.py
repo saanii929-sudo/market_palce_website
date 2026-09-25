@@ -66,7 +66,11 @@ def create_parcel(
         package_size=package_size, description=description, photo=photo, declared_value=declared_value,
         price=price,
     )
-    create_delivery_for_parcel(parcel)
+    # Creating the parcel does NOT search for a rider - that's a distinct,
+    # explicit step (find_rider_for_parcel / POST /parcels/{id}/find-rider/),
+    # same as every real delivery app: "place order" and "searching for a
+    # driver" are two separate screens, not one atomic action.
+    create_delivery_for_parcel(parcel, dispatch=False)
     return parcel
 
 
@@ -74,6 +78,42 @@ def get_delivery_for_parcel(parcel: Parcel):
     from deliveries.services import get_delivery_for
 
     return get_delivery_for(parcel)
+
+
+def find_rider_for_parcel(parcel: Parcel, user) -> dict:
+    """POST /parcels/{id}/find-rider/ - starts (or retries) the nearest-
+    match search for this parcel's Delivery. A manual retry after
+    'no riders available' gets a fresh set of dispatch attempts - the
+    MAX_DISPATCH_ATTEMPTS cap exists to stop the automatic cascade from
+    spamming riders forever on its own, not to block a customer explicitly
+    asking to search again. Returns the same shape as GET /parcels/{id}/tracking/
+    so the 'Finding your rider...' screen can poll that endpoint afterwards
+    without needing a different shape."""
+    from deliveries.models import Delivery
+    from deliveries.services import build_tracking_payload, dispatch_delivery
+
+    if parcel.sender_id != user.id:
+        raise ParcelError("This isn't your package.")
+    if parcel.status != Parcel.Status.PENDING:
+        raise ParcelError("This package already has a rider assigned, or is no longer searching.")
+
+    delivery = get_delivery_for_parcel(parcel)
+    if delivery is None:
+        raise ParcelError("No delivery record found for this package.")
+    if delivery.status == Delivery.Status.OFFERED and not delivery.no_riders_available:
+        # A rider already has a live, unexpired offer out - starting a
+        # second search now would risk two riders being able to accept the
+        # same delivery. Let the existing offer resolve (accept/decline/
+        # expire) before searching again.
+        raise ParcelError("We're already waiting on a rider to respond. Try again in a few seconds.")
+
+    if delivery.no_riders_available:
+        delivery.dispatch_attempts = 0
+        delivery.save(update_fields=["dispatch_attempts"])
+
+    dispatch_delivery(delivery)
+    delivery.refresh_from_db()
+    return build_tracking_payload(delivery)
 
 
 @transaction.atomic

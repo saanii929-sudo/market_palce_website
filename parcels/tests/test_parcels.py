@@ -11,6 +11,7 @@ from parcels.services import (
     cancel_parcel,
     compute_parcel_price,
     create_parcel,
+    find_rider_for_parcel,
     get_delivery_for_parcel,
     get_parcel_quote,
 )
@@ -18,8 +19,9 @@ from riders.tests.factories import RiderProfileFactory
 
 
 def _create_dispatched_parcel():
-    """A parcel with a rider already online and in range, so create_parcel's
-    call into Phase 2's dispatch produces a live pending offer."""
+    """A parcel with a rider already online and in range, then an explicit
+    find-rider call - creation itself no longer auto-dispatches (see
+    parcels.services.create_parcel / find_rider_for_parcel)."""
     rider = RiderProfileFactory(current_lat=Decimal("5.6100"), current_lng=Decimal("-0.1900"))
     sender = UserFactory()
     parcel = create_parcel(
@@ -27,6 +29,7 @@ def _create_dispatched_parcel():
         pickup_line1="1 A St", pickup_city="Accra", pickup_lat=Decimal("5.6100"), pickup_lng=Decimal("-0.1900"),
         dropoff_line1="2 B St", dropoff_city="Accra", dropoff_lat=Decimal("5.6050"), dropoff_lng=Decimal("-0.1880"),
     )
+    find_rider_for_parcel(parcel, sender)
     delivery = get_delivery_for_parcel(parcel)
     offer = DeliveryOffer.objects.get(delivery=delivery)
     return parcel, delivery, offer, rider
@@ -78,6 +81,101 @@ class TestParcelCreation:
                 package_size=Parcel.PackageSize.SMALL, pickup_line1="1 A St", pickup_city="Accra",
                 dropoff_line1="", dropoff_city="",
             )
+
+
+@pytest.mark.django_db
+class TestFindRiderForParcel:
+    def test_create_parcel_does_not_auto_dispatch(self):
+        RiderProfileFactory(current_lat=Decimal("5.6100"), current_lng=Decimal("-0.1900"))
+        sender = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", pickup_lat=Decimal("5.6100"), pickup_lng=Decimal("-0.1900"),
+            dropoff_line1="2 B St", dropoff_city="Accra", dropoff_lat=Decimal("5.6050"), dropoff_lng=Decimal("-0.1880"),
+        )
+        delivery = get_delivery_for_parcel(parcel)
+        assert delivery.status == Delivery.Status.PENDING
+        assert delivery.dispatch_attempts == 0
+        assert not DeliveryOffer.objects.filter(delivery=delivery).exists()
+
+    def test_find_rider_creates_the_offer(self):
+        rider = RiderProfileFactory(current_lat=Decimal("5.6100"), current_lng=Decimal("-0.1900"))
+        sender = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", pickup_lat=Decimal("5.6100"), pickup_lng=Decimal("-0.1900"),
+            dropoff_line1="2 B St", dropoff_city="Accra", dropoff_lat=Decimal("5.6050"), dropoff_lng=Decimal("-0.1880"),
+        )
+
+        payload = find_rider_for_parcel(parcel, sender)
+
+        # "rider" only populates once a Trip exists (i.e. after accept) -
+        # at this point there's just a pending offer out.
+        assert payload["delivery_status"] == "offered"
+        assert payload["rider"] is None
+        delivery = get_delivery_for_parcel(parcel)
+        assert delivery.status == Delivery.Status.OFFERED
+        assert DeliveryOffer.objects.get(delivery=delivery).rider_id == rider.id
+
+    def test_find_rider_only_the_sender_can_call_it(self):
+        sender = UserFactory()
+        other_user = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", dropoff_line1="2 B St", dropoff_city="Accra",
+        )
+        with pytest.raises(ParcelError):
+            find_rider_for_parcel(parcel, other_user)
+
+    def test_find_rider_rejects_once_a_rider_is_assigned(self):
+        parcel, delivery, offer, rider = _create_dispatched_parcel()
+        accept_offer(offer, rider)
+        parcel.refresh_from_db()
+
+        with pytest.raises(ParcelError):
+            find_rider_for_parcel(parcel, parcel.sender)
+
+    def test_find_rider_rejects_a_second_search_while_an_offer_is_still_pending(self):
+        """Prevents a customer mashing 'find rider' from creating two
+        simultaneous offers to two different riders for the same parcel."""
+        RiderProfileFactory(current_lat=Decimal("5.6100"), current_lng=Decimal("-0.1900"))
+        RiderProfileFactory(current_lat=Decimal("5.6101"), current_lng=Decimal("-0.1900"))
+        sender = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", pickup_lat=Decimal("5.6100"), pickup_lng=Decimal("-0.1900"),
+            dropoff_line1="2 B St", dropoff_city="Accra", dropoff_lat=Decimal("5.6050"), dropoff_lng=Decimal("-0.1880"),
+        )
+        find_rider_for_parcel(parcel, sender)
+
+        with pytest.raises(ParcelError):
+            find_rider_for_parcel(parcel, sender)
+
+        delivery = get_delivery_for_parcel(parcel)
+        assert DeliveryOffer.objects.filter(delivery=delivery).count() == 1
+
+    def test_find_rider_retry_resets_attempts_after_no_riders_available(self):
+        from deliveries.models import MAX_DISPATCH_ATTEMPTS
+
+        sender = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", pickup_lat=Decimal("5.6100"), pickup_lng=Decimal("-0.1900"),
+            dropoff_line1="2 B St", dropoff_city="Accra", dropoff_lat=Decimal("5.6050"), dropoff_lng=Decimal("-0.1880"),
+        )
+        delivery = get_delivery_for_parcel(parcel)
+        delivery.dispatch_attempts = MAX_DISPATCH_ATTEMPTS
+        delivery.save(update_fields=["dispatch_attempts"])
+        assert delivery.no_riders_available
+
+        # Now bring a rider online and retry - a stale exhausted counter
+        # must not silently block the retry from ever finding them.
+        rider = RiderProfileFactory(current_lat=Decimal("5.6100"), current_lng=Decimal("-0.1900"))
+        find_rider_for_parcel(parcel, sender)
+
+        delivery.refresh_from_db()
+        assert delivery.status == Delivery.Status.OFFERED
+        assert DeliveryOffer.objects.get(delivery=delivery).rider_id == rider.id
 
 
 @pytest.mark.django_db

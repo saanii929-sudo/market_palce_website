@@ -32,13 +32,39 @@ class RiderProfile(TimeStampedModel):
     def set_online(self, is_online: bool) -> None:
         if is_online and not self.is_verified:
             raise ValidationError("You must complete verification before going online.")
+        if is_online == self.is_online:
+            return
         self.is_online = is_online
         self.save(update_fields=["is_online"])
+
+        if is_online:
+            RiderOnlineSession.objects.create(rider=self)
+        else:
+            session = self.online_sessions.filter(ended_at__isnull=True).order_by("-started_at").first()
+            if session is not None:
+                session.ended_at = timezone.now()
+                session.save(update_fields=["ended_at"])
 
     def update_location(self, lat, lng) -> None:
         self.current_lat = lat
         self.current_lng = lng
         self.save(update_fields=["current_lat", "current_lng"])
+
+
+class RiderOnlineSession(TimeStampedModel):
+    """One row per online-toggle-on -> toggle-off span, so 'online hours
+    today' on the earnings screen is a real aggregate instead of a guess.
+    ended_at is null while the rider is still online."""
+
+    rider = models.ForeignKey(RiderProfile, on_delete=models.CASCADE, related_name="online_sessions")
+    started_at = models.DateTimeField(default=timezone.now)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self):
+        return f"RiderOnlineSession({self.rider}, {self.started_at})"
 
 
 class Vehicle(TimeStampedModel):
@@ -112,8 +138,13 @@ class RiderPayoutAccount(TimeStampedModel):
 
     rider = models.ForeignKey(RiderProfile, on_delete=models.CASCADE, related_name="payout_accounts")
     type = models.CharField(max_length=20, choices=Type.choices)
+    provider = models.CharField(max_length=100, blank=True, help_text="e.g. 'MTN Mobile Money', 'GCB Bank'.")
+    masked_number = models.CharField(
+        max_length=30, blank=True, help_text="Display-only, e.g. '•••• 1122' - never the full account/MoMo number.",
+    )
     account_reference = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_at"]

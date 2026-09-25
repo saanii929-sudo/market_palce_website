@@ -171,3 +171,117 @@ class RiderPayoutSerializer(serializers.ModelSerializer):
         model = RiderPayout
         fields = ["id", "amount", "payout_account", "status", "requested_at", "completed_at", "admin_note"]
         read_only_fields = fields
+
+
+class DeliveryRequestSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    kind = serializers.ChoiceField(choices=["store_order", "parcel"])
+    pickup_label = serializers.CharField()
+    pickup_address = serializers.CharField()
+    dropoff_address = serializers.CharField()
+    customer_name = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    distance_km = serializers.DecimalField(max_digits=6, decimal_places=2, allow_null=True)
+    eta_minutes = serializers.IntegerField()
+    item_count = serializers.IntegerField()
+
+
+class ActiveDeliverySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    status = serializers.CharField()
+    kind = serializers.ChoiceField(choices=["store_order", "parcel"])
+    pickup_label = serializers.CharField()
+    pickup_address = serializers.CharField()
+    dropoff_address = serializers.CharField()
+    customer_name = serializers.CharField()
+    customer_phone = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    distance_km = serializers.DecimalField(max_digits=6, decimal_places=2, allow_null=True)
+    picked_up_at = serializers.DateTimeField(allow_null=True)
+
+
+class DeliveryCompleteSerializer(serializers.Serializer):
+    delivery_code = serializers.CharField(max_length=4)
+
+
+class DeliveryHistorySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    kind = serializers.ChoiceField(choices=["store_order", "parcel"])
+    order_number_or_parcel_id = serializers.CharField()
+    pickup_label = serializers.CharField()
+    dropoff_area = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    status = serializers.ChoiceField(choices=["delivered", "cancelled"])
+    rating = serializers.IntegerField(allow_null=True)
+    completed_at = serializers.DateTimeField(allow_null=True)
+
+
+class NewEarningsSummarySerializer(serializers.Serializer):
+    available_balance = serializers.DecimalField(max_digits=10, decimal_places=2)
+    today_earnings = serializers.DecimalField(max_digits=10, decimal_places=2)
+    trips_today = serializers.IntegerField()
+    online_hours_today = serializers.DecimalField(max_digits=5, decimal_places=2)
+    week = serializers.ListField(child=serializers.DecimalField(max_digits=10, decimal_places=2))
+    total_trips = serializers.IntegerField()
+    avg_per_trip = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+class EarningsActivitySerializer(serializers.Serializer):
+    type = serializers.ChoiceField(choices=["delivery", "cash_out"])
+    label = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    created_at = serializers.DateTimeField()
+
+
+class PayoutMethodSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    subtitle = serializers.CharField()
+    is_default = serializers.BooleanField()
+
+    @classmethod
+    def build(cls, account: RiderPayoutAccount) -> dict:
+        return {
+            "id": account.id,
+            "title": account.provider or account.get_type_display(),
+            "subtitle": account.masked_number,
+            "is_default": account.is_default,
+        }
+
+
+class PayoutMethodCreateSerializer(serializers.Serializer):
+    provider = serializers.CharField(max_length=100)
+    account_number = serializers.CharField(max_length=50, write_only=True)
+    type = serializers.ChoiceField(choices=RiderPayoutAccount.Type.choices, required=False, default=RiderPayoutAccount.Type.MOMO)
+
+
+class CashOutSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    payout_method_id = serializers.IntegerField()
+
+    def validate_payout_method_id(self, value):
+        try:
+            return RiderPayoutAccount.objects.get(id=value)
+        except RiderPayoutAccount.DoesNotExist:
+            raise serializers.ValidationError("Select a valid payout method.")
+
+
+class RiderReviewSerializer(serializers.Serializer):
+    reviewer_name = serializers.SerializerMethodField()
+    rating = serializers.IntegerField(source="stars")
+    comment = serializers.CharField()
+    created_at = serializers.DateTimeField()
+
+    def get_reviewer_name(self, obj) -> str:
+        customer = obj.customer
+        return customer.full_name or customer.email or customer.phone or "Customer"
+
+
+class RiderReviewsSummarySerializer(serializers.Serializer):
+    average = serializers.DecimalField(max_digits=3, decimal_places=2)
+    breakdown = serializers.DictField(child=serializers.FloatField())
+
+
+class RateRiderSubmitSerializer(serializers.Serializer):
+    rating = serializers.IntegerField(min_value=1, max_value=5)
+    comment = serializers.CharField(max_length=500, required=False, allow_blank=True, default="")

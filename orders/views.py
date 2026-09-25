@@ -180,6 +180,37 @@ class SellerOrderTrackingView(generics.RetrieveAPIView):
         ).select_related("seller", "shipment").prefetch_related("status_history")
 
 
+class SellerOrderRateRiderView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, order_number, seller_order_id):
+        from deliveries.services import TripError, get_delivery_for, rate_trip
+        from riders.serializers import RateRiderSubmitSerializer
+
+        seller_order = get_object_or_404(
+            SellerOrder, id=seller_order_id, order__order_number=order_number, order__user=request.user,
+        )
+        serializer = RateRiderSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        delivery = get_delivery_for(seller_order)
+        trip = getattr(delivery, "trip", None) if delivery else None
+        if trip is None:
+            return Response({"detail": "No rider trip found for this order."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            rating = rate_trip(
+                trip, request.user,
+                stars=serializer.validated_data["rating"], comment=serializer.validated_data["comment"],
+            )
+        except TripError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {"id": rating.id, "rating": rating.stars, "comment": rating.comment}, status=status.HTTP_201_CREATED
+        )
+
+
 class HubtelCheckoutStatusView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 

@@ -2,6 +2,7 @@ import datetime
 import math
 from decimal import Decimal
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 from notifications.services import notify
 from riders.models import RiderProfile, RiderRating
@@ -19,6 +20,9 @@ from sellers.models import SellerRiderBlock
 from orders.models import SellerOrder
 from riders.services import current_vehicle
 from riders.services import credit_trip_earnings
+from orders.models import SellerOrder
+from parcels.models import Parcel
+from sellers.models import SellerFulfillmentRating
 
 
 DEFAULT_SEARCH_RADIUS_KM = 15.0
@@ -122,7 +126,7 @@ def get_delivery_for(content_object) -> Delivery | None:
     return Delivery.objects.filter(content_type=content_type, object_id=content_object.pk).order_by("-id").first()
 
 
-def create_delivery_for_parcel(parcel) -> Delivery:
+def create_delivery_for_parcel(parcel, *, dispatch: bool = True) -> Delivery:
     delivery = create_delivery_for(
         parcel,
         delivery_type=Delivery.DeliveryType.PARCEL,
@@ -138,7 +142,8 @@ def create_delivery_for_parcel(parcel) -> Delivery:
         dropoff_lng=parcel.dropoff_lng,
         price=parcel.price,
     )
-    dispatch_delivery(delivery)
+    if dispatch:
+        dispatch_delivery(delivery)
     return delivery
 
 
@@ -262,14 +267,70 @@ def list_nearby_riders_for_seller_order(seller_order, radius_km: float = DEFAULT
     return results
 
 
-def _notify_rider_of_offer(offer: DeliveryOffer) -> None:
+def build_delivery_request_payload(offer: DeliveryOffer) -> dict:
     
 
+    delivery = offer.delivery
+    obj = delivery.content_object
+
+    if isinstance(obj, SellerOrder):
+        kind = "store_order"
+        item_count = obj.items.aggregate(total=Sum("qty"))["total"] or 0
+    elif isinstance(obj, Parcel):
+        kind = "parcel"
+        item_count = 1
+    else:
+        kind = "store_order"
+        item_count = 0
+
+    distance_km = delivery.distance_km
+    rider = offer.rider
+    if delivery.pickup_lat is not None and delivery.pickup_lng is not None \
+            and rider.current_lat is not None and rider.current_lng is not None:
+        distance_km = round(
+            haversine_km(
+                float(rider.current_lat), float(rider.current_lng),
+                float(delivery.pickup_lat), float(delivery.pickup_lng),
+            ),
+            2,
+        )
+
+    eta_minutes = int((Decimal(str(distance_km or 0)) / AVERAGE_RIDER_SPEED_KMH) * 60)
+
+    return {
+        "id": offer.id,
+        "kind": kind,
+        "pickup_label": delivery.pickup_contact_name,
+        "pickup_address": delivery.pickup_address,
+        "dropoff_address": delivery.dropoff_address,
+        "customer_name": delivery.dropoff_contact_name,
+        "amount": str(delivery.rider_fare) if delivery.rider_fare is not None else None,
+        "distance_km": str(distance_km) if distance_km is not None else None,
+        "eta_minutes": eta_minutes,
+        "item_count": item_count,
+    }
+
+
+def _broadcast_offer_to_rider(offer: DeliveryOffer) -> None:
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+    async_to_sync(channel_layer.group_send)(
+        f"rider_dispatch_{offer.rider_id}",
+        {"type": "delivery.request", "request": build_delivery_request_payload(offer)},
+    )
+
+
+def _notify_rider_of_offer(offer: DeliveryOffer) -> None:
     delivery = offer.delivery
     notify(
         offer.rider.user, "system", "New delivery request",
         f"GH₵{delivery.price} - pickup at {delivery.pickup_address}. You have {OFFER_TTL_SECONDS} seconds to respond.",
     )
+    _broadcast_offer_to_rider(offer)
 
 
 @transaction.atomic
@@ -288,6 +349,9 @@ def dispatch_delivery(delivery: Delivery) -> DeliveryOffer | None:
     update_fields = ["dispatch_attempts"]
 
     if rider is None:
+        if delivery.status != Delivery.Status.PENDING:
+            delivery.status = Delivery.Status.PENDING
+            update_fields.append("status")
         delivery.save(update_fields=update_fields)
         return None
 
@@ -310,12 +374,6 @@ def dispatch_delivery(delivery: Delivery) -> DeliveryOffer | None:
 
 @transaction.atomic
 def dispatch_delivery_direct(delivery: Delivery, rider) -> DeliveryOffer:
-    """The 'direct' half of seller-initiated dispatch - a single offer
-    targeted at one chosen rider, skipping the nearest-match query
-    entirely. Still just a DeliveryOffer the rider must accept; nothing
-    here creates a Trip directly. Callers (sellers.services.request_rider_for_seller_order)
-    are responsible for tagging delivery.initiated_by/requested_by/request_mode
-    before calling this."""
     delivery = Delivery.objects.select_for_update().get(pk=delivery.pk)
     if delivery.status not in (Delivery.Status.PENDING, Delivery.Status.OFFERED):
         raise DispatchError("This delivery already has an active offer or trip.")
@@ -437,6 +495,8 @@ def accept_offer(offer: DeliveryOffer, rider) -> Trip:
     trip = Trip.objects.create(delivery=delivery, rider=rider, status=Trip.Status.HEADING_TO_PICKUP)
     TripStatusHistory.objects.create(trip=trip, status=Trip.Status.HEADING_TO_PICKUP)
     delivery.advance_content_to_rider_assigned()
+
+    ProofOfDelivery.objects.get_or_create(trip=trip)
 
     if delivery.requested_by_id:
         transaction.on_commit(lambda: _notify_seller_of_accepted_offer(offer))
@@ -568,11 +628,15 @@ def complete_trip(trip: Trip, rider) -> Trip:
 
     trip.delivery.advance_content_to_delivered()
 
-    
-
     credit_trip_earnings(trip)
 
     return trip
+
+
+@transaction.atomic
+def complete_delivery_with_code(trip: Trip, rider, *, delivery_code: str) -> Trip:
+    submit_proof_of_delivery(trip, rider, otp_code=delivery_code)
+    return complete_trip(trip, rider)
 
 
 @transaction.atomic
@@ -597,12 +661,7 @@ def rate_trip(trip: Trip, customer, *, stars: int, comment: str = ""):
 
 @transaction.atomic
 def rate_seller_fulfillment(trip: Trip, rider, *, stars: int, comment: str = ""):
-    """The reverse direction of rate_trip - the rider rates the seller's
-    pickup experience. Internal-facing only; see sellers.services.get_seller_fulfillment_rating
-    for the aggregate an admin sees. Only meaningful for a SellerOrder-backed
-    trip - a Parcel has no seller to rate."""
-    from orders.models import SellerOrder
-    from sellers.models import SellerFulfillmentRating
+
 
     trip = Trip.objects.select_for_update().get(pk=trip.pk)
     if trip.rider_id != rider.id:
@@ -620,6 +679,35 @@ def rate_seller_fulfillment(trip: Trip, rider, *, stars: int, comment: str = "")
     return SellerFulfillmentRating.objects.create(
         trip=trip, rider=rider, seller=obj.seller, stars=stars, comment=comment,
     )
+
+
+def _delivery_kind(delivery: Delivery) -> str:
+    from orders.models import SellerOrder
+    from parcels.models import Parcel
+
+    obj = delivery.content_object
+    if isinstance(obj, Parcel):
+        return "parcel"
+    if isinstance(obj, SellerOrder):
+        return "store_order"
+    return "store_order"
+
+
+def build_active_delivery_payload(trip: Trip) -> dict:
+    delivery = trip.delivery
+    return {
+        "id": trip.id,
+        "status": trip.status,
+        "kind": _delivery_kind(delivery),
+        "pickup_label": delivery.pickup_contact_name,
+        "pickup_address": delivery.pickup_address,
+        "dropoff_address": delivery.dropoff_address,
+        "customer_name": delivery.dropoff_contact_name,
+        "customer_phone": delivery.dropoff_contact_phone,
+        "amount": delivery.rider_fare,
+        "distance_km": delivery.distance_km,
+        "picked_up_at": trip.picked_up_at,
+    }
 
 
 def build_tracking_payload(delivery: Delivery) -> dict:

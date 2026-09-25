@@ -13,6 +13,11 @@ urlpatterns = [
         views.SellerOrderTrackingView.as_view(),
         name="seller-order-tracking",
     ),
+    path(
+        "orders/<str:order_number>/seller-orders/<int:seller_order_id>/rate-rider/",
+        views.SellerOrderRateRiderView.as_view(),
+        name="seller-order-rate-rider",
+    ),
     path("orders/<str:order_number>/cancel/", views.OrderCancelView.as_view(), name="order-cancel"),
     path("orders/<str:order_number>/buy-again/", views.OrderBuyAgainView.as_view(), name="order-buy-again"),
     path(

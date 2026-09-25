@@ -136,3 +136,23 @@ class TestDispatchCascade:
         offer_2 = dispatch_delivery(delivery_2)
 
         assert offer_2 is None
+
+    def test_status_resets_to_pending_when_a_cascade_attempt_finds_nobody(self):
+        """A delivery that successfully matched once, then had that offer
+        lapse with no replacement found, must not stay stuck reporting
+        status='offered' - no_riders_available (status==PENDING and
+        attempts>=MAX) depends on this to ever become true."""
+        rider = RiderProfileFactory(current_lat=Decimal("5.6040"), current_lng=Decimal("-0.1870"))
+        delivery = DeliveryFactory()
+
+        first_offer = dispatch_delivery(delivery)
+        assert first_offer is not None
+        delivery.refresh_from_db()
+        assert delivery.status == Delivery.Status.OFFERED
+
+        # That rider is now the only one who exists, so declining removes
+        # the sole eligible candidate - the cascade must find nobody.
+        decline_offer(first_offer, rider)
+
+        delivery.refresh_from_db()
+        assert delivery.status == Delivery.Status.PENDING

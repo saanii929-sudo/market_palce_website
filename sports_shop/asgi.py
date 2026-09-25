@@ -23,9 +23,12 @@ from channels.auth import AuthMiddlewareStack  # noqa: E402
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 
 from chat.middleware import JWTAuthMiddleware  # noqa: E402
-from chat.routing import websocket_urlpatterns  # noqa: E402
+from chat.routing import websocket_urlpatterns as chat_websocket_urlpatterns  # noqa: E402
+from riders.routing import websocket_urlpatterns as rider_websocket_urlpatterns  # noqa: E402
 
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
-    "websocket": AuthMiddlewareStack(JWTAuthMiddleware(URLRouter(websocket_urlpatterns))),
+    "websocket": AuthMiddlewareStack(
+        JWTAuthMiddleware(URLRouter(chat_websocket_urlpatterns + rider_websocket_urlpatterns))
+    ),
 })

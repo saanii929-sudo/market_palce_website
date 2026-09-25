@@ -5,10 +5,17 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import RiderDocument
+from .models import RiderDocument, RiderPayoutAccount
 from .serializers import (
-    EarningsSummarySerializer,
+    ActiveDeliverySerializer,
+    CashOutSerializer,
+    DeliveryCompleteSerializer,
+    DeliveryHistorySerializer,
+    EarningsActivitySerializer,
     LocationPingSerializer,
+    NewEarningsSummarySerializer,
+    PayoutMethodCreateSerializer,
+    PayoutMethodSerializer,
     RiderDocumentReviewSerializer,
     RiderDocumentSerializer,
     RiderDocumentUploadSerializer,
@@ -18,6 +25,8 @@ from .serializers import (
     RiderPayoutSerializer,
     RiderProfileSerializer,
     RiderRegisterSerializer,
+    RiderReviewSerializer,
+    RiderReviewsSummarySerializer,
     RiderSettingsSerializer,
     VehicleSerializer,
     VehicleUpdateSerializer,
@@ -25,12 +34,19 @@ from .serializers import (
 )
 from .services import (
     RiderError,
+    add_payout_method,
     current_vehicle,
+    get_deliveries_history,
+    get_earnings_activity,
     get_earnings_summary,
     get_earnings_transactions,
+    get_reviews,
+    get_reviews_summary,
+    list_payout_methods,
     register_rider,
     request_payout,
     review_document,
+    set_default_payout_method,
     set_online,
     update_rider_settings,
     upload_document,
@@ -75,9 +91,20 @@ class RiderRegisterView(APIView):
 
 
 class RiderDocumentUploadView(APIView):
+    """GET lists the rider's own documents (the same RiderDocument rows
+    GET /riders/verification-status/ derives its per-document status from -
+    one source of truth for both). POST uploads/replaces one document."""
+
     serializer_class = RiderDocumentUploadSerializer
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
+
+    def get(self, request):
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+        documents = rider_profile.documents.all()
+        return Response(RiderDocumentSerializer(documents, many=True, context={"request": request}).data)
 
     def post(self, request):
         rider_profile, error = _rider_profile_or_403(request)
@@ -200,6 +227,11 @@ class RiderOnlineToggleView(APIView):
 
         return Response(RiderProfileSerializer(rider_profile).data)
 
+    # PATCH /riders/status/ is the same operation under the path/verb the
+    # rider app's status screen expects - POST /riders/online/ keeps working
+    # unchanged for anything already wired to it.
+    patch = post
+
 
 class RiderLocationPingView(APIView):
     serializer_class = LocationPingSerializer
@@ -266,8 +298,8 @@ class RiderEarningsSummaryView(APIView):
         if error:
             return error
 
-        summary = get_earnings_summary(rider_profile, period=request.query_params.get("period", "today"))
-        return Response(EarningsSummarySerializer(summary).data)
+        summary = get_earnings_summary(rider_profile)
+        return Response(NewEarningsSummarySerializer(summary).data)
 
 
 class RiderEarningsTransactionsView(generics.ListAPIView):
@@ -330,3 +362,283 @@ class RiderOfferDeclineView(APIView):
             return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({"detail": "Offer declined."})
+
+
+class RiderDeliveryRequestAcceptView(APIView):
+    """POST /riders/delivery-requests/{id}/accept/ - same operation as
+    RiderOfferAcceptView (both call deliveries.services.accept_offer), just
+    returns the shared ActiveDeliverySerializer shape (see #3 of the brief)
+    instead of TripSerializer, and never includes the delivery code."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        from deliveries.models import DeliveryOffer
+        from deliveries.services import DispatchError, accept_offer, build_active_delivery_payload
+
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+
+        offer = get_object_or_404(DeliveryOffer, pk=pk)
+        try:
+            trip = accept_offer(offer, rider_profile)
+        except DispatchError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            ActiveDeliverySerializer(build_active_delivery_payload(trip)).data, status=status.HTTP_201_CREATED
+        )
+
+
+class RiderDeliveryRequestDeclineView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        from deliveries.models import DeliveryOffer
+        from deliveries.services import DispatchError, decline_offer
+
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+
+        offer = get_object_or_404(DeliveryOffer, pk=pk)
+        try:
+            decline_offer(offer, rider_profile)
+        except DispatchError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(status=status.HTTP_200_OK)
+
+
+class RiderActiveDeliveryView(APIView):
+    """GET /riders/deliveries/active/ - lets the app rehydrate this screen
+    after a restart. 204 (no body) if the rider has nothing in progress."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from deliveries.models import Trip
+        from deliveries.services import build_active_delivery_payload
+
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+
+        trip = (
+            Trip.objects.filter(rider=rider_profile, status__in=Trip.ACTIVE_STATUSES)
+            .select_related("delivery")
+            .order_by("-created_at")
+            .first()
+        )
+        if trip is None:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        return Response(ActiveDeliverySerializer(build_active_delivery_payload(trip)).data)
+
+
+class RiderDeliveryConfirmPickupView(APIView):
+    """POST /riders/deliveries/{id}/confirm-pickup/ - {id} is the Trip id,
+    the same id GET /riders/deliveries/active/ and the accept response
+    return. Same underlying deliveries.services.confirm_pickup as
+    TripConfirmPickupView, reshaped to ActiveDeliverySerializer."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        from deliveries.models import Trip
+        from deliveries.services import TripError, build_active_delivery_payload, confirm_pickup
+
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+
+        trip = get_object_or_404(Trip, pk=pk)
+        try:
+            trip = confirm_pickup(trip, rider_profile)
+        except TripError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(ActiveDeliverySerializer(build_active_delivery_payload(trip)).data)
+
+
+class RiderDeliveryCompleteView(APIView):
+    """POST /riders/deliveries/{id}/complete/ - body: {"delivery_code": "1234"}.
+    Validated server-side against the code generated at accept-time
+    (deliveries.services.complete_delivery_with_code); a wrong code is
+    rejected with a plain 400, matching how every other business-rule
+    error in this app responds (as opposed to a DRF field-validation error,
+    which already goes through the shared exception handler automatically)."""
+
+    serializer_class = DeliveryCompleteSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        from deliveries.models import Trip
+        from deliveries.services import TripError, build_active_delivery_payload, complete_delivery_with_code
+
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+
+        serializer = DeliveryCompleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        trip = get_object_or_404(Trip, pk=pk)
+        try:
+            trip = complete_delivery_with_code(
+                trip, rider_profile, delivery_code=serializer.validated_data["delivery_code"]
+            )
+        except TripError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(ActiveDeliverySerializer(build_active_delivery_payload(trip)).data)
+
+
+class RiderDeliveriesHistoryView(generics.ListAPIView):
+    serializer_class = DeliveryHistorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return []
+
+        rider_profile = getattr(self.request.user, "rider_profile", None)
+        if rider_profile is None:
+            return []
+        return get_deliveries_history(rider_profile)
+
+
+class RiderEarningsActivityView(generics.ListAPIView):
+    serializer_class = EarningsActivitySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return []
+
+        rider_profile = getattr(self.request.user, "rider_profile", None)
+        if rider_profile is None:
+            return []
+        return get_earnings_activity(rider_profile)
+
+
+class RiderPayoutMethodListCreateView(generics.ListCreateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        return PayoutMethodCreateSerializer if self.request.method == "POST" else PayoutMethodSerializer
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return RiderPayoutAccount.objects.none()
+
+        rider_profile = getattr(self.request.user, "rider_profile", None)
+        if rider_profile is None:
+            return RiderPayoutAccount.objects.none()
+        return list_payout_methods(rider_profile)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        data = [PayoutMethodSerializer.build(account) for account in (page if page is not None else queryset)]
+        if page is not None:
+            return self.get_paginated_response(data)
+        return Response(data)
+
+    def post(self, request, *args, **kwargs):
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+
+        serializer = PayoutMethodCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            account = add_payout_method(
+                rider_profile,
+                provider=serializer.validated_data["provider"],
+                account_number=serializer.validated_data["account_number"],
+                type=serializer.validated_data["type"],
+            )
+        except RiderError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(PayoutMethodSerializer.build(account), status=status.HTTP_201_CREATED)
+
+
+class RiderPayoutMethodSetDefaultView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+
+        try:
+            account = set_default_payout_method(rider_profile, pk)
+        except RiderError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(PayoutMethodSerializer.build(account))
+
+
+class RiderCashOutView(APIView):
+    serializer_class = CashOutSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+
+        serializer = CashOutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            payout = request_payout(
+                rider_profile,
+                amount=serializer.validated_data["amount"],
+                payout_account=serializer.validated_data["payout_method_id"],
+            )
+        except RiderError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        rider_profile.refresh_from_db()
+        from .services import get_available_earnings_balance
+
+        return Response({
+            "available_balance": get_available_earnings_balance(rider_profile),
+            "payout": RiderPayoutSerializer(payout).data,
+        }, status=status.HTTP_201_CREATED)
+
+
+class RiderReviewsListView(generics.ListAPIView):
+    serializer_class = RiderReviewSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            from .models import RiderRating
+
+            return RiderRating.objects.none()
+
+        rider_profile = getattr(self.request.user, "rider_profile", None)
+        if rider_profile is None:
+            from .models import RiderRating
+
+            return RiderRating.objects.none()
+        return get_reviews(rider_profile)
+
+
+class RiderReviewsSummaryView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+
+        return Response(RiderReviewsSummarySerializer(get_reviews_summary(rider_profile)).data)
+
+
