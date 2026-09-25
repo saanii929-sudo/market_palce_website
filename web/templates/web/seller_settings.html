@@ -45,6 +45,51 @@
               class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">{{ seller.tagline }}</textarea>
   </div>
 
+  <div class="border-t border-gray-100 pt-5">
+    <label class="block text-sm font-bold mb-2">Pickup location</label>
+    <p class="text-xs text-gray-400 mb-3">Used to match you with nearby riders when you request a delivery. Without this set, "Request rider" and nearby-rider matching won't find anyone.</p>
+
+    <button type="button" id="use-current-location-btn"
+            class="rounded-xl border border-gray-200 font-bold text-sm px-4 py-2.5 hover:border-ink transition-colors mb-3">
+      📍 Use my current location
+    </button>
+    <p id="location-status" class="text-xs text-gray-400 mb-3"></p>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs font-bold text-gray-500 mb-1.5">Latitude</label>
+        <input type="text" inputmode="decimal" name="pickup_lat" id="pickup_lat" value="{{ seller.pickup_lat|default:'' }}" placeholder="5.603700"
+               class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-500 mb-1.5">Longitude</label>
+        <input type="text" inputmode="decimal" name="pickup_lng" id="pickup_lng" value="{{ seller.pickup_lng|default:'' }}" placeholder="-0.187000"
+               class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+      </div>
+    </div>
+  </div>
+
   <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Save changes</button>
 </form>
+
+<script>
+  document.getElementById("use-current-location-btn").addEventListener("click", function () {
+    var status = document.getElementById("location-status");
+    if (!navigator.geolocation) {
+      status.textContent = "Your browser doesn't support location - enter it manually.";
+      return;
+    }
+    status.textContent = "Locating…";
+    navigator.geolocation.getCurrentPosition(
+      function (position) {
+        document.getElementById("pickup_lat").value = position.coords.latitude.toFixed(6);
+        document.getElementById("pickup_lng").value = position.coords.longitude.toFixed(6);
+        status.textContent = "Location captured - remember to save changes below.";
+      },
+      function () {
+        status.textContent = "Couldn't get your location - check browser permissions or enter it manually.";
+      }
+    );
+  });
+</script>
 {% endblock %}

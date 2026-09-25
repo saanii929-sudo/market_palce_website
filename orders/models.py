@@ -271,6 +271,11 @@ class SellerOrder(TimeStampedModel):
 
         notify_seller_order_status_change(self)
 
+        if new_status == self.Status.SHIPPED:
+            from deliveries.services import create_delivery_for_seller_order
+
+            create_delivery_for_seller_order(self)
+
         return history
 
     def get_status_display(self) -> str:
@@ -387,12 +392,6 @@ class ReturnRequestItem(TimeStampedModel):
 
 
 class RefundRequest(TimeStampedModel):
-    """A distinct, formal money-back workflow from ReturnRequest above -
-    ReturnRequest is about the physical logistics of shipping an item back
-    to a seller; this is about the state-machined decision of whether (and
-    how much) money moves back to the buyer, independent of whether a
-    physical return happens (e.g. "damaged" claims often don't need one)."""
-
     class Reason(models.TextChoices):
         NOT_AS_DESCRIBED = "not_as_described", "Not as described"
         DAMAGED = "damaged", "Damaged"
@@ -456,11 +455,6 @@ class RefundRequest(TimeStampedModel):
         return self._apply_transition(new_status, actor=actor, note=note)
 
     def admin_override_to(self, new_status: str, *, actor, note: str = "") -> "RefundStatusHistory":
-        """Bypasses can_transition_to's forward-only check. The only caller
-        is disputes.services.resolve_dispute: resolving a Dispute in the
-        buyer's favor must be able to push a REJECTED refund request back to
-        APPROVED (reopening a decision the seller already made), which the
-        normal buyer/seller-facing state machine deliberately never allows."""
         return self._apply_transition(new_status, actor=actor, note=note)
 
     def _apply_transition(self, new_status: str, *, actor=None, note: str = "") -> "RefundStatusHistory":

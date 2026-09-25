@@ -10,7 +10,16 @@ from django.utils.text import slugify
 from accounts.models import User
 from catalog.models import Seller
 
-from .models import Payout, PayoutAccount, SellerApplication, SellerSubscription, SubscriptionPlan
+from .models import (
+    Payout,
+    PayoutAccount,
+    SellerApplication,
+    SellerFavoriteRider,
+    SellerFulfillmentRating,
+    SellerRiderBlock,
+    SellerSubscription,
+    SubscriptionPlan,
+)
 from .notifications import (
     notify_application_reviewed,
     notify_kyc_resolved,
@@ -343,3 +352,85 @@ def mark_subscription_failed(subscription: SellerSubscription, reason: str) -> S
     subscription.save(update_fields=["status", "failure_reason"])
     notify_subscription_failed(subscription)
     return subscription
+
+
+class RiderRequestError(Exception):
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+
+def add_favorite_rider(seller: Seller, rider, *, notes: str = "") -> SellerFavoriteRider:
+    favorite, _ = SellerFavoriteRider.objects.update_or_create(
+        seller=seller, rider=rider, defaults={"notes": notes},
+    )
+    return favorite
+
+
+def remove_favorite_rider(seller: Seller, rider_id: int) -> None:
+    SellerFavoriteRider.objects.filter(seller=seller, rider_id=rider_id).delete()
+
+
+def block_rider(seller: Seller, rider, *, reason: str = "") -> SellerRiderBlock:
+    block, _ = SellerRiderBlock.objects.update_or_create(seller=seller, rider=rider, defaults={"reason": reason})
+    # A blocked rider can't also be a favourite - keep the two lists mutually exclusive.
+    SellerFavoriteRider.objects.filter(seller=seller, rider=rider).delete()
+    return block
+
+
+def unblock_rider(seller: Seller, rider_id: int) -> None:
+    SellerRiderBlock.objects.filter(seller=seller, rider_id=rider_id).delete()
+
+
+def get_seller_fulfillment_rating(seller: Seller) -> dict:
+    from django.db.models import Avg, Count
+
+    stats = SellerFulfillmentRating.objects.filter(seller=seller).aggregate(avg=Avg("stars"), count=Count("id"))
+    return {"average": stats["avg"] or Decimal("0.00"), "count": stats["count"] or 0}
+
+
+@transaction.atomic
+def request_rider_for_seller_order(seller_order, seller: Seller, *, mode: str, rider=None):
+    """The seller-initiated entry point into Phase 2's dispatch engine -
+    'auto' calls the exact same nearest-match dispatch the system trigger
+    uses; 'direct' targets one chosen rider. Either way this is still just
+    a DeliveryOffer the rider must accept - never a bypass of rider
+    consent. Returns (delivery, offer); offer is None only when auto mode
+    ran and found nobody available right now."""
+    from deliveries.models import Delivery
+    from deliveries.services import (
+        DispatchError,
+        create_delivery_for_seller_order,
+        dispatch_delivery,
+        dispatch_delivery_direct,
+        get_delivery_for,
+    )
+
+    if seller_order.seller_id != seller.id:
+        raise RiderRequestError("This isn't your order.")
+    if mode not in (Delivery.RequestMode.AUTO, Delivery.RequestMode.DIRECT):
+        raise RiderRequestError("Invalid request mode.")
+    if mode == Delivery.RequestMode.DIRECT and rider is None:
+        raise RiderRequestError("Select a rider to request.")
+
+    delivery = get_delivery_for(seller_order)
+    if delivery is None:
+        delivery = create_delivery_for_seller_order(seller_order, dispatch=False)
+    elif delivery.status not in (Delivery.Status.PENDING, Delivery.Status.OFFERED):
+        raise RiderRequestError("This order already has an assigned rider or has been delivered.")
+
+    delivery.initiated_by = Delivery.InitiatedBy.SELLER
+    delivery.requested_by = seller.user
+    delivery.request_mode = mode
+    delivery.save(update_fields=["initiated_by", "requested_by", "request_mode"])
+
+    try:
+        if mode == Delivery.RequestMode.DIRECT:
+            offer = dispatch_delivery_direct(delivery, rider)
+        else:
+            offer = dispatch_delivery(delivery)
+    except DispatchError as exc:
+        raise RiderRequestError(exc.message) from exc
+
+    delivery.refresh_from_db()
+    return delivery, offer

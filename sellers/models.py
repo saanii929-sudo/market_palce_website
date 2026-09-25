@@ -182,3 +182,70 @@ class BulkUploadJob(TimeStampedModel):
     @property
     def is_current(self) -> bool:
         return self.status == self.Status.ACTIVE and bool(self.expires_at) and self.expires_at > timezone.now()
+
+
+class SellerFavoriteRider(TimeStampedModel):
+    """A convenience list for the seller's 'choose a rider' UI - favouriting
+    a rider does NOT affect matching eligibility, it's not a guarantee of
+    availability."""
+
+    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name="favorite_riders")
+    rider = models.ForeignKey("riders.RiderProfile", on_delete=models.CASCADE, related_name="favorited_by")
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["seller", "rider"], name="unique_seller_favorite_rider")
+        ]
+
+    def __str__(self):
+        return f"SellerFavoriteRider({self.seller.business_name}, {self.rider})"
+
+
+class SellerRiderBlock(TimeStampedModel):
+    """Excludes this rider from this seller's auto-match candidate pool and
+    from their nearby-riders/direct-request options - see
+    deliveries.services._matching_constraints_for_seller_order."""
+
+    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name="blocked_riders")
+    rider = models.ForeignKey("riders.RiderProfile", on_delete=models.CASCADE, related_name="blocked_by")
+    reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["seller", "rider"], name="unique_seller_rider_block")
+        ]
+
+    def __str__(self):
+        return f"SellerRiderBlock({self.seller.business_name}, {self.rider})"
+
+
+class SellerFulfillmentRating(TimeStampedModel):
+    """The reverse direction of riders.RiderRating - the rider rates the
+    seller/pickup experience after delivery. Internal-facing: aggregated
+    into a seller reliability metric for admins (see
+    sellers.services.get_seller_fulfillment_rating), never surfaced
+    publicly as a product-review-style rating."""
+
+    trip = models.OneToOneField(
+        "deliveries.Trip", on_delete=models.CASCADE, related_name="seller_fulfillment_rating"
+    )
+    rider = models.ForeignKey(
+        "riders.RiderProfile", on_delete=models.CASCADE, related_name="fulfillment_ratings_given"
+    )
+    seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name="fulfillment_ratings")
+    stars = models.PositiveSmallIntegerField()
+    comment = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(stars__gte=1, stars__lte=5), name="seller_fulfillment_rating_stars_1_to_5"
+            )
+        ]
+
+    def __str__(self):
+        return f"SellerFulfillmentRating({self.seller.business_name}, {self.stars}*)"

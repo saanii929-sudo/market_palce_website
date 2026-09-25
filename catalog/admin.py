@@ -38,10 +38,21 @@ class BrandAdmin(admin.ModelAdmin):
 
 @admin.register(Seller)
 class SellerAdmin(admin.ModelAdmin):
-    list_display = ["id", "business_name", "user", "rating", "is_verified", "is_featured"]
+    list_display = [
+        "id", "business_name", "user", "rating", "is_verified", "is_featured", "fulfillment_rating",
+    ]
     prepopulated_fields = {"slug": ("business_name",)}
     search_fields = ["business_name"]
     autocomplete_fields = ["user"]
+
+    @admin.display(description="Rider fulfillment rating")
+    def fulfillment_rating(self, obj):
+        from sellers.services import get_seller_fulfillment_rating
+
+        stats = get_seller_fulfillment_rating(obj)
+        if not stats["count"]:
+            return "—"
+        return f"{stats['average']:.2f}★ ({stats['count']})"
 
 
 class ProductImageInline(admin.TabularInline):

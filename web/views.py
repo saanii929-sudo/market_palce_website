@@ -71,19 +71,34 @@ from payments.serializers import PaymentMethodTokenCreateSerializer
 from reviews.models import Review
 from reviews.serializers import ReviewCreateSerializer, ReviewFlagCreateSerializer
 from reviews.services import ReviewModerationError, flag_review
-from sellers.models import BulkUploadJob, Payout, PayoutAccount, SellerApplication, SellerSubscription, SubscriptionPlan
+from deliveries.services import build_tracking_payload, get_delivery_for, list_nearby_riders_for_seller_order
+from riders.models import RiderProfile
+from sellers.models import (
+    BulkUploadJob,
+    Payout,
+    PayoutAccount,
+    SellerApplication,
+    SellerSubscription,
+    SubscriptionPlan,
+)
 from sellers.tasks import process_bulk_upload
 from sellers.services import (
     PayoutError,
+    RiderRequestError,
     SellerApplicationError,
     SubscriptionError,
+    add_favorite_rider,
+    block_rider,
     finalize_subscription_payment,
     get_active_subscription,
     get_available_balance,
     mark_subscription_failed,
+    remove_favorite_rider,
+    request_rider_for_seller_order,
     request_withdrawal,
     start_subscription_checkout,
     submit_kyc,
+    unblock_rider,
 )
 from support.models import FAQ, SupportContact
 from support.serializers import SupportTicketCreateSerializer
@@ -1461,6 +1476,97 @@ def seller_order_status_update_view(request, seller, suborder_number):
     return redirect("web-seller-orders")
 
 
+@seller_required
+def seller_order_rider_view(request, seller, suborder_number):
+    seller_order = get_object_or_404(SellerOrder, suborder_number=suborder_number, seller=seller)
+    delivery = get_delivery_for(seller_order)
+    favorite_ids = set(seller.favorite_riders.values_list("rider_id", flat=True))
+    blocked_ids = set(seller.blocked_riders.values_list("rider_id", flat=True))
+
+    nearby_riders = list_nearby_riders_for_seller_order(seller_order)
+    for rider_row in nearby_riders:
+        rider_row["is_favorite"] = rider_row["rider_id"] in favorite_ids
+
+    return render(request, "web/seller_order_rider.html", {
+        "active_nav": "orders",
+        "seller": seller,
+        "products_count": Product.objects.filter(seller=seller).count(),
+        "orders_count": _seller_order_qs(seller).count(),
+        "seller_order": seller_order,
+        "delivery": delivery,
+        "tracking": build_tracking_payload(delivery) if delivery else None,
+        "nearby_riders": nearby_riders,
+        "favorite_riders": seller.favorite_riders.select_related("rider__user").order_by("-created_at"),
+        "blocked_ids": blocked_ids,
+    })
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_order_rider_request_view(request, seller, suborder_number):
+    seller_order = get_object_or_404(SellerOrder, suborder_number=suborder_number, seller=seller)
+    mode = request.POST.get("mode", "auto")
+    rider = None
+    if mode == "direct":
+        rider = get_object_or_404(RiderProfile, id=request.POST.get("rider_id"))
+
+    try:
+        delivery, offer = request_rider_for_seller_order(seller_order, seller, mode=mode, rider=rider)
+        if offer is not None:
+            messages.success(request, f"Rider request sent for order {suborder_number}.")
+        else:
+            messages.warning(request, "No riders are available right now - we'll keep trying automatically.")
+    except RiderRequestError as exc:
+        messages.error(request, exc.message)
+    return redirect("web-seller-order-rider", suborder_number=suborder_number)
+
+
+@seller_required
+def seller_riders_view(request, seller):
+    return render(request, "web/seller_riders.html", {
+        "active_nav": "riders",
+        "seller": seller,
+        "products_count": Product.objects.filter(seller=seller).count(),
+        "orders_count": _seller_order_qs(seller).count(),
+        "favorites": seller.favorite_riders.select_related("rider__user").order_by("-created_at"),
+        "blocks": seller.blocked_riders.select_related("rider__user").order_by("-created_at"),
+    })
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_rider_favorite_view(request, seller, rider_id):
+    rider = get_object_or_404(RiderProfile, id=rider_id)
+    add_favorite_rider(seller, rider, notes=request.POST.get("notes", "").strip())
+    messages.success(request, "Added to favourites.")
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-seller-riders")))
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_rider_unfavorite_view(request, seller, rider_id):
+    remove_favorite_rider(seller, rider_id)
+    messages.success(request, "Removed from favourites.")
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-seller-riders")))
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_rider_block_view(request, seller, rider_id):
+    rider = get_object_or_404(RiderProfile, id=rider_id)
+    block_rider(seller, rider, reason=request.POST.get("reason", "").strip())
+    messages.success(request, "Rider blocked - they won't be matched to your orders again.")
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-seller-riders")))
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_rider_unblock_view(request, seller, rider_id):
+    unblock_rider(seller, rider_id)
+    messages.success(request, "Rider unblocked.")
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-seller-riders")))
+
+
 RETURN_TAB_STATUSES = {
     "requested": [ReturnRequest.Status.REQUESTED],
     "approved": [ReturnRequest.Status.APPROVED],
@@ -1867,6 +1973,16 @@ def seller_settings_view(request, seller):
         seller.support_phone = request.POST.get("support_phone", "").strip()
         seller.tagline = request.POST.get("tagline", "").strip()
         update_fields = ["business_name", "primary_category", "support_phone", "tagline"]
+
+        pickup_lat = request.POST.get("pickup_lat", "").strip()
+        pickup_lng = request.POST.get("pickup_lng", "").strip()
+        try:
+            seller.pickup_lat = Decimal(pickup_lat) if pickup_lat else None
+            seller.pickup_lng = Decimal(pickup_lng) if pickup_lng else None
+            update_fields += ["pickup_lat", "pickup_lng"]
+        except InvalidOperation:
+            messages.error(request, "That pickup location doesn't look valid - please set it again.")
+
         if request.FILES.get("logo"):
             seller.logo = request.FILES["logo"]
             update_fields.append("logo")

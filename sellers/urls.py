@@ -10,6 +10,32 @@ urlpatterns = [
     path("sellers/payouts/", views.SellerPayoutListCreateView.as_view(), name="seller-payout-list"),
     path("seller/coupons/", views.SellerCouponListCreateView.as_view(), name="seller-coupon-list"),
     path(
+        "seller/orders/<int:suborder_id>/nearby-riders/",
+        views.SellerNearbyRidersView.as_view(),
+        name="seller-order-nearby-riders",
+    ),
+    path(
+        "seller/orders/<int:suborder_id>/request-rider/",
+        views.SellerRequestRiderView.as_view(),
+        name="seller-order-request-rider",
+    ),
+    path(
+        "seller/orders/<int:suborder_id>/delivery-status/",
+        views.SellerOrderDeliveryStatusView.as_view(),
+        name="seller-order-delivery-status",
+    ),
+    path(
+        "seller/favorite-riders/",
+        views.SellerFavoriteRiderListCreateView.as_view(),
+        name="seller-favorite-rider-list",
+    ),
+    path(
+        "seller/favorite-riders/<int:rider_id>/",
+        views.SellerFavoriteRiderDeleteView.as_view(),
+        name="seller-favorite-rider-delete",
+    ),
+    path("seller/riders/<int:rider_id>/block/", views.SellerRiderBlockView.as_view(), name="seller-rider-block"),
+    path(
         "seller/products/bulk-upload/",
         views.SellerBulkUploadCreateView.as_view(),
         name="seller-bulk-upload-create",

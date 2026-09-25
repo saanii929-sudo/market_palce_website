@@ -5,7 +5,7 @@ from rest_framework import serializers
 from cart.models import Coupon
 from catalog.models import Category
 
-from .models import BulkUploadJob, Payout, SellerApplication
+from .models import BulkUploadJob, Payout, SellerApplication, SellerFavoriteRider
 
 
 class SellerApplicationSerializer(serializers.ModelSerializer):
@@ -144,3 +144,59 @@ class BulkUploadJobSerializer(serializers.ModelSerializer):
             "id", "status", "total_rows", "success_count", "error_count", "error_report", "created_at",
         ]
         read_only_fields = fields
+
+
+class NearbyRiderSerializer(serializers.Serializer):
+    rider_id = serializers.IntegerField()
+    name = serializers.CharField()
+    rating = serializers.DecimalField(max_digits=3, decimal_places=2)
+    vehicle_type = serializers.CharField(allow_null=True)
+    distance_km = serializers.DecimalField(max_digits=6, decimal_places=2)
+    eta_minutes = serializers.IntegerField()
+
+
+class RequestRiderSerializer(serializers.Serializer):
+    mode = serializers.ChoiceField(choices=["auto", "direct"])
+    rider_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+
+    def validate_rider_id(self, value):
+        if value is None:
+            return None
+        from riders.models import RiderProfile
+
+        try:
+            return RiderProfile.objects.get(id=value)
+        except RiderProfile.DoesNotExist:
+            raise serializers.ValidationError("Select a valid rider.")
+
+    def validate(self, attrs):
+        if attrs["mode"] == "direct" and attrs.get("rider_id") is None:
+            raise serializers.ValidationError({"rider_id": "rider_id is required for direct mode."})
+        return attrs
+
+
+class SellerFavoriteRiderCreateSerializer(serializers.Serializer):
+    rider_id = serializers.IntegerField()
+    notes = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+
+    def validate_rider_id(self, value):
+        from riders.models import RiderProfile
+
+        try:
+            return RiderProfile.objects.get(id=value)
+        except RiderProfile.DoesNotExist:
+            raise serializers.ValidationError("Select a valid rider.")
+
+
+class SellerFavoriteRiderSerializer(serializers.ModelSerializer):
+    rider_id = serializers.IntegerField(source="rider.id", read_only=True)
+    rider_name = serializers.SerializerMethodField()
+    rider_rating = serializers.DecimalField(source="rider.rating_avg", max_digits=3, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = SellerFavoriteRider
+        fields = ["id", "rider_id", "rider_name", "rider_rating", "notes", "created_at"]
+        read_only_fields = fields
+
+    def get_rider_name(self, obj):
+        return obj.rider.user.full_name or obj.rider.user.email or obj.rider.user.phone

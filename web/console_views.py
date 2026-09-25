@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib import messages
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Count, ProtectedError, Q, Sum
+from django.db.models import Avg, Count, ProtectedError, Q, Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -20,12 +20,28 @@ from disputes.services import DisputeError, add_message, resolve_dispute
 from notifications.models import Broadcast
 from notifications.tasks import send_broadcast
 from orders.models import DeliveryMethod, Order, SellerOrder
+from parcels.models import Parcel
 from pos.models import POSSale
 from reviews.models import Review
 from reviews.services import ReviewModerationError, moderate_review
+from riders.models import RiderDocument, RiderPayout
+from riders.services import (
+    RiderError,
+    mark_rider_payout_paid,
+    reject_rider_payout,
+    review_document,
+    schedule_rider_payout,
+)
 from risk.models import RiskFlag
 from risk.services import RiskFlagError, review_risk_flag
-from sellers.models import Payout, SellerApplication, SellerSubscription, SubscriptionPlan
+from sellers.models import (
+    Payout,
+    SellerApplication,
+    SellerFulfillmentRating,
+    SellerRiderBlock,
+    SellerSubscription,
+    SubscriptionPlan,
+)
 from sellers.services import (
     PayoutError,
     SellerApplicationError,
@@ -35,6 +51,7 @@ from sellers.services import (
     reject_kyc,
     reject_payout,
     schedule_payout,
+    unblock_rider,
     verify_kyc,
 )
 
@@ -61,6 +78,8 @@ def _base_ctx(active_nav):
         "pending_kyc_count": SellerApplication.objects.filter(
             status=SellerApplication.Status.APPROVED, kyc_status=SellerApplication.KYCStatus.PENDING,
         ).exclude(bank_account_number="", momo_number="").count(),
+        "pending_rider_kyc_count": RiderDocument.objects.filter(status=RiderDocument.Status.PENDING).count(),
+        "pending_rider_payouts_count": RiderPayout.objects.filter(status=RiderPayout.Status.REQUESTED).count(),
         "open_disputes_count": Dispute.objects.filter(
             status__in=[Dispute.Status.OPEN, Dispute.Status.INVESTIGATING]
         ).count(),
@@ -412,7 +431,7 @@ def console_orders_export_view(request):
 
 # -- Users ------------------------------------------------------------
 
-USER_TABS = {"customers", "sellers", "admins"}
+USER_TABS = {"customers", "sellers", "riders", "admins"}
 
 
 def _display_role(user) -> str:
@@ -420,17 +439,23 @@ def _display_role(user) -> str:
         return "admin"
     if getattr(user, "seller_profile", None) is not None:
         return "seller"
+    if getattr(user, "rider_profile", None) is not None:
+        return "rider"
     return "customer"
 
 
 @superadmin_required
 def console_users_view(request):
     tab = request.GET.get("type", "")
-    users = User.objects.select_related("seller_profile").order_by("-date_joined")
+    users = User.objects.select_related("seller_profile", "rider_profile").order_by("-date_joined")
     if tab == "customers":
-        users = users.filter(seller_profile__isnull=True, is_staff=False, is_superuser=False)
+        users = users.filter(
+            seller_profile__isnull=True, rider_profile__isnull=True, is_staff=False, is_superuser=False,
+        )
     elif tab == "sellers":
         users = users.filter(seller_profile__isnull=False)
+    elif tab == "riders":
+        users = users.filter(rider_profile__isnull=False)
     elif tab == "admins":
         users = users.filter(Q(is_staff=True) | Q(is_superuser=True))
 
@@ -655,6 +680,153 @@ def console_payouts_export_view(request):
     return _csv_response(
         "payouts.csv", ["Seller", "Amount", "Method", "Account details", "Requested", "Status"], rows
     )
+
+
+# -- Rider payouts -----------------------------------------------------------
+
+RIDER_PAYOUT_TABS = {"requested", "scheduled", "paid", "rejected"}
+
+
+@superadmin_required
+def console_rider_payouts_view(request):
+    tab = request.GET.get("status", "requested")
+    payouts = RiderPayout.objects.select_related("rider__user", "payout_account").order_by("-created_at")
+    if tab in RIDER_PAYOUT_TABS:
+        payouts = payouts.filter(status=tab)
+
+    ctx = _base_ctx("rider-payouts")
+    ctx["payouts"] = payouts
+    ctx["active_tab"] = tab
+    return render(request, "web/console_rider_payouts.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_rider_payout_schedule_view(request, payout_id):
+    payout = get_object_or_404(RiderPayout, id=payout_id)
+    try:
+        schedule_rider_payout(
+            payout, admin_note=f"Scheduled via admin console by {request.user.full_name or request.user.email}",
+        )
+        messages.success(request, f"Payout for {payout.rider} scheduled.")
+    except RiderError as exc:
+        messages.error(request, exc.message)
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-rider-payouts")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_rider_payout_mark_paid_view(request, payout_id):
+    payout = get_object_or_404(RiderPayout, id=payout_id)
+    try:
+        mark_rider_payout_paid(payout)
+        messages.success(request, f"Payout for {payout.rider} marked as paid.")
+    except RiderError as exc:
+        messages.error(request, exc.message)
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-rider-payouts")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_rider_payout_reject_view(request, payout_id):
+    payout = get_object_or_404(RiderPayout, id=payout_id)
+    try:
+        reject_rider_payout(
+            payout,
+            admin_note=request.POST.get("admin_note")
+            or f"Rejected via admin console by {request.user.full_name or request.user.email}",
+        )
+        messages.success(request, f"Payout for {payout.rider} rejected.")
+    except RiderError as exc:
+        messages.error(request, exc.message)
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-rider-payouts")))
+
+
+@superadmin_required
+def console_rider_payouts_export_view(request):
+    rows = [
+        [str(p.rider), p.amount, p.payout_account.get_type_display(), p.requested_at.date(), p.status]
+        for p in RiderPayout.objects.select_related("rider__user", "payout_account").order_by("-created_at")
+    ]
+    return _csv_response("rider_payouts.csv", ["Rider", "Amount", "Method", "Requested", "Status"], rows)
+
+
+# -- Parcels ------------------------------------------------------------------
+
+PARCEL_TABS = {
+    "pending": [Parcel.Status.PENDING],
+    "rider_assigned": [Parcel.Status.RIDER_ASSIGNED],
+    "in_transit": [Parcel.Status.PICKED_UP, Parcel.Status.IN_TRANSIT],
+    "delivered": [Parcel.Status.DELIVERED],
+    "cancelled": [Parcel.Status.CANCELLED],
+}
+
+
+@superadmin_required
+def console_parcels_view(request):
+    tab = request.GET.get("status", "")
+    parcels = Parcel.objects.select_related("sender").order_by("-created_at")
+    if tab in PARCEL_TABS:
+        parcels = parcels.filter(status__in=PARCEL_TABS[tab])
+
+    ctx = _base_ctx("parcels")
+    ctx["parcels"] = parcels
+    ctx["active_tab"] = tab
+    return render(request, "web/console_parcels.html", ctx)
+
+
+@superadmin_required
+def console_parcels_export_view(request):
+    rows = [
+        [
+            p.id, p.sender.full_name or p.sender.email, p.recipient_name, p.get_package_size_display(),
+            p.pickup_line1, p.dropoff_line1, p.price, p.status, p.created_at.date(),
+        ]
+        for p in Parcel.objects.select_related("sender").order_by("-created_at")
+    ]
+    return _csv_response(
+        "parcels.csv",
+        ["ID", "Sender", "Recipient", "Size", "Pickup", "Dropoff", "Price", "Status", "Created"],
+        rows,
+    )
+
+
+# -- Seller-rider relations ---------------------------------------------------
+
+@superadmin_required
+def console_seller_rider_blocks_view(request):
+    ctx = _base_ctx("seller-rider-blocks")
+    ctx["blocks"] = SellerRiderBlock.objects.select_related("seller", "rider__user").order_by("-created_at")
+    return render(request, "web/console_seller_rider_blocks.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_seller_rider_unblock_view(request, block_id):
+    block = get_object_or_404(SellerRiderBlock, id=block_id)
+    unblock_rider(block.seller, block.rider_id)
+    messages.success(request, f"{block.rider} unblocked for {block.seller.business_name}.")
+    return redirect(
+        _safe_redirect_target(request, request.POST.get("next"), reverse("web-console-seller-rider-blocks"))
+    )
+
+
+@superadmin_required
+def console_fulfillment_ratings_view(request):
+    ratings = (
+        SellerFulfillmentRating.objects.select_related("seller", "rider__user", "trip")
+        .order_by("-created_at")
+    )
+    seller_averages = (
+        SellerFulfillmentRating.objects.values("seller__business_name")
+        .annotate(average=Avg("stars"), count=Count("id"))
+        .order_by("-count")
+    )
+
+    ctx = _base_ctx("fulfillment-ratings")
+    ctx["ratings"] = ratings
+    ctx["seller_averages"] = seller_averages
+    return render(request, "web/console_fulfillment_ratings.html", ctx)
 
 
 # -- Categories -------------------------------------------------------------
@@ -1369,6 +1541,33 @@ def console_kyc_reject_view(request, application_id):
     except SellerApplicationError as exc:
         messages.error(request, exc.message)
     return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-kyc-queue")))
+
+
+# -- Rider verification -------------------------------------------------
+
+@superadmin_required
+def console_rider_kyc_queue_view(request):
+    documents = (
+        RiderDocument.objects.filter(status=RiderDocument.Status.PENDING)
+        .select_related("rider__user")
+        .order_by("created_at")
+    )
+    ctx = _base_ctx("rider-kyc-queue")
+    ctx["documents"] = documents
+    return render(request, "web/console_rider_kyc_queue.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_rider_document_review_view(request, document_id):
+    document = get_object_or_404(RiderDocument, id=document_id)
+    action = request.POST.get("action")
+    try:
+        review_document(document, action=action, reviewer_note=request.POST.get("reviewer_note", "").strip())
+        messages.success(request, f"Document {'verified' if action == 'verify' else 'rejected'}.")
+    except RiderError as exc:
+        messages.error(request, exc.message)
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-rider-kyc-queue")))
 
 
 # -- Broadcasts -----------------------------------------------------------

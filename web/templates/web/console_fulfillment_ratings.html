@@ -1,0 +1,65 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Fulfillment ratings{% endblock %}
+{% block console_subtitle %}How riders rate the pickup experience at each seller - internal only, never shown publicly{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden mb-6">
+  <div class="p-5 border-b border-gray-100">
+    <p class="text-sm font-bold">Seller reliability averages</p>
+  </div>
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Seller</th>
+          <th class="px-5 py-3">Average</th>
+          <th class="px-5 py-3">Ratings</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in seller_averages %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ row.seller__business_name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ row.average|floatformat:2 }}★</td>
+            <td class="px-5 py-4 text-gray-500">{{ row.count }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="3" class="px-5 py-10 text-center text-gray-400">No fulfillment ratings yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="p-5 border-b border-gray-100">
+    <p class="text-sm font-bold">Recent ratings</p>
+  </div>
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Seller</th>
+          <th class="px-5 py-3">Rider</th>
+          <th class="px-5 py-3">Stars</th>
+          <th class="px-5 py-3">Comment</th>
+          <th class="px-5 py-3">Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rating in ratings %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ rating.seller.business_name }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ rating.rider.user.full_name|default:rating.rider.user.email }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ rating.stars }}★</td>
+            <td class="px-5 py-4 text-gray-500">{{ rating.comment|default:"—"|truncatechars:60 }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ rating.created_at|date:"M d, Y" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No fulfillment ratings yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

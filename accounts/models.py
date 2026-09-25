@@ -21,6 +21,7 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     class Role(models.TextChoices):
         CUSTOMER = "customer", "Customer"
         SELLER = "seller", "Seller"
+        RIDER = "rider", "Rider"
         ADMIN = "admin", "Admin"
 
     email = models.EmailField(unique=True, null=True, blank=True)

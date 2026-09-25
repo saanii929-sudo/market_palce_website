@@ -12,6 +12,7 @@
     <a href="?" class="text-xs font-bold px-4 py-2 rounded-full {% if not active_tab %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">All users</a>
     <a href="?type=customers" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'customers' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Customers</a>
     <a href="?type=sellers" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'sellers' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Sellers</a>
+    <a href="?type=riders" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'riders' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Riders</a>
     <a href="?type=admins" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'admins' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Admins</a>
   </div>
 
@@ -36,6 +37,8 @@
                 <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-ink text-white">admin</span>
               {% elif user.display_role == 'seller' %}
                 <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-brand/10 text-brand">seller</span>
+              {% elif user.display_role == 'rider' %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">rider</span>
               {% else %}
                 <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">customer</span>
               {% endif %}

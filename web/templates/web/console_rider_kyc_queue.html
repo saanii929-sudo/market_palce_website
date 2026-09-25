@@ -1,0 +1,54 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Rider KYC queue{% endblock %}
+{% block console_subtitle %}Documents awaiting verification{% endblock %}
+{% block console_actions %}{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Rider</th>
+          <th class="px-5 py-3">Document</th>
+          <th class="px-5 py-3">File</th>
+          <th class="px-5 py-3">Expires</th>
+          <th class="px-5 py-3">Submitted</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for document in documents %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4">
+              <p class="font-bold">{{ document.rider.user.full_name|default:document.rider.user.email }}</p>
+              <p class="text-xs text-gray-400">{{ document.rider.user.email|default:document.rider.user.phone }}</p>
+            </td>
+            <td class="px-5 py-4 text-gray-500">{{ document.get_doc_type_display }}</td>
+            <td class="px-5 py-4"><a href="{{ document.file.url }}" target="_blank" class="text-brand font-bold hover:underline text-xs">View file</a></td>
+            <td class="px-5 py-4 text-gray-500">{{ document.expires_at|date:"M d, Y"|default:"—" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ document.created_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4">
+              <div class="flex gap-2 justify-end flex-wrap">
+                <form method="post" action="{% url 'web-console-rider-document-review' document.id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="verify">
+                  <button type="submit" class="rounded-lg border border-green-200 text-green-700 font-bold text-xs px-4 py-2 hover:bg-green-50 transition-colors">Verify</button>
+                </form>
+                <form method="post" action="{% url 'web-console-rider-document-review' document.id %}" class="flex items-center gap-1">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="reject">
+                  <input type="text" name="reviewer_note" placeholder="Reason (optional)" class="w-36 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:border-ink">
+                  <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Reject</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">No documents awaiting review.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

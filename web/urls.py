@@ -104,6 +104,19 @@ urlpatterns = [
     path("seller/products/<int:product_id>/images/<int:image_id>/delete/", views.seller_product_image_delete_view, name="web-seller-product-image-delete"),
     path("seller/orders/", views.seller_orders_view, name="web-seller-orders"),
     path("seller/orders/<str:suborder_number>/status/", views.seller_order_status_update_view, name="web-seller-order-status"),
+    path("seller/orders/<str:suborder_number>/rider/", views.seller_order_rider_view, name="web-seller-order-rider"),
+    path(
+        "seller/orders/<str:suborder_number>/rider/request/",
+        views.seller_order_rider_request_view, name="web-seller-order-rider-request",
+    ),
+    path("seller/riders/", views.seller_riders_view, name="web-seller-riders"),
+    path("seller/riders/<int:rider_id>/favorite/", views.seller_rider_favorite_view, name="web-seller-rider-favorite"),
+    path(
+        "seller/riders/<int:rider_id>/unfavorite/",
+        views.seller_rider_unfavorite_view, name="web-seller-rider-unfavorite",
+    ),
+    path("seller/riders/<int:rider_id>/block/", views.seller_rider_block_view, name="web-seller-rider-block"),
+    path("seller/riders/<int:rider_id>/unblock/", views.seller_rider_unblock_view, name="web-seller-rider-unblock"),
     path("seller/order-returns/", views.seller_order_returns_view, name="web-seller-order-returns"),
     path("seller/order-returns/<int:return_id>/resolve/", views.seller_order_return_resolve_view, name="web-seller-order-return-resolve"),
     path("seller/refund-requests/", views.seller_refund_requests_view, name="web-seller-refund-requests"),
@@ -208,6 +221,11 @@ urlpatterns = [
     path("console/payouts/<int:payout_id>/schedule/", console_views.console_payout_schedule_view, name="web-console-payout-schedule"),
     path("console/payouts/<int:payout_id>/mark-paid/", console_views.console_payout_mark_paid_view, name="web-console-payout-mark-paid"),
     path("console/payouts/<int:payout_id>/reject/", console_views.console_payout_reject_view, name="web-console-payout-reject"),
+    path("console/rider-payouts/", console_views.console_rider_payouts_view, name="web-console-rider-payouts"),
+    path("console/rider-payouts/export/", console_views.console_rider_payouts_export_view, name="web-console-rider-payouts-export"),
+    path("console/rider-payouts/<int:payout_id>/schedule/", console_views.console_rider_payout_schedule_view, name="web-console-rider-payout-schedule"),
+    path("console/rider-payouts/<int:payout_id>/mark-paid/", console_views.console_rider_payout_mark_paid_view, name="web-console-rider-payout-mark-paid"),
+    path("console/rider-payouts/<int:payout_id>/reject/", console_views.console_rider_payout_reject_view, name="web-console-rider-payout-reject"),
     path("console/subscriptions/", console_views.console_subscriptions_view, name="web-console-subscriptions"),
     path("console/subscriptions/export/", console_views.console_subscriptions_export_view, name="web-console-subscriptions-export"),
     path("console/subscription-plans/", console_views.console_subscription_plans_view, name="web-console-subscription-plans"),
@@ -259,5 +277,28 @@ urlpatterns = [
     path("console/kyc-queue/<int:application_id>/verify/", console_views.console_kyc_verify_view, name="web-console-kyc-verify"),
     path("console/kyc-queue/<int:application_id>/reject/", console_views.console_kyc_reject_view, name="web-console-kyc-reject"),
 
+    path("console/rider-kyc-queue/", console_views.console_rider_kyc_queue_view, name="web-console-rider-kyc-queue"),
+    path(
+        "console/rider-kyc-queue/<int:document_id>/review/",
+        console_views.console_rider_document_review_view, name="web-console-rider-document-review",
+    ),
+
     path("console/broadcasts/", console_views.console_broadcasts_view, name="web-console-broadcasts"),
+
+    path("console/parcels/", console_views.console_parcels_view, name="web-console-parcels"),
+    path("console/parcels/export/", console_views.console_parcels_export_view, name="web-console-parcels-export"),
+
+    path(
+        "console/seller-rider-blocks/",
+        console_views.console_seller_rider_blocks_view, name="web-console-seller-rider-blocks",
+    ),
+    path(
+        "console/seller-rider-blocks/<int:block_id>/unblock/",
+        console_views.console_seller_rider_unblock_view, name="web-console-seller-rider-unblock",
+    ),
+
+    path(
+        "console/fulfillment-ratings/",
+        console_views.console_fulfillment_ratings_view, name="web-console-fulfillment-ratings",
+    ),
 ]

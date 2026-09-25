@@ -10,36 +10,54 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from cart.models import Coupon
+from orders.models import SellerOrder
 from orders.services.payment_gateway import HubtelGateway, PaymentGatewayError
 from orders.serializers import WebhookResponseSerializer
-from .models import BulkUploadJob, Payout, SellerApplication, SellerSubscription
+from .models import BulkUploadJob, Payout, SellerApplication, SellerFavoriteRider, SellerSubscription
 from .serializers import (
     BulkUploadJobSerializer,
+    NearbyRiderSerializer,
     PayoutRequestSerializer,
     PayoutSerializer,
+    RequestRiderSerializer,
     SellerApplicationCreateSerializer,
     SellerApplicationReviewSerializer,
     SellerApplicationSerializer,
     SellerCouponCreateSerializer,
     SellerCouponSerializer,
+    SellerFavoriteRiderCreateSerializer,
+    SellerFavoriteRiderSerializer,
     SellerKYCReviewSerializer,
     SellerKYCSubmitSerializer,
 )
 from .services import (
     PayoutError,
+    RiderRequestError,
     SellerApplicationError,
+    add_favorite_rider,
     approve_application,
+    block_rider,
     finalize_subscription_payment,
     get_available_balance,
     mark_subscription_failed,
     reject_application,
     reject_kyc,
+    remove_favorite_rider,
+    request_rider_for_seller_order,
     request_withdrawal,
     submit_application,
     submit_kyc,
+    unblock_rider,
     verify_kyc,
 )
 from .tasks import process_bulk_upload
+
+
+def _seller_or_403(request):
+    seller = getattr(request.user, "seller_profile", None)
+    if seller is None:
+        return None, Response({"detail": "You don't have a seller account."}, status=status.HTTP_403_FORBIDDEN)
+    return seller, None
 
 
 class SellerApplyView(APIView):
@@ -163,6 +181,131 @@ class SellerBalanceView(APIView):
         if seller is None:
             return Response({"detail": "You don't have a seller account."}, status=status.HTTP_403_FORBIDDEN)
         return Response({"available_balance": get_available_balance(seller)})
+
+
+class SellerNearbyRidersView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, suborder_id):
+        seller, error = _seller_or_403(request)
+        if error:
+            return error
+
+        seller_order = get_object_or_404(SellerOrder, id=suborder_id, seller=seller)
+
+        from deliveries.services import list_nearby_riders_for_seller_order
+
+        riders = list_nearby_riders_for_seller_order(seller_order)
+        return Response(NearbyRiderSerializer(riders, many=True).data)
+
+
+class SellerRequestRiderView(APIView):
+    serializer_class = RequestRiderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, suborder_id):
+        seller, error = _seller_or_403(request)
+        if error:
+            return error
+
+        seller_order = get_object_or_404(SellerOrder, id=suborder_id, seller=seller)
+
+        serializer = RequestRiderSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            delivery, offer = request_rider_for_seller_order(
+                seller_order, seller,
+                mode=serializer.validated_data["mode"], rider=serializer.validated_data["rider_id"],
+            )
+        except RiderRequestError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        from deliveries.serializers import DeliverySerializer
+
+        return Response(
+            DeliverySerializer(delivery).data, status=status.HTTP_201_CREATED if offer else status.HTTP_200_OK
+        )
+
+
+class SellerOrderDeliveryStatusView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, suborder_id):
+        seller, error = _seller_or_403(request)
+        if error:
+            return error
+
+        seller_order = get_object_or_404(SellerOrder, id=suborder_id, seller=seller)
+
+        from deliveries.services import build_tracking_payload, get_delivery_for
+
+        delivery = get_delivery_for(seller_order)
+        if delivery is None:
+            return Response(
+                {"detail": "No delivery has been requested for this order yet."}, status=status.HTTP_404_NOT_FOUND
+            )
+        return Response(build_tracking_payload(delivery))
+
+
+class SellerFavoriteRiderListCreateView(generics.ListCreateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        return SellerFavoriteRiderCreateSerializer if self.request.method == "POST" else SellerFavoriteRiderSerializer
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return SellerFavoriteRider.objects.none()
+        seller = getattr(self.request.user, "seller_profile", None)
+        if seller is None:
+            return SellerFavoriteRider.objects.none()
+        return SellerFavoriteRider.objects.filter(seller=seller).select_related("rider__user")
+
+    def post(self, request):
+        seller, error = _seller_or_403(request)
+        if error:
+            return error
+
+        serializer = SellerFavoriteRiderCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        favorite = add_favorite_rider(
+            seller, serializer.validated_data["rider_id"], notes=serializer.validated_data["notes"]
+        )
+        return Response(SellerFavoriteRiderSerializer(favorite).data, status=status.HTTP_201_CREATED)
+
+
+class SellerFavoriteRiderDeleteView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, rider_id):
+        seller, error = _seller_or_403(request)
+        if error:
+            return error
+        remove_favorite_rider(seller, rider_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SellerRiderBlockView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, rider_id):
+        seller, error = _seller_or_403(request)
+        if error:
+            return error
+
+        from riders.models import RiderProfile
+
+        rider = get_object_or_404(RiderProfile, id=rider_id)
+        block_rider(seller, rider, reason=request.data.get("reason", ""))
+        return Response(status=status.HTTP_201_CREATED)
+
+    def delete(self, request, rider_id):
+        seller, error = _seller_or_403(request)
+        if error:
+            return error
+        unblock_rider(seller, rider_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AdminSellerApplicationListView(generics.ListAPIView):

@@ -1,0 +1,83 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Rider payouts{% endblock %}
+{% block console_subtitle %}Review and release rider withdrawal requests{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-rider-payouts-export' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Export report</a>
+{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="p-5 flex items-center gap-2 flex-wrap border-b border-gray-100">
+    <a href="?status=requested" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'requested' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Requested</a>
+    <a href="?status=scheduled" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'scheduled' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Scheduled</a>
+    <a href="?status=paid" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'paid' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Paid</a>
+    <a href="?status=rejected" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'rejected' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Rejected</a>
+    <a href="?status=all" class="text-xs font-bold px-4 py-2 rounded-full ml-auto {% if active_tab == 'all' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">All</a>
+  </div>
+
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Rider</th>
+          <th class="px-5 py-3">Amount</th>
+          <th class="px-5 py-3">Method</th>
+          <th class="px-5 py-3">Requested</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for payout in payouts %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ payout.rider.user.full_name|default:payout.rider.user.email }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ payout.amount }}</td>
+            <td class="px-5 py-4 text-brand font-semibold">{{ payout.payout_account.get_type_display }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ payout.requested_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4">
+              {% if payout.status == "requested" %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Requested</span>
+              {% elif payout.status == "scheduled" %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">Scheduled</span>
+              {% elif payout.status == "paid" %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Paid</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Rejected</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4">
+              {% if payout.status == "requested" %}
+                <div class="flex gap-2 justify-end flex-wrap">
+                  <form method="post" action="{% url 'web-console-rider-payout-schedule' payout.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-lg border border-blue-200 text-blue-700 font-bold text-xs px-4 py-2 hover:bg-blue-50 transition-colors">Schedule</button>
+                  </form>
+                  <form method="post" action="{% url 'web-console-rider-payout-mark-paid' payout.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-lg border border-green-200 text-green-700 font-bold text-xs px-4 py-2 hover:bg-green-50 transition-colors">Mark paid</button>
+                  </form>
+                  <form method="post" action="{% url 'web-console-rider-payout-reject' payout.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-4 py-2 hover:bg-red-50 transition-colors">Reject</button>
+                  </form>
+                </div>
+              {% elif payout.status == "scheduled" %}
+                <div class="flex gap-2 justify-end">
+                  <form method="post" action="{% url 'web-console-rider-payout-mark-paid' payout.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="rounded-lg border border-green-200 text-green-700 font-bold text-xs px-4 py-2 hover:bg-green-50 transition-colors">Mark paid</button>
+                  </form>
+                </div>
+              {% elif payout.admin_note %}
+                <span class="text-xs text-gray-400">{{ payout.admin_note|truncatechars:40 }}</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">No rider payouts in this view.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

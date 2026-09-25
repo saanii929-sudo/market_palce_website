@@ -1,0 +1,81 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Riders{% endblock %}
+{% block seller_subtitle %}Manage your favourite and blocked riders{% endblock %}
+
+{% block seller_content %}
+<div class="space-y-6">
+
+  <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+    <div class="p-5 border-b border-gray-100">
+      <p class="font-bold">Favourite riders</p>
+      <p class="text-xs text-gray-400 mt-1">Add a rider to favourites from the "Request a rider" screen on any order. This is just a shortlist - it doesn't guarantee they're available.</p>
+    </div>
+    <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Rider</th>
+          <th class="px-5 py-3">Notes</th>
+          <th class="px-5 py-3">Added</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for favorite in favorites %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ favorite.rider.user.full_name|default:favorite.rider.user.email }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ favorite.notes|default:"—" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ favorite.created_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4">
+              <form method="post" action="{% url 'web-seller-rider-unfavorite' favorite.rider_id %}" class="flex justify-end">
+                {% csrf_token %}
+                <button type="submit" class="rounded-lg border border-gray-200 text-gray-500 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">Remove</button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="px-5 py-10 text-center text-gray-400">No favourite riders yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+    <div class="p-5 border-b border-gray-100">
+      <p class="font-bold">Blocked riders</p>
+      <p class="text-xs text-gray-400 mt-1">Blocked riders are never matched to your orders, whether by auto-match or a direct request.</p>
+    </div>
+    <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Rider</th>
+          <th class="px-5 py-3">Reason</th>
+          <th class="px-5 py-3">Blocked</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for block in blocks %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">{{ block.rider.user.full_name|default:block.rider.user.email }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ block.reason|default:"—" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ block.created_at|date:"M d, Y" }}</td>
+            <td class="px-5 py-4">
+              <form method="post" action="{% url 'web-seller-rider-unblock' block.rider_id %}" class="flex justify-end">
+                {% csrf_token %}
+                <button type="submit" class="rounded-lg border border-gray-200 text-gray-500 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">Unblock</button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="px-5 py-10 text-center text-gray-400">You haven't blocked any riders.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

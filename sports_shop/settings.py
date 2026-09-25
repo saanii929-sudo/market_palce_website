@@ -27,13 +27,6 @@ if not DEBUG:
 # Application definition
 
 INSTALLED_APPS = [
-    # daphne must be the very first app: Django resolves a management-
-    # command-name clash (it and django.contrib.staticfiles both define
-    # "runserver") in favor of whichever app appears EARLIER in this list.
-    # daphne's runserver is what actually serves WebSocket upgrades in local
-    # dev (Channels itself stopped shipping a runserver override in 4.x) -
-    # without this ordering, `manage.py runserver` silently falls back to
-    # the plain WSGI server and every /ws/... connection 404s.
     "daphne",
     "channels",
     "django.contrib.admin",
@@ -60,6 +53,9 @@ INSTALLED_APPS = [
     "disputes",
     "payments",
     "sellers",
+    "riders",
+    "deliveries",
+    "parcels",
     "pos",
     "reviews",
     "notifications",
@@ -231,11 +227,6 @@ CELERY_TASK_ALWAYS_EAGER = env("CELERY_TASK_ALWAYS_EAGER")
 CELERY_TASK_EAGER_PROPAGATES = True
 
 
-# Channels (real-time chat) - reuses the same Redis as Celery/cache above as
-# its channel layer so a message broadcast from one process (e.g. a REST
-# request handled by one worker) reaches WebSocket connections open on any
-# other. Falls back to the in-memory layer (single-process only - fine for
-# local dev and tests) when Redis isn't configured.
 if REDIS_URL:
     CHANNEL_LAYERS = {
         "default": {
@@ -291,17 +282,6 @@ MNOTIFY_SENDER_ID = env("MNOTIFY_SENDER_ID", default="SportShop")
 GOOGLE_OAUTH_CLIENT_ID = env("GOOGLE_OAUTH_CLIENT_ID", default="")
 APPLE_CLIENT_ID = env("APPLE_CLIENT_ID", default="")
 
-# Firebase Admin (Google sign-in for the Flutter app, which authenticates via
-# Firebase Auth and hands us a Firebase ID token rather than a raw Google
-# OAuth one - see accounts.services.social.verify_firebase_token; also used
-# for real FCM push notifications - see notifications.push). Two ways to
-# supply the service-account key, see core.firebase.get_firebase_app():
-# - FIREBASE_CREDENTIALS_PATH: path to the downloaded JSON file on disk.
-#   Simplest for local dev / a host where you can also deploy the file.
-# - FIREBASE_CREDENTIALS_JSON: the file's contents pasted directly as a
-#   single env var. Preferred on PaaS platforms (Coolify, Render, etc.)
-#   where setting an env var is easy but mounting an extra file isn't -
-#   nothing extra to deploy alongside the container.
 FIREBASE_CREDENTIALS_PATH = env("FIREBASE_CREDENTIALS_PATH", default="")
 FIREBASE_CREDENTIALS_JSON = env("FIREBASE_CREDENTIALS_JSON", default="")
 

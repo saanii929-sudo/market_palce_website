@@ -1,0 +1,112 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Request a rider{% endblock %}
+{% block seller_subtitle %}Order {{ seller_order.suborder_number }}{% endblock %}
+
+{% block seller_content %}
+<div class="space-y-6">
+
+  {% if delivery %}
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <p class="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Delivery status</p>
+    <div class="flex items-center gap-3 flex-wrap">
+      <span class="text-sm font-bold px-3 py-1.5 rounded-full bg-blue-100 text-blue-700">{{ delivery.get_status_display }}</span>
+      {% if tracking.trip_status %}
+        <span class="text-sm text-gray-500">Trip: {{ tracking.trip_status }}</span>
+      {% endif %}
+      {% if delivery.request_mode == "direct" %}
+        <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Direct request</span>
+      {% endif %}
+    </div>
+    {% if tracking.rider %}
+      <p class="text-sm text-gray-600 mt-3">Rider: <span class="font-bold">{{ tracking.rider.name }}</span> · {{ tracking.rider.vehicle_type|default:"—" }} · {{ tracking.rider.rating }}★</p>
+    {% endif %}
+    {% if delivery.no_riders_available %}
+      <p class="text-sm text-red-600 mt-3 font-semibold">No riders were available after several attempts. Try requesting again below.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
+      <p class="font-bold">Nearby riders</p>
+      <form method="post" action="{% url 'web-seller-order-rider-request' seller_order.suborder_number %}">
+        {% csrf_token %}
+        <input type="hidden" name="mode" value="auto">
+        <button type="submit" class="rounded-xl bg-ink text-white font-bold text-sm px-5 py-2.5 hover:opacity-90 transition-opacity">Request nearest available rider</button>
+      </form>
+    </div>
+
+    <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Rider</th>
+          <th class="px-5 py-3">Vehicle</th>
+          <th class="px-5 py-3">Distance</th>
+          <th class="px-5 py-3">ETA</th>
+          <th class="px-5 py-3">Rating</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rider in nearby_riders %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-bold">
+              {{ rider.name }}
+              {% if rider.is_favorite %}<span class="text-amber-500" title="Favourite">★</span>{% endif %}
+            </td>
+            <td class="px-5 py-4 text-gray-500">{{ rider.vehicle_type|default:"—" }}</td>
+            <td class="px-5 py-4 text-gray-500">{{ rider.distance_km }} km</td>
+            <td class="px-5 py-4 text-gray-500">{{ rider.eta_minutes }} min</td>
+            <td class="px-5 py-4 text-gray-500">{{ rider.rating }}★</td>
+            <td class="px-5 py-4">
+              <div class="flex gap-2 justify-end flex-wrap">
+                <form method="post" action="{% url 'web-seller-order-rider-request' seller_order.suborder_number %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="mode" value="direct">
+                  <input type="hidden" name="rider_id" value="{{ rider.rider_id }}">
+                  <button type="submit" class="rounded-lg border border-ink text-ink font-bold text-xs px-4 py-2 hover:bg-ink hover:text-white transition-colors">Request this rider</button>
+                </form>
+                {% if not rider.is_favorite %}
+                  <form method="post" action="{% url 'web-seller-rider-favorite' rider.rider_id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <button type="submit" class="rounded-lg border border-gray-200 text-gray-500 font-bold text-xs px-3 py-2 hover:border-ink transition-colors">☆ Favourite</button>
+                  </form>
+                {% endif %}
+                <form method="post" action="{% url 'web-seller-rider-block' rider.rider_id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.path }}">
+                  <button type="submit" class="rounded-lg border border-red-200 text-red-600 font-bold text-xs px-3 py-2 hover:bg-red-50 transition-colors">Block</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-10 text-center text-gray-400">No riders are online nearby right now. Make sure your store's pickup location is set in Store settings.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  {% if favorite_riders %}
+  <div class="rounded-2xl bg-white border border-gray-200 p-5">
+    <p class="font-bold mb-3">Your favourite riders</p>
+    <div class="flex flex-wrap gap-2">
+      {% for favorite in favorite_riders %}
+        <form method="post" action="{% url 'web-seller-order-rider-request' seller_order.suborder_number %}">
+          {% csrf_token %}
+          <input type="hidden" name="mode" value="direct">
+          <input type="hidden" name="rider_id" value="{{ favorite.rider_id }}">
+          <button type="submit" class="rounded-full border border-gray-200 text-xs font-bold px-4 py-2 hover:border-ink transition-colors">
+            ★ {{ favorite.rider.user.full_name|default:favorite.rider.user.email }}
+          </button>
+        </form>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

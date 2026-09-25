@@ -86,10 +86,6 @@ ACCESSORIES = [_img(p) for p in [
 ]]
 HERO_IMAGE = _img("photo-1517649763962-0c623066013b")
 
-
-# (category slug, category name, subcategory names, brand slug, brand name,
-#  seller slug, seller name, [(slug, name, price, original_price, sold_count,
-#  is_featured, image_pool), ...])
 CATALOG_SPEC = [
     ("football", "Football", ["Boots", "Jerseys", "Balls", "Goalkeeper gear"], "vantage", "Vantage", "sportmart", "SportMart", [
         ("pro-match-boots", "Pro Match Football Boots", "329.00", "449.00", 212, True, FOOTBALL_BOOTS),
@@ -145,6 +141,9 @@ class Command(BaseCommand):
         self.stdout.write("Seeding seller payouts...")
         self._seed_payouts()
 
+        self.stdout.write("Seeding rider profiles...")
+        self._seed_riders()
+
         self.stdout.write("Seeding POS employees and in-store sales...")
         self._seed_pos(products_by_slug)
 
@@ -175,8 +174,6 @@ class Command(BaseCommand):
         admin_user.is_email_verified = True
         admin_user.role = User.Role.ADMIN
         admin_user.save(update_fields=["password", "is_staff", "is_superuser", "is_email_verified", "role"])
-
-    # -- catalog ------------------------------------------------------------
 
     def _seed_catalog(self):
         brand_cache, seller_cache, category_cache = {}, {}, {}
@@ -228,6 +225,12 @@ class Command(BaseCommand):
                     seller.primary_category = category
                     seller.support_phone = "024 700 1122"
                     seller.save(update_fields=["user", "primary_category", "support_phone"])
+                if seller.pickup_lat is None or seller.pickup_lng is None:
+                    # A real Accra location (Osu) - riders can only be matched
+                    # to this seller once a pickup point exists.
+                    seller.pickup_lat = Decimal("5.5563")
+                    seller.pickup_lng = Decimal("-0.1969")
+                    seller.save(update_fields=["pickup_lat", "pickup_lng"])
 
             first_subcategory = Subcategory.objects.filter(category=category).first()
 
@@ -352,6 +355,54 @@ class Command(BaseCommand):
             Payout.objects.get_or_create(
                 seller=seller, payout_date=payout_date,
                 defaults={"amount": amount, "method": "MTN MoMo", "status": status},
+            )
+
+    def _seed_riders(self):
+        from riders.models import RiderProfile, Vehicle
+
+        # Cluster riders a few hundred metres around wherever the demo
+        # seller's own pickup point currently is (set in Store settings, or
+        # via /admin/), falling back to Osu, Accra if it's never been set -
+        # otherwise "nearby riders" would find nobody if that location ever
+        # moves away from a hardcoded default.
+        seller = Seller.objects.filter(slug="northmark-store").first()
+        if seller is not None and seller.pickup_lat is not None and seller.pickup_lng is not None:
+            base_lat, base_lng = float(seller.pickup_lat), float(seller.pickup_lng)
+        else:
+            base_lat, base_lng = 5.5563, -0.1969
+
+        rider_specs = [
+            ("rider1@example.com", "Kwame Mensah", Vehicle.Type.MOTORCYCLE, "GT-1234-24", 0.0022, -0.0014),
+            ("rider2@example.com", "Ama Owusu", Vehicle.Type.BICYCLE, "GT-5678-24", -0.0006, -0.0031),
+            ("rider3@example.com", "Kojo Boateng", Vehicle.Type.CAR, "GT-9012-24", 0.0039, 0.0016),
+            ("rider4@example.com", "Efua Asante", Vehicle.Type.VAN, "GT-3456-24", -0.0021, -0.0043),
+        ]
+
+        for email, full_name, vehicle_type, plate, lat_offset, lng_offset in rider_specs:
+            lat, lng = f"{base_lat + lat_offset:.6f}", f"{base_lng + lng_offset:.6f}"
+            user, _ = User.objects.get_or_create(
+                email=email, defaults={"is_email_verified": True, "full_name": full_name, "role": User.Role.RIDER},
+            )
+            # Always (re)set the known demo password/role/status, every run -
+            # mirrors the seller@example.com account just above.
+            user.set_password("StrongPass123!")
+            user.is_email_verified = True
+            user.role = User.Role.RIDER
+            user.save(update_fields=["password", "is_email_verified", "role"])
+
+            rider_profile, _ = RiderProfile.objects.get_or_create(user=user)
+            rider_profile.is_online = True
+            rider_profile.is_verified = True
+            rider_profile.current_lat = lat
+            rider_profile.current_lng = lng
+            rider_profile.rating_avg = Decimal("4.80")
+            rider_profile.save(
+                update_fields=["is_online", "is_verified", "current_lat", "current_lng", "rating_avg"]
+            )
+
+            Vehicle.objects.get_or_create(
+                rider=rider_profile, type=vehicle_type,
+                defaults={"make": "Demo", "model": "Model", "plate_number": plate, "color": "White"},
             )
 
     def _seed_pos(self, products_by_slug):

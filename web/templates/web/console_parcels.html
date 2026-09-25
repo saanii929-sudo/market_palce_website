@@ -1,0 +1,63 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Parcels{% endblock %}
+{% block console_subtitle %}Customer-sent packages moving through the dispatch engine{% endblock %}
+{% block console_actions %}
+  <a href="{% url 'web-console-parcels-export' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">Export report</a>
+{% endblock %}
+
+{% block console_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="p-5 flex items-center gap-2 flex-wrap border-b border-gray-100">
+    <a href="{% url 'web-console-parcels' %}" class="text-xs font-bold px-4 py-2 rounded-full {% if not active_tab %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">All</a>
+    <a href="?status=pending" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'pending' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Pending</a>
+    <a href="?status=rider_assigned" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'rider_assigned' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Rider assigned</a>
+    <a href="?status=in_transit" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'in_transit' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">In transit</a>
+    <a href="?status=delivered" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'delivered' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Delivered</a>
+    <a href="?status=cancelled" class="text-xs font-bold px-4 py-2 rounded-full {% if active_tab == 'cancelled' %}bg-ink text-white{% else %}border border-gray-200 text-gray-500 hover:border-ink{% endif %}">Cancelled</a>
+  </div>
+
+  <div class="overflow-x-auto">
+  <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Sender</th>
+          <th class="px-5 py-3">Recipient</th>
+          <th class="px-5 py-3">Size</th>
+          <th class="px-5 py-3">Route</th>
+          <th class="px-5 py-3">Price</th>
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3">Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for parcel in parcels %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4">
+              <p class="font-bold">{{ parcel.sender.full_name|default:parcel.sender.email }}</p>
+              <p class="text-xs text-gray-400">{{ parcel.sender.phone|default:"" }}</p>
+            </td>
+            <td class="px-5 py-4 text-gray-500">{{ parcel.recipient_name }}<br><span class="text-xs">{{ parcel.recipient_phone }}</span></td>
+            <td class="px-5 py-4 text-gray-500">{{ parcel.get_package_size_display }}</td>
+            <td class="px-5 py-4 text-gray-500 text-xs">{{ parcel.pickup_line1 }} → {{ parcel.dropoff_line1 }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ parcel.price }}</td>
+            <td class="px-5 py-4">
+              {% if parcel.status == "delivered" %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Delivered</span>
+              {% elif parcel.status == "cancelled" %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Cancelled</span>
+              {% elif parcel.status == "pending" %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Pending</span>
+              {% else %}
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">{{ parcel.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4 text-gray-500">{{ parcel.created_at|date:"M d, Y" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="px-5 py-10 text-center text-gray-400">No parcels in this view.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

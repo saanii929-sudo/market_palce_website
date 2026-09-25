@@ -97,10 +97,6 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class SellerOrderSummarySerializer(serializers.ModelSerializer):
-    """The lightweight per-sub-order summary embedded in OrderTrackingSerializer
-    - just enough to show "which seller's shipment is at which stage" without
-    the full item/shipment detail SellerOrderTrackingSerializer carries."""
-
     seller_name = serializers.CharField(source="seller.business_name", read_only=True)
 
     class Meta:

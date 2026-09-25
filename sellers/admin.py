@@ -2,7 +2,17 @@ from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.html import format_html
 
-from .models import BulkUploadJob, Payout, PayoutAccount, SellerApplication, SellerSubscription, SubscriptionPlan
+from .models import (
+    BulkUploadJob,
+    Payout,
+    PayoutAccount,
+    SellerApplication,
+    SellerFavoriteRider,
+    SellerFulfillmentRating,
+    SellerRiderBlock,
+    SellerSubscription,
+    SubscriptionPlan,
+)
 from .services import (
     PayoutError,
     SellerApplicationError,
@@ -184,3 +194,26 @@ class BulkUploadJobAdmin(admin.ModelAdmin):
     search_fields = ["seller__business_name"]
     autocomplete_fields = ["seller"]
     readonly_fields = ["status", "total_rows", "success_count", "error_count", "error_report"]
+
+
+@admin.register(SellerFavoriteRider)
+class SellerFavoriteRiderAdmin(admin.ModelAdmin):
+    list_display = ["id", "seller", "rider", "notes", "created_at"]
+    search_fields = ["seller__business_name", "rider__user__email"]
+    autocomplete_fields = ["seller", "rider"]
+
+
+@admin.register(SellerRiderBlock)
+class SellerRiderBlockAdmin(admin.ModelAdmin):
+    list_display = ["id", "seller", "rider", "reason", "created_at"]
+    search_fields = ["seller__business_name", "rider__user__email"]
+    autocomplete_fields = ["seller", "rider"]
+
+
+@admin.register(SellerFulfillmentRating)
+class SellerFulfillmentRatingAdmin(admin.ModelAdmin):
+    list_display = ["id", "seller", "rider", "stars", "trip", "created_at"]
+    list_filter = ["stars"]
+    search_fields = ["seller__business_name", "rider__user__email"]
+    autocomplete_fields = ["seller", "rider", "trip"]
+    readonly_fields = ["trip", "rider", "seller", "stars", "comment"]

@@ -91,6 +91,14 @@ class Seller(TimeStampedModel):
         help_text="Cart subtotal (for this seller's items) above which delivery is free. Leave blank to use the platform default.",
     )
 
+    # Used by deliveries.services to find/rank riders near this seller's
+    # pickup point (nearest-match dispatch, nearby-riders/, direct
+    # requests). Blank until a seller sets it, so a Delivery for a seller
+    # with no location on file just never dispatches - the same graceful
+    # degradation already applied to Order's own delivery coordinates.
+    pickup_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    pickup_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
     class Meta:
         ordering = ["business_name"]
 
@@ -126,6 +134,16 @@ class Product(TimeStampedModel):
         help_text="Scanned at the point of sale; falls back to SKU when blank.",
     )
     stock_qty = models.PositiveIntegerField(default=0)
+
+    class DeliverySize(models.TextChoices):
+        SMALL = "small", "Small"
+        MEDIUM = "medium", "Medium"
+        LARGE = "large", "Large"
+
+    delivery_size = models.CharField(
+        max_length=20, choices=DeliverySize.choices, blank=True,
+        help_text="Used to filter which rider vehicle types can carry this item. Blank = no requirement.",
+    )
 
     is_returnable = models.BooleanField(
         default=True, help_text="Whether a customer can request a return for this product after delivery."

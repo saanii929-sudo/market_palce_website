@@ -111,8 +111,25 @@
           <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-check"/></svg>KYC queue</span>
           {% if pending_kyc_count %}<span class="text-xs font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center">{{ pending_kyc_count }}</span>{% endif %}
         </a>
+        <a href="{% url 'web-console-rider-kyc-queue' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'rider-kyc-queue' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-barcode"/></svg>Rider KYC queue</span>
+          {% if pending_rider_kyc_count %}<span class="text-xs font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center">{{ pending_rider_kyc_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'web-console-rider-payouts' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'rider-payouts' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-chart"/></svg>Rider payouts</span>
+          {% if pending_rider_payouts_count %}<span class="text-xs font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center">{{ pending_rider_payouts_count }}</span>{% endif %}
+        </a>
         <a href="{% url 'web-console-broadcasts' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'broadcasts' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-bell"/></svg>Broadcasts
+        </a>
+        <a href="{% url 'web-console-parcels' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'parcels' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-barcode"/></svg>Parcels
+        </a>
+        <a href="{% url 'web-console-seller-rider-blocks' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'seller-rider-blocks' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-help"/></svg>Seller rider blocks
+        </a>
+        <a href="{% url 'web-console-fulfillment-ratings' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'fulfillment-ratings' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-star"/></svg>Fulfillment ratings
         </a>
         {% endwith %}
       </nav>
