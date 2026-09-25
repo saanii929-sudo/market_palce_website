@@ -312,16 +312,40 @@ def build_delivery_request_payload(offer: DeliveryOffer) -> dict:
 
 
 def _broadcast_offer_to_rider(offer: DeliveryOffer) -> None:
-    from asgiref.sync import async_to_sync
-    from channels.layers import get_channel_layer
+    """Best-effort, same guarantee as notifications.push: a live rider push
+    must never be able to block or fail the request that created the offer.
+    Runs in a background daemon thread with a hard timeout - async_to_sync
+    bridging into the channel layer from inside a sync request (especially
+    with an already-open WebSocket in the same ASGI process) has a known
+    failure mode where it can hang instead of raising, which a plain
+    try/except can't protect against."""
+    import logging
+    import threading
 
-    channel_layer = get_channel_layer()
-    if channel_layer is None:
-        return
-    async_to_sync(channel_layer.group_send)(
-        f"rider_dispatch_{offer.rider_id}",
-        {"type": "delivery.request", "request": build_delivery_request_payload(offer)},
-    )
+    logger = logging.getLogger(__name__)
+    payload = build_delivery_request_payload(offer)
+    rider_id = offer.rider_id
+
+    def _send():
+        try:
+            from asgiref.sync import async_to_sync
+            from channels.layers import get_channel_layer
+
+            channel_layer = get_channel_layer()
+            if channel_layer is None:
+                return
+            async_to_sync(channel_layer.group_send)(
+                f"rider_dispatch_{rider_id}",
+                {"type": "delivery.request", "request": payload},
+            )
+        except Exception:
+            logger.exception("Failed to broadcast delivery offer to rider %s over WebSocket", rider_id)
+
+    thread = threading.Thread(target=_send, daemon=True)
+    thread.start()
+    thread.join(timeout=3)
+    if thread.is_alive():
+        logger.warning("WebSocket broadcast to rider %s is still running after 3s - abandoning it.", rider_id)
 
 
 def _notify_rider_of_offer(offer: DeliveryOffer) -> None:
