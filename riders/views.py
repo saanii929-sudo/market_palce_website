@@ -159,8 +159,19 @@ class RiderVehicleView(APIView):
 
 
 class RiderSettingsView(APIView):
+    """GET returns the rider's current profile/preferences (including the
+    real, computed acceptance_rate - see riders.services.recompute_acceptance_rate)
+    so the app can render the profile screen and initial toggle states
+    without needing to first PATCH something."""
+
     serializer_class = RiderSettingsSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+        return Response(RiderProfileSerializer(rider_profile).data)
 
     def patch(self, request):
         rider_profile, error = _rider_profile_or_403(request)

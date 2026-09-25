@@ -463,6 +463,10 @@ def expire_offer(offer: DeliveryOffer) -> None:
     offer.status = DeliveryOffer.Status.EXPIRED
     offer.save(update_fields=["status"])
 
+    from riders.services import recompute_acceptance_rate
+
+    recompute_acceptance_rate(offer.rider)
+
     delivery = offer.delivery
     if delivery.request_mode == Delivery.RequestMode.DIRECT:
         delivery.status = Delivery.Status.PENDING
@@ -508,6 +512,10 @@ def accept_offer(offer: DeliveryOffer, rider) -> Trip:
     offer.status = DeliveryOffer.Status.ACCEPTED
     offer.save(update_fields=["status"])
 
+    from riders.services import recompute_acceptance_rate
+
+    recompute_acceptance_rate(rider)
+
     DeliveryOffer.objects.filter(delivery=offer.delivery, status=DeliveryOffer.Status.PENDING).exclude(
         id=offer.id
     ).update(status=DeliveryOffer.Status.EXPIRED)
@@ -538,6 +546,10 @@ def decline_offer(offer: DeliveryOffer, rider) -> None:
 
     offer.status = DeliveryOffer.Status.DECLINED
     offer.save(update_fields=["status"])
+
+    from riders.services import recompute_acceptance_rate
+
+    recompute_acceptance_rate(rider)
 
     delivery = offer.delivery
     if delivery.request_mode == Delivery.RequestMode.DIRECT:

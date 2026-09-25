@@ -145,6 +145,33 @@ def update_rider_settings(rider_profile: RiderProfile, data: dict) -> RiderProfi
     return rider_profile
 
 
+def recompute_acceptance_rate(rider_profile: RiderProfile) -> Decimal:
+    """A real, computed acceptance rate - the share of offers this rider
+    has ever reached a final state on (accepted, declined, or let expire)
+    that they actually accepted. Recomputed from deliveries.services
+    whenever one of those three outcomes happens - see accept_offer/
+    decline_offer/expire_offer. Letting an offer time out counts against
+    the rate the same as an explicit decline, matching how Uber/Bolt-style
+    acceptance rates work: ignoring a request isn't neutral."""
+    from deliveries.models import DeliveryOffer
+
+    resolved = DeliveryOffer.objects.filter(
+        rider=rider_profile,
+        status__in=[DeliveryOffer.Status.ACCEPTED, DeliveryOffer.Status.DECLINED, DeliveryOffer.Status.EXPIRED],
+    )
+    total = resolved.count()
+    if total == 0:
+        rate = Decimal("100.00")
+    else:
+        accepted = resolved.filter(status=DeliveryOffer.Status.ACCEPTED).count()
+        rate = (Decimal(accepted) / Decimal(total) * 100).quantize(Decimal("0.01"))
+
+    if rider_profile.acceptance_rate != rate:
+        rider_profile.acceptance_rate = rate
+        rider_profile.save(update_fields=["acceptance_rate"])
+    return rate
+
+
 def credit_trip_earnings(trip):
     """Called from exactly one place - deliveries.services.complete_trip.
     Copies the fare that was already locked on the Delivery at dispatch
