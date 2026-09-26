@@ -175,10 +175,28 @@ def recompute_acceptance_rate(rider_profile: RiderProfile) -> Decimal:
 def credit_trip_earnings(trip):
     """Called from exactly one place - deliveries.services.complete_trip.
     Copies the fare that was already locked on the Delivery at dispatch
-    time (see Delivery.lock_rider_fare) - never recomputes it here."""
+    time (see Delivery.lock_rider_fare) - never recomputes it here.
+
+    For a cash-on-pickup parcel, the rider already collected the FULL price
+    in cash directly from the sender at pickup (see
+    Delivery.advance_content_to_picked_up) - their fare share is already in
+    their pocket, so crediting the full rider_fare again here would double
+    -pay them. Instead `total` nets out to the negative of the platform's
+    commission (rider_fare - price), so it draws down what the platform
+    owes them from other trips by exactly the cash they're holding on the
+    platform's behalf. base_fare/distance_bonus/surge_multiplier stay as
+    the nominal fare breakdown for display purposes either way."""
     from .models import RiderEarning
 
     delivery = trip.delivery
+    total = delivery.rider_fare
+
+    from parcels.models import Parcel
+
+    obj = delivery.content_object
+    if isinstance(obj, Parcel) and obj.payment_method == Parcel.PaymentMethod.CASH:
+        total = delivery.rider_fare - delivery.price
+
     earning, _ = RiderEarning.objects.get_or_create(
         trip=trip,
         defaults={
@@ -186,7 +204,7 @@ def credit_trip_earnings(trip):
             "base_fare": delivery.rider_base_fare,
             "distance_bonus": delivery.rider_distance_bonus,
             "surge_multiplier": delivery.rider_surge_multiplier,
-            "total": delivery.rider_fare,
+            "total": total,
         },
     )
     return earning
@@ -248,11 +266,19 @@ def get_earnings_activity(rider_profile: RiderProfile) -> list[dict]:
     first - GET /riders/earnings/activity/ paginates over this list."""
     from .models import RiderEarning
 
+    from parcels.models import Parcel
+
     activity = []
     for earning in RiderEarning.objects.filter(rider=rider_profile).select_related("trip__delivery"):
-        kind = _delivery_kind_label(earning.trip.delivery)
+        delivery = earning.trip.delivery
+        kind = _delivery_kind_label(delivery)
+        obj = delivery.content_object
+        if isinstance(obj, Parcel) and obj.payment_method == Parcel.PaymentMethod.CASH:
+            label = f"{kind} delivery (cash collected on pickup)"
+        else:
+            label = f"{kind} delivery"
         activity.append({
-            "type": "delivery", "label": f"{kind} delivery", "amount": earning.total,
+            "type": "delivery", "label": label, "amount": earning.total,
             "created_at": earning.created_at,
         })
     for payout in RiderPayout.objects.filter(rider=rider_profile, status=RiderPayout.Status.PAID):

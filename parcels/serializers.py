@@ -47,6 +47,9 @@ class ParcelCreateSerializer(serializers.Serializer):
     declared_value = serializers.DecimalField(
         max_digits=10, decimal_places=2, required=False, allow_null=True, default=None
     )
+    payment_method = serializers.ChoiceField(
+        choices=Parcel.PaymentMethod.choices, required=False, default=Parcel.PaymentMethod.ONLINE
+    )
 
     def validate_pickup_address_id(self, value):
         if value is None:
@@ -64,6 +67,6 @@ class ParcelSerializer(serializers.ModelSerializer):
             "id", "recipient_name", "recipient_phone",
             "pickup_line1", "pickup_city", "dropoff_line1", "dropoff_city",
             "package_size", "description", "photo", "declared_value",
-            "status", "price", "payment_status", "checkout_url", "created_at",
+            "status", "price", "payment_method", "payment_status", "checkout_url", "created_at",
         ]
         read_only_fields = fields

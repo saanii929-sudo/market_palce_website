@@ -61,6 +61,11 @@ class Parcel(TimeStampedModel):
         PAID = "paid", "Paid"
         FAILED = "failed", "Failed"
 
+    class PaymentMethod(models.TextChoices):
+        ONLINE = "online", "Pay online"
+        CASH = "cash", "Cash on pickup"
+
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.ONLINE)
     payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.UNPAID)
     payment_reference = models.CharField(max_length=40, blank=True, default=generate_parcel_payment_reference)
     checkout_url = models.URLField(max_length=500, blank=True)

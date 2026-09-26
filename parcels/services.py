@@ -40,6 +40,7 @@ def create_parcel(
     pickup_address=None, pickup_line1: str = "", pickup_city: str = "",
     pickup_lat=None, pickup_lng=None, dropoff_lat=None, dropoff_lng=None,
     description: str = "", photo=None, declared_value=None,
+    payment_method: str = Parcel.PaymentMethod.ONLINE,
 ) -> Parcel:
     from deliveries.services import create_delivery_for_parcel, haversine_km
 
@@ -64,7 +65,7 @@ def create_parcel(
         pickup_lat=pickup_lat, pickup_lng=pickup_lng,
         dropoff_line1=dropoff_line1, dropoff_city=dropoff_city, dropoff_lat=dropoff_lat, dropoff_lng=dropoff_lng,
         package_size=package_size, description=description, photo=photo, declared_value=declared_value,
-        price=price,
+        price=price, payment_method=payment_method,
     )
     # Creating the parcel does NOT search for a rider - that's a distinct,
     # explicit step (find_rider_for_parcel / POST /parcels/{id}/find-rider/),
@@ -91,6 +92,8 @@ def initiate_parcel_checkout(
 
     if parcel.sender_id != user.id:
         raise ParcelError("This isn't your package.")
+    if parcel.payment_method != Parcel.PaymentMethod.ONLINE:
+        raise ParcelError("This package is set to pay cash on pickup.")
     if parcel.payment_status == Parcel.PaymentStatus.PAID:
         raise ParcelError("This package has already been paid for.")
 
@@ -150,7 +153,15 @@ def find_rider_for_parcel(parcel: Parcel, user) -> dict:
 
     if parcel.sender_id != user.id:
         raise ParcelError("This isn't your package.")
-    if parcel.payment_status != Parcel.PaymentStatus.PAID:
+    # Cash-on-pickup parcels skip this gate entirely - the sender pays the
+    # rider in person when the rider arrives (see
+    # deliveries.models.Delivery.advance_content_to_picked_up, which marks
+    # the parcel paid at that moment). Only online payments must clear
+    # before a rider can be found.
+    if (
+        parcel.payment_method == Parcel.PaymentMethod.ONLINE
+        and parcel.payment_status != Parcel.PaymentStatus.PAID
+    ):
         raise ParcelError("Please complete payment before we can find you a rider.")
     if parcel.status != Parcel.Status.PENDING:
         raise ParcelError("This package already has a rider assigned, or is no longer searching.")

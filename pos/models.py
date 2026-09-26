@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import models
 from django.utils import timezone
@@ -275,6 +276,40 @@ class ProductBatch(TimeStampedModel):
         if not self.expiry_date or self.is_expired:
             return False
         return (self.expiry_date - timezone.now().date()).days <= 30
+
+
+class WarehouseStock(TimeStampedModel):
+    """Backroom/overstock inventory for a product, tracked separately from
+    Product.stock_qty (what's actually listed as sellable on the
+    storefront). Only meaningful while the seller has Seller.has_warehouse
+    enabled - see pos.services.receive_into_warehouse and
+    import_from_warehouse for the two operations that move stock in and out
+    of it."""
+
+    product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name="warehouse_stock")
+    qty_on_hand = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"WarehouseStock({self.product.name}, {self.qty_on_hand})"
+
+
+class WarehouseTransfer(TimeStampedModel):
+    """Audit trail entry for one 'import from warehouse' action - how many
+    units of a product moved from the warehouse onto the storefront, and
+    who did it. Purely a log; the actual balances live on WarehouseStock
+    and Product.stock_qty."""
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="warehouse_transfers")
+    qty = models.PositiveIntegerField()
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"WarehouseTransfer({self.product.name}, {self.qty})"
 
 
 class Expense(TimeStampedModel):

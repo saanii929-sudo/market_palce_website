@@ -22,6 +22,8 @@ from .models import (
     POSSaleItem,
     ProductBatch,
     PurchaseOrder,
+    WarehouseStock,
+    WarehouseTransfer,
 )
 
 
@@ -246,6 +248,44 @@ def write_off_batch(batch: ProductBatch, seller) -> Expense:
         description=f"Write-off: {write_off_qty} x {product.name} (expired batch {batch.batch_code})",
         amount=write_off_value,
     )
+
+
+@transaction.atomic
+def receive_into_warehouse(product: Product, *, qty: int) -> WarehouseStock:
+    if not product.seller.has_warehouse:
+        raise POSError("Turn on warehouse tracking in store settings first.")
+    if qty <= 0:
+        raise POSError("Enter a quantity greater than zero.")
+
+    warehouse_stock, _ = WarehouseStock.objects.get_or_create(product=product)
+    warehouse_stock.qty_on_hand += qty
+    warehouse_stock.save(update_fields=["qty_on_hand"])
+    return warehouse_stock
+
+
+@transaction.atomic
+def import_from_warehouse(product: Product, *, qty: int, user) -> Product:
+    if not product.seller.has_warehouse:
+        raise POSError("Turn on warehouse tracking in store settings first.")
+    if qty <= 0:
+        raise POSError("Enter a quantity greater than zero.")
+
+    try:
+        warehouse_stock = WarehouseStock.objects.select_for_update().get(product=product)
+    except WarehouseStock.DoesNotExist:
+        raise POSError("This product has no warehouse stock recorded yet.")
+
+    if warehouse_stock.qty_on_hand < qty:
+        raise POSError(f"Only {warehouse_stock.qty_on_hand} unit(s) available in the warehouse.")
+
+    warehouse_stock.qty_on_hand -= qty
+    warehouse_stock.save(update_fields=["qty_on_hand"])
+
+    product.stock_qty += qty
+    product.save(update_fields=["stock_qty"])
+
+    WarehouseTransfer.objects.create(product=product, qty=qty, performed_by=user)
+    return product
 
 
 @transaction.atomic

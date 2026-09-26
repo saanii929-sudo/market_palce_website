@@ -68,6 +68,7 @@ from orders.services.refunds import RefundError, advance_refund_request, is_refu
 from orders.services.returns import ReturnError, eligible_order_items, request_return, resolve_return_request
 from payments.models import PaymentMethodToken
 from payments.serializers import PaymentMethodTokenCreateSerializer
+from pos.services import POSError, import_from_warehouse
 from reviews.models import Review
 from reviews.serializers import ReviewCreateSerializer, ReviewFlagCreateSerializer
 from reviews.services import ReviewModerationError, flag_review
@@ -1216,7 +1217,11 @@ def seller_overview_view(request, seller):
 
 @seller_required
 def seller_products_view(request, seller):
-    products = Product.objects.filter(seller=seller).select_related("category").order_by("-created_at")
+    products = (
+        Product.objects.filter(seller=seller)
+        .select_related("category", "warehouse_stock")
+        .order_by("-created_at")
+    )
     query = request.GET.get("q", "").strip()
     if query:
         products = products.filter(name__icontains=query)
@@ -1432,6 +1437,26 @@ def seller_product_delete_view(request, seller, product_id):
         product.is_active = False
         product.save(update_fields=["is_active"])
         messages.error(request, f'"{name}" has existing orders, so it was deactivated instead of deleted.')
+    return redirect("web-seller-products")
+
+
+@seller_required
+@require_http_methods(["POST"])
+def seller_product_warehouse_import_view(request, seller, product_id):
+    """The 'Import from warehouse' action shown next to an out-of-stock
+    product on the products page - moves units from Seller.has_warehouse
+    backroom stock onto this product's sellable stock_qty."""
+    product = get_object_or_404(Product, id=product_id, seller=seller)
+    try:
+        qty = int(request.POST.get("qty", "0"))
+    except ValueError:
+        qty = 0
+
+    try:
+        import_from_warehouse(product, qty=qty, user=request.user)
+        messages.success(request, f"Imported {qty} unit(s) of \"{product.name}\" from the warehouse.")
+    except POSError as exc:
+        messages.error(request, exc.message)
     return redirect("web-seller-products")
 
 
@@ -1972,7 +1997,8 @@ def seller_settings_view(request, seller):
             seller.primary_category = get_object_or_404(Category, id=category_id)
         seller.support_phone = request.POST.get("support_phone", "").strip()
         seller.tagline = request.POST.get("tagline", "").strip()
-        update_fields = ["business_name", "primary_category", "support_phone", "tagline"]
+        seller.has_warehouse = bool(request.POST.get("has_warehouse"))
+        update_fields = ["business_name", "primary_category", "support_phone", "tagline", "has_warehouse"]
 
         pickup_lat = request.POST.get("pickup_lat", "").strip()
         pickup_lng = request.POST.get("pickup_lng", "").strip()

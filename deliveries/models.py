@@ -151,12 +151,19 @@ class Delivery(TimeStampedModel):
             obj.save(update_fields=["status"])
 
     def advance_content_to_picked_up(self) -> None:
-       
-
         obj = self.content_object
         if isinstance(obj, Parcel):
             obj.status = Parcel.Status.PICKED_UP
-            obj.save(update_fields=["status"])
+            update_fields = ["status"]
+            # Cash-on-pickup parcels never go through the online checkout
+            # flow - the sender hands the rider cash for the full price at
+            # exactly this moment, so this is where payment_status flips to
+            # paid. See parcels.services.find_rider_for_parcel, which lets a
+            # cash parcel dispatch without waiting on this.
+            if obj.payment_method == Parcel.PaymentMethod.CASH and obj.payment_status == Parcel.PaymentStatus.UNPAID:
+                obj.payment_status = Parcel.PaymentStatus.PAID
+                update_fields.append("payment_status")
+            obj.save(update_fields=update_fields)
 
     def advance_content_to_in_transit(self) -> None:
        

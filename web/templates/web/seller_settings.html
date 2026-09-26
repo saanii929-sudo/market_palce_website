@@ -69,6 +69,21 @@
     </div>
   </div>
 
+  <div class="border-t border-gray-100 pt-5">
+    <label class="flex items-start gap-3 cursor-pointer">
+      <input type="checkbox" name="has_warehouse" value="1" {% if seller.has_warehouse %}checked{% endif %}
+             class="mt-1 w-4 h-4 rounded border-gray-300 accent-brand">
+      <span>
+        <span class="block text-sm font-bold">I have a warehouse</span>
+        <span class="block text-xs text-gray-400 mt-0.5">
+          Keep backroom stock separate from what's listed as available for sale. When a product runs out on the
+          storefront, you can import units from the warehouse instead of restocking from scratch.
+          {% if seller.has_warehouse %}Manage it from <a href="{% url 'web-seller-warehouse' %}" class="text-brand font-bold hover:underline">Warehouse</a> in the sidebar.{% endif %}
+        </span>
+      </span>
+    </label>
+  </div>
+
   <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Save changes</button>
 </form>
 

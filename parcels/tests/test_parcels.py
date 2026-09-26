@@ -329,6 +329,94 @@ class TestParcelPayment:
 
 
 @pytest.mark.django_db
+class TestCashOnPickupParcels:
+    def _create_cash_parcel(self, sender=None):
+        rider = RiderProfileFactory(current_lat=Decimal("5.6100"), current_lng=Decimal("-0.1900"))
+        sender = sender or UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", pickup_lat=Decimal("5.6100"), pickup_lng=Decimal("-0.1900"),
+            dropoff_line1="2 B St", dropoff_city="Accra", dropoff_lat=Decimal("5.6050"), dropoff_lng=Decimal("-0.1880"),
+            payment_method=Parcel.PaymentMethod.CASH,
+        )
+        return parcel, sender, rider
+
+    def test_defaults_to_online_when_not_specified(self):
+        sender = UserFactory()
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_line1="1 A St", pickup_city="Accra", dropoff_line1="2 B St", dropoff_city="Accra",
+        )
+        assert parcel.payment_method == Parcel.PaymentMethod.ONLINE
+
+    def test_cash_parcel_can_find_a_rider_while_still_unpaid(self):
+        parcel, sender, rider = self._create_cash_parcel()
+        assert parcel.payment_status == Parcel.PaymentStatus.UNPAID
+
+        find_rider_for_parcel(parcel, sender)
+
+        delivery = get_delivery_for_parcel(parcel)
+        assert DeliveryOffer.objects.get(delivery=delivery).rider_id == rider.id
+        parcel.refresh_from_db()
+        assert parcel.payment_status == Parcel.PaymentStatus.UNPAID  # not paid yet - collected at pickup
+
+    def test_pickup_confirmation_marks_the_cash_parcel_paid(self):
+        parcel, sender, rider = self._create_cash_parcel()
+        find_rider_for_parcel(parcel, sender)
+        delivery = get_delivery_for_parcel(parcel)
+        offer = DeliveryOffer.objects.get(delivery=delivery)
+        trip = accept_offer(offer, rider)
+
+        confirm_pickup(trip, rider)
+
+        parcel.refresh_from_db()
+        assert parcel.payment_status == Parcel.PaymentStatus.PAID
+
+    def test_checkout_is_rejected_for_a_cash_parcel(self):
+        parcel, sender, rider = self._create_cash_parcel()
+        with pytest.raises(ParcelError):
+            initiate_parcel_checkout(
+                parcel, sender,
+                callback_url="https://api.example.com/parcels/payment-webhook/",
+                return_url="https://app.example.com/return",
+                cancellation_url="https://app.example.com/cancel",
+            )
+
+    def test_cash_trip_completion_nets_out_the_platform_commission_from_rider_earnings(self):
+        from riders.models import RiderEarning
+
+        parcel, sender, rider = self._create_cash_parcel()
+        find_rider_for_parcel(parcel, sender)
+        delivery = get_delivery_for_parcel(parcel)
+        offer = DeliveryOffer.objects.get(delivery=delivery)
+        trip = accept_offer(offer, rider)
+        confirm_pickup(trip, rider)
+        pod = trip.proof_of_delivery
+        submit_proof_of_delivery(trip, rider, otp_code=pod.otp_code)
+        complete_trip(trip, rider)
+
+        delivery.refresh_from_db()
+        earning = RiderEarning.objects.get(trip=trip)
+        expected_net = delivery.rider_fare - delivery.price
+        assert expected_net < 0  # the rider already pocketed more in cash than their fare share
+        assert earning.total == expected_net
+
+    def test_online_trip_completion_still_credits_the_full_fare(self):
+        from riders.models import RiderEarning
+
+        parcel, delivery, offer, rider = _create_dispatched_parcel()  # payment_method defaults to ONLINE
+        trip = accept_offer(offer, rider)
+        confirm_pickup(trip, rider)
+        pod = trip.proof_of_delivery
+        submit_proof_of_delivery(trip, rider, otp_code=pod.otp_code)
+        complete_trip(trip, rider)
+
+        delivery.refresh_from_db()
+        earning = RiderEarning.objects.get(trip=trip)
+        assert earning.total == delivery.rider_fare
+
+
+@pytest.mark.django_db
 class TestParcelStatusTracksTheUnderlyingTrip:
     def test_status_advances_through_the_full_trip_without_special_casing_the_state_machine(self):
         parcel, delivery, offer, rider = _create_dispatched_parcel()

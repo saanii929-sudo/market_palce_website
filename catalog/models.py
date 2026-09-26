@@ -81,6 +81,14 @@ class Seller(TimeStampedModel):
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=Decimal("0.00"))
     is_verified = models.BooleanField(default=False)
     is_featured = models.BooleanField(default=False)
+    has_warehouse = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether this seller keeps backroom/overstock inventory in a warehouse, separate from what's "
+            "listed as available on the storefront (Product.stock_qty). Enables warehouse stock tracking and "
+            "importing units into a product's sellable stock when it runs out."
+        ),
+    )
 
     primary_category = models.ForeignKey(
         "catalog.Category", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"

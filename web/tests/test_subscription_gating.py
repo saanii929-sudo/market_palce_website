@@ -17,6 +17,7 @@ from .test_catalog_management import seller_client
     "web-seller-discounts",
     "web-seller-reports",
     "web-seller-invoices",
+    "web-seller-warehouse",
 ])
 def test_unsubscribed_seller_is_redirected_away_from_pos_suite(url_name):
     client, _ = seller_client()
@@ -30,6 +31,7 @@ def test_unsubscribed_seller_is_redirected_away_from_pos_suite(url_name):
     "web-pos-terminal",
     "web-seller-inventory",
     "web-seller-employees",
+    "web-seller-warehouse",
 ])
 def test_subscribed_seller_can_access_pos_suite(url_name):
     client, _ = seller_client(subscribed=True)

@@ -111,6 +111,11 @@
         <a href="{% url 'web-seller-inventory' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'inventory' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-grid"/></svg>Stock &amp; expiry
         </a>
+        {% if seller.has_warehouse %}
+        <a href="{% url 'web-seller-warehouse' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'warehouse' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-download"/></svg>Warehouse
+        </a>
+        {% endif %}
         <a href="{% url 'web-seller-purchase-orders' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'purchase-orders' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-download"/></svg>Purchase orders
         </a>

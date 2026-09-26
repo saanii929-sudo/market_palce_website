@@ -102,6 +102,10 @@ urlpatterns = [
     path("seller/products/<int:product_id>/variants/add/", views.seller_product_variant_add_view, name="web-seller-product-variant-add"),
     path("seller/products/<int:product_id>/variants/<int:variant_id>/delete/", views.seller_product_variant_delete_view, name="web-seller-product-variant-delete"),
     path("seller/products/<int:product_id>/images/<int:image_id>/delete/", views.seller_product_image_delete_view, name="web-seller-product-image-delete"),
+    path(
+        "seller/products/<int:product_id>/warehouse/import/",
+        views.seller_product_warehouse_import_view, name="web-seller-product-warehouse-import",
+    ),
     path("seller/orders/", views.seller_orders_view, name="web-seller-orders"),
     path("seller/orders/<str:suborder_number>/status/", views.seller_order_status_update_view, name="web-seller-order-status"),
     path("seller/orders/<str:suborder_number>/rider/", views.seller_order_rider_view, name="web-seller-order-rider"),
@@ -162,6 +166,11 @@ urlpatterns = [
     path("seller/inventory/", store_ops_views.seller_inventory_view, name="web-seller-inventory"),
     path("seller/inventory/export/", store_ops_views.seller_inventory_export_view, name="web-seller-inventory-export"),
     path("seller/inventory/batches/<int:batch_id>/write-off/", store_ops_views.seller_batch_write_off_view, name="web-seller-batch-write-off"),
+    path("seller/warehouse/", store_ops_views.seller_warehouse_view, name="web-seller-warehouse"),
+    path(
+        "seller/warehouse/<int:product_id>/receive/",
+        store_ops_views.seller_warehouse_receive_view, name="web-seller-warehouse-receive",
+    ),
 
     path("seller/expenses/", store_ops_views.seller_expenses_view, name="web-seller-expenses"),
     path("seller/expenses/add/", store_ops_views.seller_expense_add_view, name="web-seller-expense-add"),

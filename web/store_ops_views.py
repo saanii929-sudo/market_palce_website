@@ -25,7 +25,15 @@ from pos.models import (
     Supplier,
 )
 from pos.reports import compute_pnl
-from pos.services import POSError, mark_payroll_paid, process_return, receive_purchase_order, run_payroll, write_off_batch
+from pos.services import (
+    POSError,
+    mark_payroll_paid,
+    process_return,
+    receive_into_warehouse,
+    receive_purchase_order,
+    run_payroll,
+    write_off_batch,
+)
 
 from .views import _seller_order_qs, subscription_required
 
@@ -208,6 +216,35 @@ def seller_inventory_export_view(request, seller):
 
 
 @subscription_required
+def seller_warehouse_view(request, seller):
+    ctx = _base_ctx(seller, "warehouse")
+    if seller.has_warehouse:
+        products = list(Product.objects.filter(seller=seller).select_related("warehouse_stock", "category"))
+        for product in products:
+            warehouse_stock = getattr(product, "warehouse_stock", None)
+            product.warehouse_qty = warehouse_stock.qty_on_hand if warehouse_stock else 0
+        ctx["products"] = products
+    return render(request, "web/seller_warehouse.html", ctx)
+
+
+@subscription_required
+@require_http_methods(["POST"])
+def seller_warehouse_receive_view(request, seller, product_id):
+    product = get_object_or_404(Product, id=product_id, seller=seller)
+    try:
+        qty = int(request.POST.get("qty", "0"))
+    except ValueError:
+        qty = 0
+
+    try:
+        receive_into_warehouse(product, qty=qty)
+        messages.success(request, f"Added {qty} unit(s) of \"{product.name}\" to the warehouse.")
+    except POSError as exc:
+        messages.error(request, exc.message)
+    return redirect("web-seller-warehouse")
+
+
+@subscription_required
 def seller_expenses_view(request, seller):
     ctx = _base_ctx(seller, "expenses")
     ctx["expenses"] = seller.expenses.all()
@@ -236,8 +273,6 @@ def seller_expense_add_view(request, seller):
         messages.success(request, "Expense logged.")
     return redirect("web-seller-expenses")
 
-
-# -- Payroll ------------------------------------------------------------
 
 @subscription_required
 def seller_payroll_view(request, seller):

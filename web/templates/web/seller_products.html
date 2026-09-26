@@ -51,6 +51,16 @@
             <td class="px-5 py-4">
               {% if product.stock_qty == 0 %}
                 <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-600">Out of stock</span>
+                {% if seller.has_warehouse and product.warehouse_stock.qty_on_hand %}
+                  <form method="post" action="{% url 'web-seller-product-warehouse-import' product.id %}" class="flex items-center gap-1 mt-1.5">
+                    {% csrf_token %}
+                    <input type="number" name="qty" min="1" max="{{ product.warehouse_stock.qty_on_hand }}" value="{{ product.warehouse_stock.qty_on_hand }}"
+                           class="w-14 rounded-lg border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:border-ink">
+                    <button type="submit" class="text-xs font-bold text-brand hover:underline whitespace-nowrap">
+                      Import ({{ product.warehouse_stock.qty_on_hand }} in warehouse)
+                    </button>
+                  </form>
+                {% endif %}
               {% else %}
                 {{ product.stock_qty }}
               {% endif %}
