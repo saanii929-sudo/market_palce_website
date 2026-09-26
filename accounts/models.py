@@ -103,6 +103,8 @@ class Address(TimeStampedModel):
     city = models.CharField(max_length=100)
     region = models.CharField(max_length=100, blank=True)
     country = models.CharField(max_length=100, default="Ghana")
+    lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     is_default = models.BooleanField(default=False)
 
     class Meta:

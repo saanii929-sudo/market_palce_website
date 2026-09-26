@@ -231,7 +231,21 @@ if REDIS_URL:
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {"hosts": [REDIS_URL]},
+            "CONFIG": {
+                # A bare Redis URL leaves socket_timeout unset, so a slow
+                # (not down) Redis - e.g. under momentary load on a small
+                # single-server deployment - trips a very short default
+                # read timeout and tears down every rider's live dispatch
+                # socket at once. Widening the timeout and retrying once
+                # lets a brief stall pass without disconnecting anyone.
+                "hosts": [{
+                    "address": REDIS_URL,
+                    "socket_connect_timeout": 10,
+                    "socket_timeout": 10,
+                    "retry_on_timeout": True,
+                    "health_check_interval": 30,
+                }],
+            },
         }
     }
 else:

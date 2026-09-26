@@ -103,6 +103,49 @@ class TestParcelCreation:
                 package_size=Parcel.PackageSize.SMALL, dropoff_line1="2 B St", dropoff_city="Accra",
             )
 
+    def test_pickup_address_pin_carries_over_when_no_explicit_coordinates_given(self):
+        from accounts.tests.factories import AddressFactory
+
+        sender = UserFactory()
+        address = AddressFactory(user=sender, lat=Decimal("5.603700"), lng=Decimal("-0.187000"))
+
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_address=address, dropoff_line1="2 B St", dropoff_city="Accra",
+        )
+
+        assert parcel.pickup_lat == Decimal("5.603700")
+        assert parcel.pickup_lng == Decimal("-0.187000")
+
+    def test_explicit_pickup_coordinates_win_over_the_saved_addresss_pin(self):
+        from accounts.tests.factories import AddressFactory
+
+        sender = UserFactory()
+        address = AddressFactory(user=sender, lat=Decimal("5.603700"), lng=Decimal("-0.187000"))
+
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_address=address, pickup_lat=Decimal("5.700000"), pickup_lng=Decimal("-0.200000"),
+            dropoff_line1="2 B St", dropoff_city="Accra",
+        )
+
+        assert parcel.pickup_lat == Decimal("5.700000")
+        assert parcel.pickup_lng == Decimal("-0.200000")
+
+    def test_pickup_address_with_no_pin_leaves_coordinates_blank(self):
+        from accounts.tests.factories import AddressFactory
+
+        sender = UserFactory()
+        address = AddressFactory(user=sender)  # no lat/lng set
+
+        parcel = create_parcel(
+            sender, recipient_name="Jane", recipient_phone="0559998888", package_size=Parcel.PackageSize.SMALL,
+            pickup_address=address, dropoff_line1="2 B St", dropoff_city="Accra",
+        )
+
+        assert parcel.pickup_lat is None
+        assert parcel.pickup_lng is None
+
     def test_create_parcel_requires_a_dropoff_address(self):
         sender = UserFactory()
         with pytest.raises(ParcelError):

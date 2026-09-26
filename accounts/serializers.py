@@ -128,8 +128,11 @@ class AddressSerializer(serializers.ModelSerializer):
             "city",
             "region",
             "country",
+            "lat",
+            "lng",
             "is_default",
         ]
+        extra_kwargs = {"lat": {"required": False}, "lng": {"required": False}}
 
     def create(self, validated_data):
         validated_data["user"] = self.context["request"].user

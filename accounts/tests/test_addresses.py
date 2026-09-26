@@ -34,6 +34,55 @@ def test_create_and_list_addresses():
 
 
 @pytest.mark.django_db
+def test_address_pin_round_trips_through_the_api():
+    """Regression test: AddressSerializer used to omit lat/lng entirely, so
+    DRF silently dropped them from every request - the address would save
+    fine but the pin never persisted. Confirms the fields are now wired
+    through create AND back out on read."""
+    user = UserFactory(email="pinned@example.com")
+    client = authed_client(user)
+
+    response = client.post(
+        reverse("address-list"),
+        {
+            "recipient_name": "Jane Doe", "phone": "+233201234567",
+            "line1": "123 Independence Ave", "city": "Accra",
+            "lat": "5.603700", "lng": "-0.187000",
+        },
+    )
+    assert response.status_code == 201
+    assert response.data["lat"] == "5.603700"
+    assert response.data["lng"] == "-0.187000"
+
+    address_id = response.data["id"]
+    detail_response = client.get(reverse("address-detail", kwargs={"pk": address_id}))
+    assert detail_response.data["lat"] == "5.603700"
+    assert detail_response.data["lng"] == "-0.187000"
+
+    from accounts.models import Address
+
+    from decimal import Decimal
+
+    saved = Address.objects.get(id=address_id)
+    assert saved.lat == Decimal("5.603700")
+    assert saved.lng == Decimal("-0.187000")
+
+
+@pytest.mark.django_db
+def test_address_without_a_pin_still_saves_fine():
+    user = UserFactory(email="unpinned@example.com")
+    client = authed_client(user)
+
+    response = client.post(
+        reverse("address-list"),
+        {"recipient_name": "Jane Doe", "phone": "+233201234567", "line1": "123 Ave", "city": "Accra"},
+    )
+    assert response.status_code == 201
+    assert response.data["lat"] is None
+    assert response.data["lng"] is None
+
+
+@pytest.mark.django_db
 def test_first_address_is_automatically_default():
     user = UserFactory(email="firstdefault@example.com")
     client = authed_client(user)

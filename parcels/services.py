@@ -47,6 +47,12 @@ def create_parcel(
     if pickup_address is not None:
         pickup_line1 = pickup_address.line1
         pickup_city = pickup_address.city
+        # A saved address's pin (if it has one) is the whole point of
+        # picking a saved address instead of typing one in - only fall
+        # back to it when the caller didn't already pass its own
+        # coordinates explicitly.
+        if pickup_lat is None and pickup_lng is None:
+            pickup_lat, pickup_lng = pickup_address.lat, pickup_address.lng
     if not pickup_line1 or not pickup_city:
         raise ParcelError("Provide a pickup address.")
     if not dropoff_line1 or not dropoff_city:
