@@ -1,16 +1,27 @@
 from decimal import Decimal
 from django.db import transaction
 from orders.services.payment_gateway import HubtelGateway, PaymentGatewayError
-from .models import Parcel
+from .models import PackageSizePricing, Parcel
 from deliveries.services import create_delivery_for_parcel, haversine_km
 from deliveries.services import get_delivery_for
 from deliveries.models import Delivery
 from deliveries.services import build_tracking_payload, dispatch_delivery
 from deliveries.services import DispatchError, cancel_delivery
 
-PARCEL_DOCUMENT_FLAT_FEE = Decimal("10.00")
-PARCEL_BASE_FEE = Decimal("15.00")
-PARCEL_PER_KM_RATE = Decimal("3.00")
+# ---------------------------------------------------------------------------
+# Hard-coded fallback constants — used only when no active PackageSizePricing
+# row exists in the DB for a given size.  Once the admin seeds all four rows
+# these constants become dormant.
+# ---------------------------------------------------------------------------
+_FALLBACK_DOCUMENT_FLAT_FEE = Decimal("15.00")
+_FALLBACK_BASE_FEE = Decimal("15.00")
+_FALLBACK_PER_KM_RATE = Decimal("3.00")
+
+# Keep the old names around so any external import that references them
+# still works without a breaking change.
+PARCEL_DOCUMENT_FLAT_FEE = _FALLBACK_DOCUMENT_FLAT_FEE
+PARCEL_BASE_FEE = _FALLBACK_BASE_FEE
+PARCEL_PER_KM_RATE = _FALLBACK_PER_KM_RATE
 
 
 class ParcelError(Exception):
@@ -19,16 +30,36 @@ class ParcelError(Exception):
         super().__init__(message)
 
 
+def _get_pricing_rule(package_size: str) -> PackageSizePricing | None:
+    """Return the most-recently-updated active pricing row for *package_size*,
+    or None if no row has been seeded yet."""
+    return (
+        PackageSizePricing.objects
+        .filter(size=package_size, is_active=True)
+        .order_by("-updated_at")
+        .first()
+    )
+
+
 def compute_parcel_price(package_size: str, distance_km) -> Decimal:
+    """Return the fare for *package_size* over *distance_km* kilometres.
+
+    Lookup order:
+    1. Active PackageSizePricing row in DB  →  uses row.compute_price()
+    2. Hard-coded fallback constants         →  same formula as before
+    """
+    rule = _get_pricing_rule(package_size)
+    if rule is not None:
+        return rule.compute_price(distance_km)
+
+    # --- fallback (no DB row yet) ---
     if package_size == Parcel.PackageSize.DOCUMENT:
-        return PARCEL_DOCUMENT_FLAT_FEE
-    distance_km = Decimal(str(distance_km)) if distance_km is not None else Decimal("0.00")
-    return (PARCEL_BASE_FEE + PARCEL_PER_KM_RATE * distance_km).quantize(Decimal("0.01"))
+        return _FALLBACK_DOCUMENT_FLAT_FEE
+    dist = Decimal(str(distance_km)) if distance_km is not None else Decimal("0.00")
+    return (_FALLBACK_BASE_FEE + _FALLBACK_PER_KM_RATE * dist).quantize(Decimal("0.01"))
 
 
 def get_parcel_quote(*, package_size: str, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng) -> dict:
-    
-
     distance_km = None
     if None not in (pickup_lat, pickup_lng, dropoff_lat, dropoff_lng):
         distance_km = round(
@@ -153,7 +184,7 @@ def find_rider_for_parcel(parcel: Parcel, user) -> dict:
         )
 
     if delivery.status == Delivery.Status.OFFERED and not delivery.no_riders_available:
-        return build_tracking_payload(delivery)
+        raise ParcelError("A rider offer is already in progress. Please wait for a response.")
 
     if delivery.no_riders_available:
         delivery.dispatch_attempts = 0

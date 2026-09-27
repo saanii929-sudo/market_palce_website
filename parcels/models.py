@@ -82,3 +82,79 @@ class Parcel(TimeStampedModel):
 
     def can_cancel(self) -> bool:
         return self.status in self.CANCELLABLE_STATUSES
+
+
+class PackageSizePricing(TimeStampedModel):
+    """Admin-managed pricing rule for each package size.
+
+    Document parcels pay a flat fee regardless of distance.
+    All other sizes pay  base_fee + per_km_rate × distance_km.
+
+    Only one active row per size is expected; if multiple exist the
+    service picks the most-recently-updated one so admin can stage an
+    update by creating a new row and activating it.
+    """
+
+    size = models.CharField(
+        max_length=20,
+        choices=Parcel.PackageSize.choices,
+        db_index=True,
+        help_text="The package size this rule applies to.",
+    )
+    label = models.CharField(
+        max_length=60,
+        help_text='Human-readable label shown in the app, e.g. "Document (up to A4 sheets)".',
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Optional subtitle / detail text the app can show below the size name.",
+    )
+    icon_url = models.URLField(
+        blank=True,
+        help_text="Optional icon URL the Flutter app can display next to this size.",
+    )
+
+    # Pricing fields
+    flat_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text=(
+            "If set, this exact amount is charged regardless of distance. "
+            "Use for 'document' size. Leave blank for distance-based pricing."
+        ),
+    )
+    base_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Starting fare before distance is added. Used when flat_fee is blank.",
+    )
+    per_km_rate = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Additional cost per kilometre. Used when flat_fee is blank.",
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive rows are hidden from the Flutter app and ignored by the pricing engine.",
+    )
+
+    class Meta:
+        ordering = ["size", "-updated_at"]
+        verbose_name = "Package size pricing"
+        verbose_name_plural = "Package size pricing"
+
+    def __str__(self) -> str:
+        if self.flat_fee is not None:
+            return f"{self.get_size_display()} — flat GH₵{self.flat_fee}"
+        return f"{self.get_size_display()} — GH₵{self.base_fee} + GH₵{self.per_km_rate}/km"
+
+    # ------------------------------------------------------------------ #
+    # Convenience: the price for a given distance (mirrors service logic) #
+    # ------------------------------------------------------------------ #
+    def compute_price(self, distance_km) -> "Decimal":
+        from decimal import Decimal
+
+        if self.flat_fee is not None:
+            return self.flat_fee
+        base = self.base_fee or Decimal("0.00")
+        rate = self.per_km_rate or Decimal("0.00")
+        dist = Decimal(str(distance_km)) if distance_km is not None else Decimal("0.00")
+        return (base + rate * dist).quantize(Decimal("0.01"))

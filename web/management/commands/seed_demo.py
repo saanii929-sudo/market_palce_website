@@ -24,6 +24,7 @@ from notifications.models import Notification
 from orders.models import DeliveryMethod, Order, OrderItem, Payment, PaymentMethod, ReturnRequest, SellerOrder, Shipment
 from orders.services import pricing
 from orders.services.returns import ReturnError, request_return
+from parcels.models import PackageSizePricing, Parcel
 from payments.models import PaymentMethodToken
 from pos.models import (
     Customer,
@@ -152,6 +153,7 @@ class Command(BaseCommand):
 
         self.stdout.write("Seeding delivery/payment methods, FAQs, static pages...")
         self._seed_lookups()
+        self._seed_package_size_pricing()
         self._seed_faqs()
         self._seed_static_pages()
 
@@ -512,14 +514,16 @@ class Command(BaseCommand):
                 )
                 receive_purchase_order(po)
 
-        Discount.objects.get_or_create(
-            seller=seller, name="Loyalty 10%",
-            defaults={"discount_type": Discount.Type.PERCENTAGE, "value": Decimal("10.00")},
-        )
-        Discount.objects.get_or_create(
-            seller=seller, name="GH₵20 off",
-            defaults={"discount_type": Discount.Type.FIXED, "value": Decimal("20.00")},
-        )
+        if not Discount.objects.filter(seller=seller, name="Loyalty 10%").exists():
+            Discount.objects.create(
+                seller=seller, name="Loyalty 10%",
+                discount_type=Discount.Type.PERCENTAGE, value=Decimal("10.00"),
+            )
+        if not Discount.objects.filter(seller=seller, name="GH₵20 off").exists():
+            Discount.objects.create(
+                seller=seller, name="GH₵20 off",
+                discount_type=Discount.Type.FIXED, value=Decimal("20.00"),
+            )
 
         Customer.objects.get_or_create(
             seller=seller, full_name="Kojo Asante", defaults={"phone": "+233209990001"}
@@ -594,6 +598,45 @@ class Command(BaseCommand):
             code="SAVE20",
             defaults=dict(discount_type=Coupon.DiscountType.FIXED, value="20.00", min_order_amount="150.00"),
         )
+
+    def _seed_package_size_pricing(self):
+        size_specs = [
+            (
+                Parcel.PackageSize.DOCUMENT,
+                "Document",
+                "A4 sheets, letters, thin envelopes",
+                # Flat fee — distance is irrelevant for documents
+                {"flat_fee": Decimal("15.00"), "base_fee": None, "per_km_rate": None},
+            ),
+            (
+                Parcel.PackageSize.SMALL,
+                "Small",
+                "Fits in a shoebox — clothes, accessories, small gifts",
+                {"flat_fee": None, "base_fee": Decimal("15.00"), "per_km_rate": Decimal("3.00")},
+            ),
+            (
+                Parcel.PackageSize.MEDIUM,
+                "Medium",
+                "Boxed items up to 5 kg — electronics, shoes, books",
+                {"flat_fee": None, "base_fee": Decimal("20.00"), "per_km_rate": Decimal("4.00")},
+            ),
+            (
+                Parcel.PackageSize.LARGE,
+                "Large",
+                "Bulky items up to 15 kg — gym equipment, large parcels",
+                {"flat_fee": None, "base_fee": Decimal("30.00"), "per_km_rate": Decimal("5.00")},
+            ),
+        ]
+        for size, label, description, pricing in size_specs:
+            PackageSizePricing.objects.get_or_create(
+                size=size,
+                defaults={
+                    "label": label,
+                    "description": description,
+                    "is_active": True,
+                    **pricing,
+                },
+            )
 
     def _seed_faqs(self):
         faq_specs = [

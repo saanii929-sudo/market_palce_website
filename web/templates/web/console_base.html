@@ -125,6 +125,9 @@
         <a href="{% url 'web-console-parcels' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'parcels' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-barcode"/></svg>Parcels
         </a>
+        <a href="{% url 'web-console-package-size-pricing' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'package-size-pricing' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-settings"/></svg>Parcel pricing
+        </a>
         <a href="{% url 'web-console-seller-rider-blocks' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'seller-rider-blocks' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-help"/></svg>Seller rider blocks
         </a>

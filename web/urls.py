@@ -297,6 +297,12 @@ urlpatterns = [
     path("console/parcels/", console_views.console_parcels_view, name="web-console-parcels"),
     path("console/parcels/export/", console_views.console_parcels_export_view, name="web-console-parcels-export"),
 
+    path("console/package-size-pricing/", console_views.console_package_size_pricing_view, name="web-console-package-size-pricing"),
+    path("console/package-size-pricing/add/", console_views.console_package_size_pricing_add_view, name="web-console-package-size-pricing-add"),
+    path("console/package-size-pricing/<int:rule_id>/edit/", console_views.console_package_size_pricing_edit_view, name="web-console-package-size-pricing-edit"),
+    path("console/package-size-pricing/<int:rule_id>/toggle/", console_views.console_package_size_pricing_toggle_view, name="web-console-package-size-pricing-toggle"),
+    path("console/package-size-pricing/<int:rule_id>/delete/", console_views.console_package_size_pricing_delete_view, name="web-console-package-size-pricing-delete"),
+
     path(
         "console/seller-rider-blocks/",
         console_views.console_seller_rider_blocks_view, name="web-console-seller-rider-blocks",

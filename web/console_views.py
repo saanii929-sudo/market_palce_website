@@ -20,7 +20,7 @@ from disputes.services import DisputeError, add_message, resolve_dispute
 from notifications.models import Broadcast
 from notifications.tasks import send_broadcast
 from orders.models import DeliveryMethod, Order, SellerOrder
-from parcels.models import Parcel
+from parcels.models import PackageSizePricing, Parcel
 from pos.models import POSSale
 from reviews.models import Review
 from reviews.services import ReviewModerationError, moderate_review
@@ -1604,3 +1604,126 @@ def console_broadcasts_view(request):
     ctx = _base_ctx("broadcasts")
     ctx["broadcasts"] = Broadcast.objects.select_related("created_by").order_by("-created_at")[:50]
     return render(request, "web/console_broadcasts.html", ctx)
+
+
+# -- Package size pricing -----------------------------------------------
+
+def _save_package_size_pricing_from_form(request, rule=None):
+    size = request.POST.get("size", "").strip()
+    label = request.POST.get("label", "").strip()
+    description = request.POST.get("description", "").strip()
+    icon_url = request.POST.get("icon_url", "").strip()
+    pricing_type = request.POST.get("pricing_type", "flat")
+    is_active = bool(request.POST.get("is_active"))
+
+    valid_sizes = [s for s, _ in Parcel.PackageSize.choices]
+    if size not in valid_sizes:
+        messages.error(request, "Select a valid package size.")
+        return None
+    if not label:
+        messages.error(request, "Label is required.")
+        return None
+
+    flat_fee = base_fee = per_km_rate = None
+
+    if pricing_type == "flat":
+        raw = request.POST.get("flat_fee", "").strip()
+        if not raw:
+            messages.error(request, "Enter a flat fee amount.")
+            return None
+        try:
+            flat_fee = Decimal(raw)
+            if flat_fee < 0:
+                raise ValueError
+        except (InvalidOperation, ValueError):
+            messages.error(request, "Enter a valid flat fee (e.g. 15.00).")
+            return None
+    else:
+        raw_base = request.POST.get("base_fee", "").strip()
+        raw_rate = request.POST.get("per_km_rate", "").strip()
+        if not raw_base or not raw_rate:
+            messages.error(request, "Enter both a base fee and a per-km rate.")
+            return None
+        try:
+            base_fee = Decimal(raw_base)
+            per_km_rate = Decimal(raw_rate)
+            if base_fee < 0 or per_km_rate < 0:
+                raise ValueError
+        except (InvalidOperation, ValueError):
+            messages.error(request, "Enter valid amounts for base fee and per-km rate.")
+            return None
+
+    if rule is None:
+        rule = PackageSizePricing()
+
+    rule.size = size
+    rule.label = label
+    rule.description = description
+    rule.icon_url = icon_url
+    rule.flat_fee = flat_fee
+    rule.base_fee = base_fee
+    rule.per_km_rate = per_km_rate
+    rule.is_active = is_active
+    rule.save()
+    return rule
+
+
+@superadmin_required
+def console_package_size_pricing_view(request):
+    ctx = _base_ctx("package-size-pricing")
+    ctx["rules"] = PackageSizePricing.objects.order_by("size", "-updated_at")
+    return render(request, "web/console_package_size_pricing.html", ctx)
+
+
+@superadmin_required
+def console_package_size_pricing_add_view(request):
+    if request.method == "POST":
+        rule = _save_package_size_pricing_from_form(request)
+        if rule is not None:
+            messages.success(request, f'Pricing rule for "{rule.get_size_display()}" was added.')
+            return redirect("web-console-package-size-pricing")
+
+    ctx = _base_ctx("package-size-pricing")
+    ctx["rule"] = None
+    ctx["size_choices"] = Parcel.PackageSize.choices
+    return render(request, "web/console_package_size_pricing_form.html", ctx)
+
+
+@superadmin_required
+def console_package_size_pricing_edit_view(request, rule_id):
+    rule = get_object_or_404(PackageSizePricing, id=rule_id)
+    if request.method == "POST":
+        saved = _save_package_size_pricing_from_form(request, rule=rule)
+        if saved is not None:
+            messages.success(request, f'Pricing rule for "{saved.get_size_display()}" was updated.')
+            return redirect("web-console-package-size-pricing")
+
+    ctx = _base_ctx("package-size-pricing")
+    ctx["rule"] = rule
+    ctx["size_choices"] = Parcel.PackageSize.choices
+    return render(request, "web/console_package_size_pricing_form.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_package_size_pricing_toggle_view(request, rule_id):
+    rule = get_object_or_404(PackageSizePricing, id=rule_id)
+    rule.is_active = not rule.is_active
+    rule.save(update_fields=["is_active"])
+    verb = "activated" if rule.is_active else "deactivated"
+    messages.success(request, f'"{rule.get_size_display()}" pricing rule {verb}.')
+    return redirect(
+        _safe_redirect_target(request, request.POST.get("next"), reverse("web-console-package-size-pricing"))
+    )
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_package_size_pricing_delete_view(request, rule_id):
+    rule = get_object_or_404(PackageSizePricing, id=rule_id)
+    size_name = rule.get_size_display()
+    rule.delete()
+    messages.success(request, f'Pricing rule for "{size_name}" was deleted.')
+    return redirect(
+        _safe_redirect_target(request, request.POST.get("next"), reverse("web-console-package-size-pricing"))
+    )

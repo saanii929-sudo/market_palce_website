@@ -68,8 +68,8 @@ def _hubtel_status_response(hubtel_status="Paid"):
 @pytest.mark.django_db
 class TestParcelPricing:
     def test_document_is_a_flat_fee_regardless_of_distance(self):
-        assert compute_parcel_price(Parcel.PackageSize.DOCUMENT, None) == Decimal("10.00")
-        assert compute_parcel_price(Parcel.PackageSize.DOCUMENT, 500) == Decimal("10.00")
+        assert compute_parcel_price(Parcel.PackageSize.DOCUMENT, None) == Decimal("15.00")
+        assert compute_parcel_price(Parcel.PackageSize.DOCUMENT, 500) == Decimal("15.00")
 
     def test_small_medium_large_use_base_plus_per_km(self):
         price = compute_parcel_price(Parcel.PackageSize.MEDIUM, Decimal("5.00"))

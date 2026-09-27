@@ -4,8 +4,9 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Parcel
+from .models import PackageSizePricing, Parcel
 from .serializers import (
+    PackageSizePricingSerializer,
     ParcelCreateSerializer,
     ParcelQuoteResponseSerializer,
     ParcelQuoteSerializer,
@@ -21,6 +22,34 @@ from .services import (
     get_parcel_quote,
     initiate_parcel_checkout,
 )
+
+
+class PackageSizePricingListView(generics.ListAPIView):
+    """
+    GET /api/v1/parcels/package-sizes/
+
+    Returns all active package size options with their pricing rules.
+    No authentication required — this is public catalogue data.
+
+    The Flutter app should call this once at startup (or when loading the
+    send-package screen) and use the response to:
+      1. Build the size-picker list (label, description, icon_url).
+      2. Show an estimated price to the user based on pricing_type:
+         - "flat"   → display flat_fee directly.
+         - "per_km" → display "from GH₵{base_fee}" and compute the exact
+                      amount via POST /parcels/quote/ once coordinates are known.
+      3. Send the chosen `size` value when creating a parcel.
+
+    Sizes are returned in the order they were defined (document → small →
+    medium → large) so the app doesn't need to sort them.
+    """
+
+    serializer_class = PackageSizePricingSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
+    def get_queryset(self):
+        return PackageSizePricing.objects.filter(is_active=True).order_by("size", "-updated_at")
 
 
 class ParcelQuoteView(APIView):

@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from accounts.models import Address
 
-from .models import Parcel
+from .models import PackageSizePricing, Parcel
 
 
 class ParcelQuoteSerializer(serializers.Serializer):
@@ -70,3 +70,38 @@ class ParcelSerializer(serializers.ModelSerializer):
             "status", "price", "payment_method", "payment_status", "checkout_url", "created_at",
         ]
         read_only_fields = fields
+
+
+class PackageSizePricingSerializer(serializers.ModelSerializer):
+    """
+    Represents a single admin-managed package size option.
+
+    Pricing fields the Flutter app should use:
+    - flat_fee      → charge exactly this amount, distance is irrelevant
+    - base_fee      → starting fare (null when flat_fee is set)
+    - per_km_rate   → add this × distance_km on top of base_fee (null when flat_fee is set)
+
+    The app can compute an estimated price client-side once the user picks
+    a size and the GPS distance is known, then confirm with GET /parcels/quote/.
+    """
+
+    pricing_type = serializers.SerializerMethodField(
+        help_text='"flat" for flat-fee sizes, "per_km" for distance-based sizes.'
+    )
+
+    class Meta:
+        model = PackageSizePricing
+        fields = [
+            "id",
+            "size",
+            "label",
+            "description",
+            "icon_url",
+            "pricing_type",
+            "flat_fee",
+            "base_fee",
+            "per_km_rate",
+        ]
+
+    def get_pricing_type(self, obj) -> str:
+        return "flat" if obj.flat_fee is not None else "per_km"
