@@ -182,7 +182,13 @@ def _matching_constraints_for_delivery(delivery: Delivery) -> tuple[set[int], se
 
 
 def find_nearest_eligible_rider(delivery: Delivery, exclude_rider_ids=None, radius_km: float = DEFAULT_SEARCH_RADIUS_KM):
+    import logging
+    logger = logging.getLogger(__name__)
+
     if delivery.pickup_lat is None or delivery.pickup_lng is None:
+        logger.warning(
+            "dispatch | delivery=%s | SKIP: pickup_lat/lng is None", delivery.pk
+        )
         return None
 
     exclude_rider_ids = set(exclude_rider_ids or [])
@@ -206,15 +212,62 @@ def find_nearest_eligible_rider(delivery: Delivery, exclude_rider_ids=None, radi
     if required_vehicle_types:
         candidates = candidates.filter(vehicles__type__in=required_vehicle_types).distinct()
 
+    candidate_list = list(candidates)
+    logger.info(
+        "dispatch | delivery=%s | pickup=(%.6f,%.6f) | radius=%skm | "
+        "bbox=(%.4f–%.4f lat, %.4f–%.4f lng) | candidates=%d | "
+        "excluded=%s | required_vehicles=%s",
+        delivery.pk, lat, lng, radius_km,
+        min_lat, max_lat, min_lng, max_lng,
+        len(candidate_list),
+        sorted(exclude_rider_ids) or "none",
+        list(required_vehicle_types) or "any",
+    )
+
+    if not candidate_list:
+        # Log all online+verified riders regardless of position so we can
+        # see if the real rider is online but just outside the bounding box.
+        all_online = RiderProfile.objects.filter(is_online=True, is_verified=True).exclude(
+            id__in=riders_on_active_trips
+        )
+        for r in all_online:
+            logger.info(
+                "dispatch | delivery=%s | online_rider=%s | lat=%s | lng=%s | "
+                "in_bbox=%s | excluded=%s",
+                delivery.pk, r.pk, r.current_lat, r.current_lng,
+                (r.current_lat is not None and min_lat <= float(r.current_lat) <= max_lat
+                 and r.current_lng is not None and min_lng <= float(r.current_lng) <= max_lng),
+                r.pk in exclude_rider_ids,
+            )
+
     nearest_rider, nearest_distance = None, None
-    for rider in candidates:
+    for rider in candidate_list:
         if rider.min_trip_value is not None and delivery.price < rider.min_trip_value:
+            logger.info(
+                "dispatch | delivery=%s | rider=%s | SKIP: price %.2f < min_trip_value %.2f",
+                delivery.pk, rider.pk, delivery.price, rider.min_trip_value,
+            )
             continue
         distance = haversine_km(lat, lng, float(rider.current_lat), float(rider.current_lng))
         if distance > radius_km:
+            logger.info(
+                "dispatch | delivery=%s | rider=%s | SKIP: distance %.2fkm > radius %.2fkm",
+                delivery.pk, rider.pk, distance, radius_km,
+            )
             continue
         if nearest_distance is None or distance < nearest_distance:
             nearest_rider, nearest_distance = rider, distance
+
+    if nearest_rider:
+        logger.info(
+            "dispatch | delivery=%s | SELECTED rider=%s | distance=%.2fkm",
+            delivery.pk, nearest_rider.pk, nearest_distance,
+        )
+    else:
+        logger.warning(
+            "dispatch | delivery=%s | NO rider matched after filtering %d candidates",
+            delivery.pk, len(candidate_list),
+        )
 
     return nearest_rider
 
