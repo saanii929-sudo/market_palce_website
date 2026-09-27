@@ -39,6 +39,14 @@ class RiderProfile(TimeStampedModel):
 
         if is_online:
             RiderOnlineSession.objects.create(rider=self)
+            # Kick off dispatch for any deliveries that searched for a
+            # rider before this rider came online and found nobody.
+            # Runs on_commit so the is_online=True write is visible to the
+            # queries inside dispatch_delivery before it runs.
+            from django.db import transaction
+            transaction.on_commit(
+                lambda: _dispatch_pending_nearby_deliveries_for_rider(self), robust=True
+            )
         else:
             session = self.online_sessions.filter(ended_at__isnull=True).order_by("-started_at").first()
             if session is not None:
@@ -49,6 +57,58 @@ class RiderProfile(TimeStampedModel):
         self.current_lat = lat
         self.current_lng = lng
         self.save(update_fields=["current_lat", "current_lng"])
+
+
+def _dispatch_pending_nearby_deliveries_for_rider(rider_profile: "RiderProfile") -> None:
+    """Called on_commit when a rider comes online. Finds PENDING deliveries
+    that exhausted their initial search (dispatch_attempts > 0 but no active
+    offer) and re-runs dispatch so they get a chance to be matched now that
+    this rider is available. Runs in a best-effort background thread so a
+    slow query never blocks the status toggle response."""
+    import logging
+    import threading
+
+    logger = logging.getLogger(__name__)
+
+    def _run():
+        try:
+            from deliveries.models import Delivery, DeliveryOffer
+            from deliveries.services import DEFAULT_SEARCH_RADIUS_KM, _bounding_box, dispatch_delivery, haversine_km
+
+            if rider_profile.current_lat is None or rider_profile.current_lng is None:
+                return
+
+            lat = float(rider_profile.current_lat)
+            lng = float(rider_profile.current_lng)
+            min_lat, max_lat, min_lng, max_lng = _bounding_box(lat, lng, DEFAULT_SEARCH_RADIUS_KM)
+
+            # Find PENDING deliveries with pickup coordinates in the rider's
+            # vicinity that have attempted dispatch at least once (so we know
+            # find_nearest_eligible_rider already ran and found nobody) but
+            # have no live offer currently waiting on a rider.
+            pending_ids_with_live_offer = DeliveryOffer.objects.filter(
+                status=DeliveryOffer.Status.PENDING,
+            ).values_list("delivery_id", flat=True)
+
+            deliveries = Delivery.objects.filter(
+                status=Delivery.Status.PENDING,
+                dispatch_attempts__gt=0,
+                pickup_lat__gte=min_lat, pickup_lat__lte=max_lat,
+                pickup_lng__gte=min_lng, pickup_lng__lte=max_lng,
+            ).exclude(id__in=pending_ids_with_live_offer)
+
+            for delivery in deliveries:
+                try:
+                    dispatch_delivery(delivery)
+                except Exception:
+                    logger.exception(
+                        "dispatch_delivery failed for delivery %s during rider-online trigger", delivery.pk
+                    )
+        except Exception:
+            logger.exception("_dispatch_pending_nearby_deliveries_for_rider failed for rider %s", rider_profile.pk)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
 
 
 class RiderOnlineSession(TimeStampedModel):
