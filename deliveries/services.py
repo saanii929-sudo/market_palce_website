@@ -586,6 +586,7 @@ def accept_offer(offer: DeliveryOffer, rider) -> Trip:
     if delivery.requested_by_id:
         transaction.on_commit(lambda: _notify_seller_of_accepted_offer(offer))
 
+    transaction.on_commit(lambda: broadcast_parcel_tracking_update(delivery))
     return trip
 
 
@@ -636,6 +637,7 @@ def cancel_delivery(delivery: Delivery, *, note: str = "") -> Delivery:
     delivery.status = Delivery.Status.CANCELLED
     delivery.save(update_fields=["status"])
     delivery.advance_content_to_cancelled()
+    transaction.on_commit(lambda: broadcast_parcel_tracking_update(delivery))
     return delivery
 
 
@@ -665,6 +667,7 @@ def confirm_pickup(trip: Trip, rider) -> Trip:
     delivery.status = Delivery.Status.IN_PROGRESS
     delivery.save(update_fields=["status"])
 
+    transaction.on_commit(lambda: broadcast_parcel_tracking_update(delivery))
     return trip
 
 
@@ -719,6 +722,7 @@ def complete_trip(trip: Trip, rider) -> Trip:
 
     credit_trip_earnings(trip)
 
+    transaction.on_commit(lambda: broadcast_parcel_tracking_update(trip.delivery))
     return trip
 
 
@@ -808,13 +812,54 @@ def build_tracking_payload(delivery: Delivery) -> dict:
     if trip is not None:
         rider = trip.rider
         vehicle = current_vehicle(rider)
+
+        # avatar_url: prefer the uploaded image file; fall back to None so
+        # the client can show an initials placeholder instead.
+        avatar_url = None
+        if rider.user.avatar:
+            try:
+                avatar_url = rider.user.avatar.url
+            except Exception:
+                avatar_url = None
+
+        # eta_minutes: only meaningful while the rider hasn't picked up yet
+        # and we have both the rider's live position and the pickup coords.
+        eta_minutes = None
+        if (
+            trip.status in ("accepted", "arrived")
+            and rider.current_lat is not None
+            and rider.current_lng is not None
+            and delivery.pickup_lat is not None
+            and delivery.pickup_lng is not None
+        ):
+            distance_km = haversine_km(
+                float(rider.current_lat), float(rider.current_lng),
+                float(delivery.pickup_lat), float(delivery.pickup_lng),
+            )
+            eta_minutes = max(1, int((Decimal(str(distance_km)) / AVERAGE_RIDER_SPEED_KMH) * 60))
+        elif (
+            trip.status == "picked_up"
+            and rider.current_lat is not None
+            and rider.current_lng is not None
+            and delivery.dropoff_lat is not None
+            and delivery.dropoff_lng is not None
+        ):
+            distance_km = haversine_km(
+                float(rider.current_lat), float(rider.current_lng),
+                float(delivery.dropoff_lat), float(delivery.dropoff_lng),
+            )
+            eta_minutes = max(1, int((Decimal(str(distance_km)) / AVERAGE_RIDER_SPEED_KMH) * 60))
+
         rider_data = {
             "name": rider.user.full_name or rider.user.email or rider.user.phone,
+            "phone": rider.user.phone,
+            "avatar_url": avatar_url,
             "rating": rider.rating_avg,
             "vehicle_type": vehicle.type if vehicle else None,
             "vehicle_plate": vehicle.plate_number if vehicle else None,
             "current_lat": rider.current_lat,
             "current_lng": rider.current_lng,
+            "eta_minutes": eta_minutes,
         }
         pod = getattr(trip, "proof_of_delivery", None)
         if pod is not None:
@@ -827,3 +872,65 @@ def build_tracking_payload(delivery: Delivery) -> dict:
         "rider": rider_data,
         "delivery_otp": delivery_otp,
     }
+
+
+def broadcast_parcel_tracking_update(delivery: Delivery) -> None:
+    """Push the current tracking snapshot to every Flutter client connected
+    to  wss://.../ws/parcels/<parcel_id>/tracking/.
+
+    Called from:
+      - RiderLocationPingView  (every location ping the rider app sends)
+      - accept_offer           (rider accepted → trip created)
+      - confirm_pickup         (rider picked up the parcel)
+      - complete_trip          (parcel delivered)
+      - cancel_delivery        (delivery cancelled)
+
+    Only fires when the delivery is a PARCEL — marketplace-order deliveries
+    have their own tracking screens and don't share this group.
+
+    Uses the same daemon-thread + hard-timeout guard as
+    _broadcast_offer_to_rider so a slow or wedged channel layer can never
+    block a rider's HTTP response."""
+    import logging
+    import threading
+
+    logger = logging.getLogger(__name__)
+
+    if delivery.delivery_type != Delivery.DeliveryType.PARCEL:
+        return
+
+    # Resolve the parcel_id from the generic FK — do it here in the calling
+    # thread (inside the request transaction) so we don't hit the DB from
+    # inside the daemon thread after the transaction may have committed.
+    parcel = delivery.content_object
+    if parcel is None:
+        return
+    parcel_id = parcel.pk
+
+    payload = build_tracking_payload(delivery)
+
+    def _send():
+        try:
+            from asgiref.sync import async_to_sync
+            from channels.layers import get_channel_layer
+
+            channel_layer = get_channel_layer()
+            if channel_layer is None:
+                return
+            async_to_sync(channel_layer.group_send)(
+                f"parcel_tracking_{parcel_id}",
+                {"type": "tracking.update", "data": payload},
+            )
+        except Exception:
+            logger.exception(
+                "Failed to broadcast tracking update for parcel %s over WebSocket", parcel_id
+            )
+
+    thread = threading.Thread(target=_send, daemon=True)
+    thread.start()
+    thread.join(timeout=3)
+    if thread.is_alive():
+        logger.warning(
+            "WebSocket tracking broadcast for parcel %s is still running after 3s — abandoning it.",
+            parcel_id,
+        )

@@ -61,6 +61,56 @@ def _rider_profile_or_403(request):
     return rider_profile, None
 
 
+def _broadcast_rider_location_to_parcel_tracking(rider_profile) -> None:
+    """After a location ping is saved, push fresh tracking snapshots to every
+    customer whose parcel this rider is currently carrying.
+
+    A rider can only have one active parcel trip at a time in practice, but
+    the query handles any number to stay correct under edge cases (e.g. a
+    previous trip that wasn't closed out cleanly).
+
+    Runs in a daemon thread with a hard 3-second timeout — identical
+    guarantee to _broadcast_offer_to_rider in deliveries/services.py: a
+    wedged channel layer must never block the rider's HTTP location ping."""
+    import logging
+    import threading
+
+    from deliveries.models import Delivery, Trip
+    from deliveries.services import broadcast_parcel_tracking_update
+
+    logger = logging.getLogger(__name__)
+
+    # Find every active parcel trip this rider is on.
+    deliveries = list(
+        Delivery.objects.filter(
+            delivery_type=Delivery.DeliveryType.PARCEL,
+            trip__rider=rider_profile,
+            trip__status__in=Trip.ACTIVE_STATUSES,
+        ).select_related("trip")
+    )
+
+    if not deliveries:
+        return
+
+    def _send():
+        for delivery in deliveries:
+            try:
+                broadcast_parcel_tracking_update(delivery)
+            except Exception:
+                logger.exception(
+                    "Failed to broadcast location update for delivery %s", delivery.pk
+                )
+
+    thread = threading.Thread(target=_send, daemon=True)
+    thread.start()
+    thread.join(timeout=3)
+    if thread.is_alive():
+        logger.warning(
+            "Location broadcast for rider %s is still running after 3s — abandoning it.",
+            rider_profile.pk,
+        )
+
+
 class RiderRegisterView(APIView):
     serializer_class = RiderRegisterSerializer
     permission_classes = [permissions.AllowAny]
@@ -256,6 +306,7 @@ class RiderLocationPingView(APIView):
         serializer = LocationPingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         rider_profile.update_location(serializer.validated_data["lat"], serializer.validated_data["lng"])
+        _broadcast_rider_location_to_parcel_tracking(rider_profile)
         return Response({"detail": "Location updated."})
 
 
