@@ -826,7 +826,7 @@ def build_tracking_payload(delivery: Delivery) -> dict:
         # and we have both the rider's live position and the pickup coords.
         eta_minutes = None
         if (
-            trip.status in ("accepted", "arrived")
+            trip.status in (Trip.Status.HEADING_TO_PICKUP,)
             and rider.current_lat is not None
             and rider.current_lng is not None
             and delivery.pickup_lat is not None
@@ -838,7 +838,7 @@ def build_tracking_payload(delivery: Delivery) -> dict:
             )
             eta_minutes = max(1, int((Decimal(str(distance_km)) / AVERAGE_RIDER_SPEED_KMH) * 60))
         elif (
-            trip.status == "picked_up"
+            trip.status in (Trip.Status.PICKED_UP, Trip.Status.HEADING_TO_DROPOFF)
             and rider.current_lat is not None
             and rider.current_lng is not None
             and delivery.dropoff_lat is not None
@@ -854,11 +854,11 @@ def build_tracking_payload(delivery: Delivery) -> dict:
             "name": rider.user.full_name or rider.user.email or rider.user.phone,
             "phone": rider.user.phone,
             "avatar_url": avatar_url,
-            "rating": rider.rating_avg,
+            "rating": str(rider.rating_avg),
             "vehicle_type": vehicle.type if vehicle else None,
             "vehicle_plate": vehicle.plate_number if vehicle else None,
-            "current_lat": rider.current_lat,
-            "current_lng": rider.current_lng,
+            "current_lat": str(rider.current_lat) if rider.current_lat is not None else None,
+            "current_lng": str(rider.current_lng) if rider.current_lng is not None else None,
             "eta_minutes": eta_minutes,
         }
         pod = getattr(trip, "proof_of_delivery", None)
