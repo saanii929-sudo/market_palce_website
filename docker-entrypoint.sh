@@ -21,6 +21,9 @@ if [ "$1" = "daphne" ]; then
     echo "RUN_SEED_DEMO=true - seeding demo data..."
     python manage.py seed_demo
   fi
+
+  echo "Resetting demo riders (offline, no coordinates)..."
+  python manage.py reset_demo_riders
 fi
 
 exec "$@"

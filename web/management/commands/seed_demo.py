@@ -361,41 +361,44 @@ class Command(BaseCommand):
         from riders.models import RiderProfile, Vehicle
         from riders.services import required_document_types, review_document, upload_document
 
-        # Cluster riders a few hundred metres around wherever the demo
-        # seller's own pickup point currently is (set in Store settings, or
-        # via /admin/), falling back to Osu, Accra if it's never been set -
-        # otherwise "nearby riders" would find nobody if that location ever
-        # moves away from a hardcoded default.
-        seller = Seller.objects.filter(slug="northmark-store").first()
-        if seller is not None and seller.pickup_lat is not None and seller.pickup_lng is not None:
-            base_lat, base_lng = float(seller.pickup_lat), float(seller.pickup_lng)
-        else:
-            base_lat, base_lng = 5.5563, -0.1969
-
-        rider_specs = [
-            ("rider1@example.com", "Kwame Mensah", Vehicle.Type.MOTORCYCLE, "GT-1234-24", 0.0022, -0.0014),
-            ("rider2@example.com", "Ama Owusu", Vehicle.Type.BICYCLE, "GT-5678-24", -0.0006, -0.0031),
-            ("rider3@example.com", "Kojo Boateng", Vehicle.Type.CAR, "GT-9012-24", 0.0039, 0.0016),
-            ("rider4@example.com", "Efua Asante", Vehicle.Type.VAN, "GT-3456-24", -0.0021, -0.0043),
+        DEMO_RIDER_EMAILS = [
+            "rider1@example.com",
+            "rider2@example.com",
+            "rider3@example.com",
+            "rider4@example.com",
         ]
 
-        for email, full_name, vehicle_type, plate, lat_offset, lng_offset in rider_specs:
-            lat, lng = f"{base_lat + lat_offset:.6f}", f"{base_lng + lng_offset:.6f}"
+        rider_specs = [
+            ("rider1@example.com", "Kwame Mensah", Vehicle.Type.MOTORCYCLE, "GT-1234-24"),
+            ("rider2@example.com", "Ama Owusu", Vehicle.Type.BICYCLE, "GT-5678-24"),
+            ("rider3@example.com", "Kojo Boateng", Vehicle.Type.CAR, "GT-9012-24"),
+            ("rider4@example.com", "Efua Asante", Vehicle.Type.VAN, "GT-3456-24"),
+        ]
+
+        for email, full_name, vehicle_type, plate in rider_specs:
             user, _ = User.objects.get_or_create(
                 email=email, defaults={"is_email_verified": True, "full_name": full_name, "role": User.Role.RIDER},
             )
-            # Always (re)set the known demo password/role/status, every run -
-            # mirrors the seller@example.com account just above.
             user.set_password("StrongPass123!")
             user.is_email_verified = True
             user.role = User.Role.RIDER
             user.save(update_fields=["password", "is_email_verified", "role"])
 
             rider_profile, _ = RiderProfile.objects.get_or_create(user=user)
-            rider_profile.current_lat = lat
-            rider_profile.current_lng = lng
+            # Demo riders are created OFFLINE with no coordinates on every
+            # run. They exist so the admin KYC queue, document review screens,
+            # and rider-facing UI have accounts to demonstrate with. They must
+            # NOT be online or have coordinates — find_nearest_eligible_rider
+            # uses current_lat/lng and is_online=True to match riders to real
+            # customer parcels, and seeded riders with hardcoded Accra coords
+            # would be picked over the real rider under test, sending the
+            # dispatch WebSocket frame to a non-existent socket and silently
+            # swallowing every real customer's parcel dispatch.
+            rider_profile.current_lat = None
+            rider_profile.current_lng = None
+            rider_profile.is_online = False
             rider_profile.rating_avg = Decimal("4.80")
-            rider_profile.save(update_fields=["current_lat", "current_lng", "rating_avg"])
+            rider_profile.save(update_fields=["current_lat", "current_lng", "is_online", "rating_avg"])
 
             Vehicle.objects.get_or_create(
                 rider=rider_profile, type=vehicle_type,
@@ -410,9 +413,6 @@ class Command(BaseCommand):
                 document = upload_document(rider_profile, doc_type=doc_type, file="demo-placeholder.pdf")
                 if document.status != document.Status.VERIFIED:
                     review_document(document, action="verify", reviewer_note="Auto-verified demo account.")
-
-            rider_profile.is_online = True
-            rider_profile.save(update_fields=["is_online"])
 
         # A fifth rider stuck mid-application - documents uploaded but still
         # pending, and therefore not verified/online - so the admin KYC
