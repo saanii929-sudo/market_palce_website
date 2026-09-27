@@ -143,6 +143,15 @@ def find_rider_for_parcel(parcel: Parcel, user) -> dict:
     delivery = get_delivery_for_parcel(parcel)
     if delivery is None:
         raise ParcelError("No delivery record found for this package.")
+
+    # Coordinates are required for matching. Fail loudly here rather than
+    # letting find_nearest_eligible_rider silently return None - the
+    # customer's screen would just spin forever with no actionable feedback.
+    if delivery.pickup_lat is None or delivery.pickup_lng is None:
+        raise ParcelError(
+            "We couldn't get your pickup location. Please re-enter your pickup address with a pin."
+        )
+
     if delivery.status == Delivery.Status.OFFERED and not delivery.no_riders_available:
         return build_tracking_payload(delivery)
 
