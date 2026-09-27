@@ -28,6 +28,10 @@ urlpatterns = [
         views.RiderDeliveryConfirmPickupView.as_view(), name="rider-delivery-confirm-pickup",
     ),
     path(
+        "riders/deliveries/<int:pk>/proof-of-delivery/",
+        views.RiderDeliveryProofOfDeliveryView.as_view(), name="rider-delivery-proof-of-delivery",
+    ),
+    path(
         "riders/deliveries/<int:pk>/complete/",
         views.RiderDeliveryCompleteView.as_view(), name="rider-delivery-complete",
     ),

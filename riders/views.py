@@ -524,6 +524,48 @@ class RiderDeliveryConfirmPickupView(APIView):
         return Response(ActiveDeliverySerializer(build_active_delivery_payload(trip)).data)
 
 
+class RiderDeliveryProofOfDeliveryView(APIView):
+    """POST /riders/deliveries/{id}/proof-of-delivery/ — submit OTP and/or
+    photo to verify delivery before completing the trip.
+
+    Body (multipart or JSON):
+        otp_code  — 4-digit code the customer reads off their app (optional
+                    if photo-only verification is acceptable, but required to
+                    flip otp_verified=True which complete/ enforces).
+        photo     — image file (optional)
+
+    Returns the active delivery payload so the rider app can refresh its UI
+    immediately after the customer verifies the code."""
+
+    serializer_class = None  # imported inline inside post()
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def post(self, request, pk):
+        from deliveries.models import Trip
+        from deliveries.serializers import ProofOfDeliverySubmitSerializer as _Serializer
+        from deliveries.services import TripError, build_active_delivery_payload, submit_proof_of_delivery
+
+        rider_profile, error = _rider_profile_or_403(request)
+        if error:
+            return error
+
+        serializer = _Serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        trip = get_object_or_404(Trip, pk=pk)
+        try:
+            submit_proof_of_delivery(
+                trip, rider_profile,
+                otp_code=serializer.validated_data.get("otp_code") or None,
+                photo=serializer.validated_data.get("photo"),
+            )
+        except TripError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(ActiveDeliverySerializer(build_active_delivery_payload(trip)).data)
+
+
 class RiderDeliveryCompleteView(APIView):
     """POST /riders/deliveries/{id}/complete/ - body: {"delivery_code": "1234"}.
     Validated server-side against the code generated at accept-time
