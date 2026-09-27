@@ -579,7 +579,12 @@ class RiderDeliveryCompleteView(APIView):
 
     def post(self, request, pk):
         from deliveries.models import Trip
-        from deliveries.services import TripError, build_active_delivery_payload, complete_delivery_with_code
+        from deliveries.services import (
+            TripError,
+            build_active_delivery_payload,
+            complete_delivery_with_code,
+            complete_trip,
+        )
 
         rider_profile, error = _rider_profile_or_403(request)
         if error:
@@ -589,10 +594,16 @@ class RiderDeliveryCompleteView(APIView):
         serializer.is_valid(raise_exception=True)
 
         trip = get_object_or_404(Trip, pk=pk)
+        delivery_code = serializer.validated_data.get("delivery_code", "").strip()
+
         try:
-            trip = complete_delivery_with_code(
-                trip, rider_profile, delivery_code=serializer.validated_data["delivery_code"]
-            )
+            if delivery_code:
+                # Single-step flow: code not yet verified — verify + complete together.
+                trip = complete_delivery_with_code(trip, rider_profile, delivery_code=delivery_code)
+            else:
+                # Two-step flow: proof-of-delivery/ already verified the OTP,
+                # so just complete without re-checking the code.
+                trip = complete_trip(trip, rider_profile)
         except TripError as exc:
             return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 

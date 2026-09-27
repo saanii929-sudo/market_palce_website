@@ -39,12 +39,21 @@ class ParcelTrackingConsumer(AsyncJsonWebsocketConsumer):
         user = self.scope.get("user")
 
         if not user or not user.is_authenticated:
+            import logging
+            logging.getLogger(__name__).warning(
+                "ParcelTrackingConsumer: unauthenticated connection for parcel %s", self.parcel_id
+            )
             await self.close(code=4001)
             return
 
         # Resolve delivery + verify ownership in one DB hit
         result = await database_sync_to_async(self._get_delivery)(user)
         if result is None:
+            import logging
+            logging.getLogger(__name__).warning(
+                "ParcelTrackingConsumer: rejected user %s for parcel %s (not owner or not found)",
+                user.id, self.parcel_id,
+            )
             await self.close(code=4003)
             return
 
@@ -80,8 +89,12 @@ class ParcelTrackingConsumer(AsyncJsonWebsocketConsumer):
     # ------------------------------------------------------------------ #
 
     def _get_delivery(self, user):
-        """Return the Delivery for this parcel if the user is the sender or
-        staff, else None.  Also stores parcel on self for re-use."""
+        """Return the Delivery for this parcel if:
+          - the user is the parcel sender, OR
+          - the user is the rider currently assigned to this delivery, OR
+          - the user is staff.
+        Returns None otherwise."""
+        from deliveries.models import Trip
         from parcels.models import Parcel
         from parcels.services import get_delivery_for_parcel
 
@@ -90,11 +103,28 @@ class ParcelTrackingConsumer(AsyncJsonWebsocketConsumer):
         except Parcel.DoesNotExist:
             return None
 
-        if parcel.sender_id != user.id and not user.is_staff:
-            return None
-
         self.parcel = parcel
-        return get_delivery_for_parcel(parcel)
+        delivery = get_delivery_for_parcel(parcel)
+
+        if user.is_staff:
+            return delivery
+
+        if parcel.sender_id == user.id:
+            return delivery
+
+        # Allow the assigned rider to connect too (rider app tracking screen)
+        if delivery is not None:
+            rider_profile = getattr(user, "rider_profile", None)
+            if rider_profile is not None:
+                is_assigned = Trip.objects.filter(
+                    delivery=delivery,
+                    rider=rider_profile,
+                    status__in=Trip.ACTIVE_STATUSES,
+                ).exists()
+                if is_assigned:
+                    return delivery
+
+        return None
 
     def _get_snapshot(self):
         from deliveries.services import build_tracking_payload

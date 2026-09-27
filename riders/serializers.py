@@ -201,7 +201,7 @@ class ActiveDeliverySerializer(serializers.Serializer):
 
 
 class DeliveryCompleteSerializer(serializers.Serializer):
-    delivery_code = serializers.CharField(max_length=4)
+    delivery_code = serializers.CharField(max_length=4, required=False, allow_blank=True, default="")
 
 
 class DeliveryHistorySerializer(serializers.Serializer):
