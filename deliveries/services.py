@@ -221,7 +221,7 @@ def find_nearest_eligible_rider(delivery: Delivery, exclude_rider_ids=None, radi
         min_lat, max_lat, min_lng, max_lng,
         len(candidate_list),
         sorted(exclude_rider_ids) or "none",
-        list(required_vehicle_types) or "any",
+        list(required_vehicle_types) if required_vehicle_types else "any",
     )
 
     if not candidate_list:
