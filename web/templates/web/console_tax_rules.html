@@ -1,0 +1,31 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Tax rules{% endblock %}
+{% block console_subtitle %}VAT/tax rates applied to orders by region and product category{% endblock %}
+{% block console_actions %}<a href="{% url 'web-console-tax-rule-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">+ Add rule</a>{% endblock %}
+{% block console_content %}
+{% if messages %}{% for m in messages %}<div class="mb-4 rounded-xl px-5 py-3 text-sm font-semibold {% if m.tags == 'error' %}bg-red-50 text-red-700 border border-red-200{% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">{{ m }}</div>{% endfor %}{% endif %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <table class="w-full text-sm">
+    <thead><tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+      <th class="px-5 py-3">Region</th><th class="px-5 py-3">Category</th><th class="px-5 py-3">Rate</th><th class="px-5 py-3">Effective from</th><th class="px-5 py-3"></th>
+    </tr></thead>
+    <tbody>
+      {% for rule in rules %}
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="px-5 py-4 font-semibold">{{ rule.region }}</td>
+        <td class="px-5 py-4 text-gray-500">{{ rule.category.name|default:"All categories" }}</td>
+        <td class="px-5 py-4 font-bold">{{ rule.rate|floatformat:4 }} <span class="text-gray-400 font-normal text-xs">({{ rule.rate|floatformat:2 }}%… ×100)</span></td>
+        <td class="px-5 py-4 text-gray-500">{{ rule.effective_from|date:"M d, Y" }}</td>
+        <td class="px-5 py-4"><div class="flex items-center gap-2 justify-end">
+          <a href="{% url 'web-console-tax-rule-edit' rule.id %}" class="text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 hover:border-ink transition-colors">Edit</a>
+          <form method="post" action="{% url 'web-console-tax-rule-delete' rule.id %}" onsubmit="return confirm('Delete this tax rule?')">{% csrf_token %}<input type="hidden" name="next" value="{% url 'web-console-tax-rules' %}">
+            <button class="text-xs font-bold px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:border-red-400 transition-colors">Delete</button>
+          </form>
+        </div></td>
+      </tr>
+      {% empty %}<tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No tax rules configured. Add one to apply VAT to orders.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -31,14 +31,15 @@
                 <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Inactive</span>
               {% endif %}
             </td>
-            <td class="px-5 py-4 text-right">
+            <td class="px-5 py-4 text-right"><div class="flex items-center gap-2 justify-end">
+              <a href="{% url 'web-seller-supplier-edit' supplier.id %}" class="text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 hover:border-ink transition-colors">Edit</a>
               <form method="post" action="{% url 'web-seller-supplier-toggle' supplier.id %}">
                 {% csrf_token %}
                 <button type="submit" class="rounded-lg border border-gray-200 font-bold text-xs px-4 py-2 hover:border-ink transition-colors">
                   {% if supplier.is_active %}Deactivate{% else %}Activate{% endif %}
                 </button>
               </form>
-            </td>
+            </div></td>
           </tr>
         {% empty %}
           <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">No suppliers yet — add one before creating a purchase order.</td></tr>

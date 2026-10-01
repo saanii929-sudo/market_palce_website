@@ -61,11 +61,31 @@
         <a href="{% url 'web-console-users' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'users' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-users"/></svg>Users
         </a>
+        <a href="{% url 'web-console-riders' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'riders' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-barcode"/></svg>Riders
+        </a>
+        <a href="{% url 'web-console-payments' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'payments' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-card"/></svg>Payments
+        </a>
         <a href="{% url 'web-console-messages' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'messages' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-chat"/></svg>Support inbox
         </a>
+        <a href="{% url 'web-console-support-tickets' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'support-tickets' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-help"/></svg>Support tickets</span>
+          {% if open_support_tickets_count %}<span class="text-xs font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center">{{ open_support_tickets_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'web-console-refund-requests' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'refund-requests' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-calculator"/></svg>Refund requests</span>
+          {% if pending_refunds_count %}<span class="text-xs font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center">{{ pending_refunds_count }}</span>{% endif %}
+        </a>
         <a href="{% url 'web-console-support-contacts' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'support-contacts' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-mail"/></svg>Support contacts
+        </a>
+        <a href="{% url 'web-console-faqs' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'faqs' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-help"/></svg>FAQs
+        </a>
+        <a href="{% url 'web-console-static-pages' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'static-pages' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-mail"/></svg>Static pages
         </a>
         <a href="{% url 'web-console-products' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'products' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-grid"/></svg>Products
@@ -73,6 +93,9 @@
         <a href="{% url 'web-console-payouts' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 {% if active == 'payouts' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <span class="flex items-center gap-3"><svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-chart"/></svg>Payouts</span>
           {% if pending_payouts_count %}<span class="text-xs font-bold bg-brand text-white rounded-full w-5 h-5 flex items-center justify-center">{{ pending_payouts_count }}</span>{% endif %}
+        </a>
+        <a href="{% url 'web-console-coupons' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'coupons' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-star"/></svg>Coupons
         </a>
         <a href="{% url 'web-console-subscriptions' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'subscriptions' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-star"/></svg>Subscriptions
@@ -85,6 +108,9 @@
         </a>
         <a href="{% url 'web-console-delivery-methods' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'delivery-methods' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-barcode"/></svg>Delivery methods
+        </a>
+        <a href="{% url 'web-console-tax-rules' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'tax-rules' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
+          <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-calculator"/></svg>Tax rules
         </a>
         <a href="{% url 'web-console-brands' %}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 {% if active == 'brands' %}bg-brand text-white{% else %}text-white/70 hover:bg-white/5 hover:text-white{% endif %}">
           <svg viewBox="0 0 24 24" class="w-5 h-5"><use href="#icon-star"/></svg>Brands

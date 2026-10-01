@@ -60,6 +60,7 @@
               {% if order.status != "delivered" and order.status != "cancelled" %}
                 <a href="{% url 'web-seller-order-rider' order.suborder_number %}" class="text-xs font-bold text-brand hover:underline whitespace-nowrap">Request rider</a>
               {% endif %}
+              <a href="{% url 'web-seller-order-detail' order.suborder_number %}" class="text-xs font-bold text-gray-500 hover:text-ink whitespace-nowrap">View details →</a>
             </td>
           </tr>
         {% empty %}

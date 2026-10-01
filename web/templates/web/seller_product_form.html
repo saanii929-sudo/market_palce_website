@@ -90,6 +90,17 @@
   </div>
 
   <div class="rounded-xl border border-gray-200 p-4">
+    <p class="text-sm font-bold mb-3">Delivery size</p>
+    <p class="text-xs text-gray-400 mb-3">Tells the dispatch engine which vehicle type is needed to carry this item. Leave blank if any vehicle can carry it.</p>
+    <select name="delivery_size" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink bg-white">
+      <option value="" {% if not product.delivery_size %}selected{% endif %}>Any vehicle (no restriction)</option>
+      <option value="small" {% if product.delivery_size == 'small' %}selected{% endif %}>Small — bicycle or motorcycle</option>
+      <option value="medium" {% if product.delivery_size == 'medium' %}selected{% endif %}>Medium — motorcycle or car</option>
+      <option value="large" {% if product.delivery_size == 'large' %}selected{% endif %}>Large — car or van</option>
+    </select>
+  </div>
+
+  <div class="rounded-xl border border-gray-200 p-4">
     <label class="flex items-center gap-2 text-sm font-bold" id="returnable-toggle-label">
       <input type="checkbox" name="is_returnable" value="1" id="is-returnable-checkbox" {% if product.is_returnable or not product %}checked{% endif %} class="rounded border-gray-300">
       Customers can return this product

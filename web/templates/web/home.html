@@ -6,26 +6,140 @@
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-14">
 
-  <!-- Hero -->
-  {% with banner=banners.0 %}
-  <section class="relative rounded-3xl overflow-hidden bg-ink text-white h-[320px] sm:h-[380px] flex items-center"
-           style="{% if banner.resolved_image_url %}background-image: url('{{ banner.resolved_image_url }}'); background-size: cover; background-position: center;{% endif %}">
-    <div class="absolute inset-0 opacity-40" style="background: radial-gradient(circle at 75% 30%, #374151, #14161c 65%)"></div>
-    <div class="relative z-10 px-8 sm:px-14 max-w-lg">
-      <p class="text-brand text-xs font-bold tracking-widest uppercase">New season kits</p>
-      <h1 class="display text-4xl sm:text-5xl mt-3 leading-[1.05]">{{ banner.title|default:"Fresh kits. New colours." }}</h1>
-      <p class="mt-4 text-white/60 text-sm">{{ banner.subtitle|default:"The latest club and training jerseys just landed." }}</p>
-      <a href="{{ banner.cta_link|default:'' }}{% if not banner.cta_link %}{% url 'web-deals' %}{% endif %}" class="inline-block mt-6 bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 rounded-xl transition-colors">{{ banner.cta_label|default:"Shop now" }}</a>
-    </div>
-    {% if banners|length > 1 %}
-      <div class="absolute bottom-5 right-6 flex gap-1.5">
-        {% for b in banners %}
-          <span class="w-1.5 h-1.5 rounded-full {% if forloop.first %}bg-brand w-5{% else %}bg-white/30{% endif %}"></span>
+  <!-- Hero Carousel -->
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+
+    <!-- Carousel -->
+    <div class="relative" id="hero-carousel">
+
+      <!-- Slides -->
+      <div class="relative rounded-3xl overflow-hidden bg-ink h-[320px] sm:h-[380px]">
+        {% for banner in banners %}
+          <div class="hero-slide absolute inset-0 transition-opacity duration-700 {% if not forloop.first %}opacity-0 pointer-events-none{% else %}opacity-100{% endif %}"
+               data-index="{{ forloop.counter0 }}">
+            <!-- Background image -->
+            {% if banner.resolved_image_url %}
+              <img src="{{ banner.resolved_image_url }}" alt="{{ banner.title }}"
+                   class="absolute inset-0 w-full h-full object-cover object-center">
+            {% endif %}
+            <!-- Overlay -->
+            <div class="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent"></div>
+            <!-- Content -->
+            <div class="relative z-10 h-full flex flex-col justify-center px-8 sm:px-12 max-w-sm">
+              <p class="text-brand text-xs font-bold tracking-widest uppercase">New season kits</p>
+              <h2 class="display text-3xl sm:text-4xl mt-3 leading-[1.05] text-white">{{ banner.title|default:"Fresh kits. New colours." }}</h2>
+              <p class="mt-3 text-white/60 text-sm">{{ banner.subtitle|default:"The latest club and training jerseys just landed." }}</p>
+              <a href="{{ banner.cta_link|default:'#' }}"
+                 class="inline-block mt-5 bg-brand hover:bg-brand-dark text-white font-bold px-5 py-2.5 rounded-xl transition-colors w-fit">
+                {{ banner.cta_label|default:"Shop now" }}
+              </a>
+            </div>
+          </div>
+        {% empty %}
+          <!-- Fallback when no banners are configured -->
+          <div class="absolute inset-0 flex flex-col justify-center px-8 sm:px-12">
+            <div class="absolute inset-0 bg-gradient-to-br from-ink to-gray-800"></div>
+            <div class="relative z-10 max-w-sm">
+              <p class="text-brand text-xs font-bold tracking-widest uppercase">New season kits</p>
+              <h2 class="display text-3xl sm:text-4xl mt-3 leading-[1.05] text-white">Fresh kits. New colours.</h2>
+              <p class="mt-3 text-white/60 text-sm">The latest club and training jerseys just landed.</p>
+              <a href="{% url 'web-deals' %}"
+                 class="inline-block mt-5 bg-brand hover:bg-brand-dark text-white font-bold px-5 py-2.5 rounded-xl transition-colors w-fit">
+                Shop now
+              </a>
+            </div>
+          </div>
         {% endfor %}
       </div>
-    {% endif %}
+
+      <!-- Prev / Next arrows (only when more than one banner) -->
+      {% if banners|length > 1 %}
+        <button id="hero-prev"
+                class="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors"
+                aria-label="Previous slide">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <button id="hero-next"
+                class="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors"
+                aria-label="Next slide">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </button>
+
+        <!-- Dot indicators -->
+        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20" id="hero-dots">
+          {% for b in banners %}
+            <button class="hero-dot transition-all duration-300 rounded-full {% if forloop.first %}w-5 h-2 bg-brand{% else %}w-2 h-2 bg-white/40{% endif %}"
+                    data-index="{{ forloop.counter0 }}"
+                    aria-label="Go to slide {{ forloop.counter }}"></button>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Right-side info panel (visible on md+) -->
+    <div class="hidden md:flex flex-col gap-4">
+      <div class="rounded-2xl bg-ink text-white p-6 flex flex-col justify-between h-[180px]">
+        <div>
+          <p class="text-brand text-xs font-bold tracking-widest uppercase">Free delivery</p>
+          <h3 class="display text-2xl mt-2 leading-tight">Orders above GH₵200</h3>
+        </div>
+        <p class="text-white/50 text-sm">Fast riders, real-time tracking on every order.</p>
+      </div>
+      <div class="rounded-2xl overflow-hidden grid grid-cols-2 gap-4">
+        <div class="rounded-2xl bg-brand text-white p-5 flex flex-col gap-3">
+          <p class="text-xs font-bold tracking-widest uppercase opacity-80">Flash deals</p>
+          <p class="display text-xl leading-tight">Up to 50% off</p>
+          <a href="{% url 'web-deals' %}" class="text-xs font-bold underline underline-offset-2 mt-auto">Shop deals →</a>
+        </div>
+        <div class="rounded-2xl border border-gray-200 bg-white p-5 flex flex-col gap-3">
+          <p class="text-xs font-bold tracking-widest uppercase text-gray-400">Top brands</p>
+          <p class="display text-xl leading-tight text-ink">Kit. Gear. Sport.</p>
+          <a href="{% url 'web-deals' %}" class="text-xs font-bold text-brand underline underline-offset-2 mt-auto">Browse →</a>
+        </div>
+      </div>
+    </div>
+
   </section>
-  {% endwith %}
+
+  {% if banners|length > 1 %}
+  <script>
+    (function () {
+      const slides = document.querySelectorAll('.hero-slide');
+      const dots   = document.querySelectorAll('.hero-dot');
+      if (!slides.length) return;
+
+      let current = 0;
+      let timer   = null;
+
+      function goTo(idx) {
+        slides[current].classList.replace('opacity-100', 'opacity-0');
+        slides[current].classList.add('pointer-events-none');
+
+        dots[current].classList.remove('w-5', 'bg-brand');
+        dots[current].classList.add('w-2', 'bg-white/40');
+
+        current = (idx + slides.length) % slides.length;
+
+        slides[current].classList.replace('opacity-0', 'opacity-100');
+        slides[current].classList.remove('pointer-events-none');
+
+        dots[current].classList.remove('w-2', 'bg-white/40');
+        dots[current].classList.add('w-5', 'bg-brand');
+      }
+
+      function startTimer() {
+        clearInterval(timer);
+        timer = setInterval(() => goTo(current + 1), 4500);
+      }
+
+      document.getElementById('hero-prev')?.addEventListener('click', () => { goTo(current - 1); startTimer(); });
+      document.getElementById('hero-next')?.addEventListener('click', () => { goTo(current + 1); startTimer(); });
+      dots.forEach(dot => dot.addEventListener('click', () => { goTo(+dot.dataset.index); startTimer(); }));
+
+      startTimer();
+    })();
+  </script>
+  {% endif %}
 
   <!-- Categories -->
   <section>

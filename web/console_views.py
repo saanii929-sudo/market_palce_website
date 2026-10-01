@@ -14,17 +14,19 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
+from cart.models import Coupon
 from catalog.models import Banner, Brand, Category, Collection, Product, Seller, Subcategory
+from cms.models import StaticPage
 from disputes.models import Dispute
 from disputes.services import DisputeError, add_message, resolve_dispute
 from notifications.models import Broadcast
 from notifications.tasks import send_broadcast
-from orders.models import DeliveryMethod, Order, SellerOrder
+from orders.models import DeliveryMethod, Order, Payment, RefundRequest, ReturnRequest, SellerOrder, TaxRule
 from parcels.models import PackageSizePricing, Parcel
 from pos.models import POSSale
 from reviews.models import Review
 from reviews.services import ReviewModerationError, moderate_review
-from riders.models import RiderDocument, RiderPayout
+from riders.models import RiderDocument, RiderPayout, RiderProfile
 from riders.services import (
     RiderError,
     mark_rider_payout_paid,
@@ -54,6 +56,7 @@ from sellers.services import (
     unblock_rider,
     verify_kyc,
 )
+from support.models import FAQ, SupportTicket
 
 from .views import _safe_redirect_target, superadmin_required
 
@@ -85,6 +88,10 @@ def _base_ctx(active_nav):
         ).count(),
         "flagged_reviews_count": Review.objects.filter(status=Review.Status.FLAGGED).count(),
         "unreviewed_risk_flags_count": RiskFlag.objects.filter(reviewed=False).count(),
+        "open_support_tickets_count": SupportTicket.objects.filter(status=SupportTicket.Status.OPEN).count(),
+        "pending_refunds_count": RefundRequest.objects.filter(
+            status__in=[RefundRequest.Status.REQUESTED, RefundRequest.Status.UNDER_REVIEW]
+        ).count(),
     }
 
 
@@ -123,9 +130,6 @@ def console_subscriptions_export_view(request):
     return _csv_response(
         "subscriptions.csv", ["Seller", "Plan", "Amount", "Status", "Purchased", "Expires"], rows
     )
-
-
-# -- Subscription plans --------------------------------------------------
 
 def _save_subscription_plan_from_form(request, plan=None):
     name = request.POST.get("name", "").strip()
@@ -221,9 +225,6 @@ def console_subscription_plan_toggle_view(request, plan_id):
 @superadmin_required
 @require_http_methods(["POST"])
 def console_subscription_plan_delete_view(request, plan_id):
-    # SellerSubscription.plan is PROTECT, so a plan with existing
-    # subscribers can't be hard-deleted - deactivate it instead so it
-    # simply stops being offered to new sellers.
     plan = get_object_or_404(SubscriptionPlan, id=plan_id)
     name = plan.name
     try:
@@ -240,9 +241,6 @@ def _percent_delta(current, previous) -> float:
     if not previous:
         return 100.0 if current else 0.0
     return round((current - previous) / previous * 100, 1)
-
-
-# -- Overview -----------------------------------------------------------
 
 @superadmin_required
 def console_overview_view(request):
@@ -393,12 +391,6 @@ def console_seller_applications_export_view(request):
     ]
     return _csv_response("seller-applications.csv", ["Business", "Category", "Phone", "Submitted", "Status"], rows)
 
-
-# -- Orders ---------------------------------------------------------------
-# One row per seller sub-order (not per parent Order) - each seller ships
-# independently, so this is the actual fulfillment unit an admin would act
-# on, and it's the only level that has a single definite seller/status/total.
-
 @superadmin_required
 def console_orders_view(request):
     query = request.GET.get("q", "").strip()
@@ -427,9 +419,6 @@ def console_orders_export_view(request):
     return _csv_response(
         "orders.csv", ["Order", "Sub-order", "Customer", "Seller", "Date", "Status", "Total"], rows
     )
-
-
-# -- Users ------------------------------------------------------------
 
 USER_TABS = {"customers", "sellers", "riders", "admins"}
 
@@ -502,9 +491,6 @@ def _create_user_from_form(request):
         email=email or None,
         phone=phone or None,
         role=role,
-        # Admin-created accounts are considered verified immediately - the
-        # admin has already confirmed who this person is, so there's no need
-        # to route them through the OTP signup flow.
         is_email_verified=bool(email),
         is_phone_verified=bool(phone),
         is_staff=is_admin,
@@ -517,9 +503,6 @@ def _create_user_from_form(request):
 
 @superadmin_required
 def console_user_add_view(request):
-    """Creates a customer or platform-admin account directly. Sellers still
-    go through the seller-application approval flow (console_seller_application_approve_view),
-    since that's what also creates the linked catalog.Seller storefront row."""
     if request.method == "POST":
         user = _create_user_from_form(request)
         if user is not None:
@@ -576,8 +559,6 @@ def console_users_export_view(request):
     return _csv_response("users.csv", ["Name", "Contact", "Role", "Joined", "Status"], rows)
 
 
-# -- Products ------------------------------------------------------------
-
 @superadmin_required
 def console_products_view(request):
     query = request.GET.get("q", "").strip()
@@ -608,8 +589,6 @@ def console_products_export_view(request):
     ]
     return _csv_response("products.csv", ["Product", "Seller", "Category", "Price", "Status"], rows)
 
-
-# -- Payouts ---------------------------------------------------------------
 
 PAYOUT_TABS = {"requested", "scheduled", "paid", "rejected"}
 
@@ -682,8 +661,6 @@ def console_payouts_export_view(request):
     )
 
 
-# -- Rider payouts -----------------------------------------------------------
-
 RIDER_PAYOUT_TABS = {"requested", "scheduled", "paid", "rejected"}
 
 
@@ -751,8 +728,6 @@ def console_rider_payouts_export_view(request):
     return _csv_response("rider_payouts.csv", ["Rider", "Amount", "Method", "Requested", "Status"], rows)
 
 
-# -- Parcels ------------------------------------------------------------------
-
 PARCEL_TABS = {
     "pending": [Parcel.Status.PENDING],
     "rider_assigned": [Parcel.Status.RIDER_ASSIGNED],
@@ -791,8 +766,6 @@ def console_parcels_export_view(request):
     )
 
 
-# -- Seller-rider relations ---------------------------------------------------
-
 @superadmin_required
 def console_seller_rider_blocks_view(request):
     ctx = _base_ctx("seller-rider-blocks")
@@ -828,8 +801,6 @@ def console_fulfillment_ratings_view(request):
     ctx["seller_averages"] = seller_averages
     return render(request, "web/console_fulfillment_ratings.html", ctx)
 
-
-# -- Categories -------------------------------------------------------------
 
 def _unique_slug(model, name: str, fallback: str = "item") -> str:
     base = slugify(name) or fallback
@@ -980,9 +951,6 @@ def console_category_delete_view(request, category_id):
         messages.error(request, f'"{name}" has existing products, so it was deactivated instead of deleted.')
     return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-categories")))
 
-
-# -- Delivery methods --------------------------------------------------------
-
 def _save_delivery_method_from_form(request, delivery_method=None):
     name = request.POST.get("name", "").strip()
     code = request.POST.get("code", "").strip()
@@ -1086,8 +1054,6 @@ def console_delivery_method_delete_view(request, delivery_method_id):
     return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-delivery-methods")))
 
 
-# -- Brands -------------------------------------------------------------
-
 def _save_brand_from_form(request, brand=None):
     name = request.POST.get("name", "").strip()
 
@@ -1164,8 +1130,6 @@ def console_brand_delete_view(request, brand_id):
     messages.success(request, f'"{brand.name}" was deleted.')
     return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-brands")))
 
-
-# -- Banners --------------------------------------------------------------
 
 def _parse_datetime_local(value: str):
     if not value:
@@ -1260,9 +1224,6 @@ def console_banner_delete_view(request, banner_id):
     messages.success(request, f'"{banner.title}" was deleted.')
     return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-banners")))
 
-
-# -- Collections ------------------------------------------------------------
-
 def _save_collection_from_form(request, collection=None):
     title = request.POST.get("title", "").strip()
     if not title:
@@ -1354,8 +1315,6 @@ def console_collection_delete_view(request, collection_id):
     return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-collections")))
 
 
-# -- Disputes ---------------------------------------------------------------
-
 DISPUTE_TABS = {
     "open": [Dispute.Status.OPEN],
     "investigating": [Dispute.Status.INVESTIGATING],
@@ -1439,8 +1398,6 @@ def console_dispute_resolve_view(request, dispute_id):
     return redirect("web-console-dispute-detail", dispute_id=dispute.id)
 
 
-# -- Flagged reviews ----------------------------------------------------------
-
 @superadmin_required
 def console_flagged_reviews_view(request):
     ctx = _base_ctx("flagged-reviews")
@@ -1465,8 +1422,6 @@ def console_review_moderate_view(request, review_id):
         messages.error(request, exc.message)
     return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-flagged-reviews")))
 
-
-# -- Risk flags ---------------------------------------------------------------
 
 @superadmin_required
 def console_risk_flags_view(request):
@@ -1543,8 +1498,6 @@ def console_kyc_reject_view(request, application_id):
     return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-kyc-queue")))
 
 
-# -- Rider verification -------------------------------------------------
-
 @superadmin_required
 def console_rider_kyc_queue_view(request):
     documents = (
@@ -1569,8 +1522,6 @@ def console_rider_document_review_view(request, document_id):
         messages.error(request, exc.message)
     return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-rider-kyc-queue")))
 
-
-# -- Broadcasts -----------------------------------------------------------
 
 @superadmin_required
 def console_broadcasts_view(request):
@@ -1605,8 +1556,6 @@ def console_broadcasts_view(request):
     ctx["broadcasts"] = Broadcast.objects.select_related("created_by").order_by("-created_at")[:50]
     return render(request, "web/console_broadcasts.html", ctx)
 
-
-# -- Package size pricing -----------------------------------------------
 
 def _save_package_size_pricing_from_form(request, rule=None):
     size = request.POST.get("size", "").strip()
@@ -1727,3 +1676,505 @@ def console_package_size_pricing_delete_view(request, rule_id):
     return redirect(
         _safe_redirect_target(request, request.POST.get("next"), reverse("web-console-package-size-pricing"))
     )
+
+
+def _save_faq_from_form(request, faq=None):
+    question = request.POST.get("question", "").strip()
+    answer = request.POST.get("answer", "").strip()
+    topic = request.POST.get("topic", "").strip()
+    is_active = bool(request.POST.get("is_active"))
+
+    if not question:
+        messages.error(request, "Question is required.")
+        return None
+    if not answer:
+        messages.error(request, "Answer is required.")
+        return None
+    if topic not in FAQ.Topic.values:
+        messages.error(request, "Select a valid topic.")
+        return None
+
+    if faq is None:
+        faq = FAQ()
+
+    faq.question = question
+    faq.answer = answer
+    faq.topic = topic
+    faq.is_active = is_active
+    try:
+        faq.display_order = int(request.POST.get("display_order") or 0)
+    except ValueError:
+        faq.display_order = 0
+    faq.save()
+    return faq
+
+
+@superadmin_required
+def console_faqs_view(request):
+    ctx = _base_ctx("faqs")
+    ctx["faqs"] = FAQ.objects.order_by("display_order", "topic", "id")
+    ctx["topics"] = FAQ.Topic.choices
+    return render(request, "web/console_faqs.html", ctx)
+
+
+@superadmin_required
+def console_faq_add_view(request):
+    if request.method == "POST":
+        faq = _save_faq_from_form(request)
+        if faq is not None:
+            messages.success(request, "FAQ added.")
+            return redirect("web-console-faqs")
+    ctx = _base_ctx("faqs")
+    ctx["faq"] = None
+    ctx["topics"] = FAQ.Topic.choices
+    return render(request, "web/console_faq_form.html", ctx)
+
+
+@superadmin_required
+def console_faq_edit_view(request, faq_id):
+    faq = get_object_or_404(FAQ, id=faq_id)
+    if request.method == "POST":
+        saved = _save_faq_from_form(request, faq=faq)
+        if saved is not None:
+            messages.success(request, "FAQ updated.")
+            return redirect("web-console-faqs")
+    ctx = _base_ctx("faqs")
+    ctx["faq"] = faq
+    ctx["topics"] = FAQ.Topic.choices
+    return render(request, "web/console_faq_form.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_faq_toggle_view(request, faq_id):
+    faq = get_object_or_404(FAQ, id=faq_id)
+    faq.is_active = not faq.is_active
+    faq.save(update_fields=["is_active"])
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-faqs")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_faq_delete_view(request, faq_id):
+    faq = get_object_or_404(FAQ, id=faq_id)
+    faq.delete()
+    messages.success(request, "FAQ deleted.")
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-faqs")))
+
+@superadmin_required
+def console_static_pages_view(request):
+    ctx = _base_ctx("static-pages")
+    # Ensure a row exists for every slug so the list is never empty
+    for slug, _ in StaticPage.Slug.choices:
+        StaticPage.objects.get_or_create(slug=slug, defaults={"title": slug.capitalize(), "body": ""})
+    ctx["pages"] = StaticPage.objects.order_by("slug")
+    return render(request, "web/console_static_pages.html", ctx)
+
+
+@superadmin_required
+def console_static_page_edit_view(request, slug):
+    page = get_object_or_404(StaticPage, slug=slug)
+    if request.method == "POST":
+        title = request.POST.get("title", "").strip()
+        body = request.POST.get("body", "").strip()
+        if not title:
+            messages.error(request, "Title is required.")
+        else:
+            page.title = title
+            page.body = body
+            page.save(update_fields=["title", "body"])
+            messages.success(request, f'"{page.title}" was saved.')
+            return redirect("web-console-static-pages")
+    ctx = _base_ctx("static-pages")
+    ctx["page"] = page
+    return render(request, "web/console_static_page_form.html", ctx)
+
+def _save_coupon_from_form(request, coupon=None):
+    code = request.POST.get("code", "").strip().upper()
+    discount_type = request.POST.get("discount_type", "").strip()
+    value_raw = request.POST.get("value", "").strip()
+    min_order_raw = request.POST.get("min_order_amount", "").strip()
+    max_discount_raw = request.POST.get("max_discount_amount", "").strip()
+    usage_limit_raw = request.POST.get("usage_limit", "").strip()
+    valid_from_raw = request.POST.get("valid_from", "").strip()
+    valid_to_raw = request.POST.get("valid_to", "").strip()
+    is_active = bool(request.POST.get("is_active"))
+    is_public = bool(request.POST.get("is_public"))
+    title = request.POST.get("title", "").strip()
+    description = request.POST.get("description", "").strip()
+
+    if not code:
+        messages.error(request, "Coupon code is required.")
+        return None
+    if discount_type not in Coupon.DiscountType.values:
+        messages.error(request, "Select a valid discount type.")
+        return None
+    try:
+        value = Decimal(value_raw)
+        if value <= 0:
+            raise ValueError
+    except (InvalidOperation, ValueError):
+        messages.error(request, "Enter a valid discount value greater than 0.")
+        return None
+
+    # Uniqueness check (skip for the coupon being edited)
+    qs = Coupon.objects.filter(code=code)
+    if coupon:
+        qs = qs.exclude(pk=coupon.pk)
+    if qs.exists():
+        messages.error(request, f'Coupon code "{code}" is already in use.')
+        return None
+
+    if coupon is None:
+        coupon = Coupon()
+
+    coupon.code = code
+    coupon.discount_type = discount_type
+    coupon.value = value
+    coupon.min_order_amount = Decimal(min_order_raw) if min_order_raw else None
+    coupon.max_discount_amount = Decimal(max_discount_raw) if max_discount_raw else None
+    coupon.usage_limit = int(usage_limit_raw) if usage_limit_raw else None
+    coupon.valid_from = _parse_datetime_local(valid_from_raw) if valid_from_raw else None
+    coupon.valid_to = _parse_datetime_local(valid_to_raw) if valid_to_raw else None
+    coupon.is_active = is_active
+    coupon.is_public = is_public
+    coupon.title = title
+    coupon.description = description
+    coupon.save()
+    return coupon
+
+
+@superadmin_required
+def console_coupons_view(request):
+    ctx = _base_ctx("coupons")
+    ctx["coupons"] = Coupon.objects.order_by("-created_at")
+    return render(request, "web/console_coupons.html", ctx)
+
+
+@superadmin_required
+def console_coupon_add_view(request):
+    if request.method == "POST":
+        coupon = _save_coupon_from_form(request)
+        if coupon is not None:
+            messages.success(request, f'Coupon "{coupon.code}" was added.')
+            return redirect("web-console-coupons")
+    ctx = _base_ctx("coupons")
+    ctx["coupon"] = None
+    ctx["discount_types"] = Coupon.DiscountType.choices
+    return render(request, "web/console_coupon_form.html", ctx)
+
+
+@superadmin_required
+def console_coupon_edit_view(request, coupon_id):
+    coupon = get_object_or_404(Coupon, id=coupon_id)
+    if request.method == "POST":
+        saved = _save_coupon_from_form(request, coupon=coupon)
+        if saved is not None:
+            messages.success(request, f'Coupon "{saved.code}" was updated.')
+            return redirect("web-console-coupons")
+    ctx = _base_ctx("coupons")
+    ctx["coupon"] = coupon
+    ctx["discount_types"] = Coupon.DiscountType.choices
+    return render(request, "web/console_coupon_form.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_coupon_toggle_view(request, coupon_id):
+    coupon = get_object_or_404(Coupon, id=coupon_id)
+    coupon.is_active = not coupon.is_active
+    coupon.save(update_fields=["is_active"])
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-coupons")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_coupon_delete_view(request, coupon_id):
+    coupon = get_object_or_404(Coupon, id=coupon_id)
+    code = coupon.code
+    try:
+        coupon.delete()
+        messages.success(request, f'Coupon "{code}" was deleted.')
+    except ProtectedError:
+        messages.error(request, f'Coupon "{code}" is in use by existing orders and cannot be deleted. Deactivate it instead.')
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-coupons")))
+
+def _save_tax_rule_from_form(request, rule=None):
+    region = request.POST.get("region", "").strip()
+    rate_raw = request.POST.get("rate", "").strip()
+    effective_from_raw = request.POST.get("effective_from", "").strip()
+    category_id = request.POST.get("category_id", "").strip()
+
+    if not region:
+        messages.error(request, "Region is required.")
+        return None
+    try:
+        rate = Decimal(rate_raw)
+        if not (0 <= rate <= 1):
+            raise ValueError
+    except (InvalidOperation, ValueError):
+        messages.error(request, "Rate must be a decimal between 0 and 1 (e.g. 0.1250 for 12.5%).")
+        return None
+
+    effective_from = None
+    if effective_from_raw:
+        try:
+            from datetime import date
+            effective_from = date.fromisoformat(effective_from_raw)
+        except ValueError:
+            messages.error(request, "Enter a valid date for 'Effective from'.")
+            return None
+
+    category = None
+    if category_id:
+        try:
+            category = Category.objects.get(id=int(category_id))
+        except (Category.DoesNotExist, ValueError):
+            messages.error(request, "Select a valid category.")
+            return None
+
+    if rule is None:
+        rule = TaxRule()
+
+    rule.region = region
+    rule.rate = rate
+    rule.category = category
+    if effective_from:
+        rule.effective_from = effective_from
+    rule.save()
+    return rule
+
+
+@superadmin_required
+def console_tax_rules_view(request):
+    ctx = _base_ctx("tax-rules")
+    ctx["rules"] = TaxRule.objects.select_related("category").order_by("region", "-effective_from")
+    return render(request, "web/console_tax_rules.html", ctx)
+
+
+@superadmin_required
+def console_tax_rule_add_view(request):
+    if request.method == "POST":
+        rule = _save_tax_rule_from_form(request)
+        if rule is not None:
+            messages.success(request, f'Tax rule for "{rule.region}" was added.')
+            return redirect("web-console-tax-rules")
+    ctx = _base_ctx("tax-rules")
+    ctx["rule"] = None
+    ctx["categories"] = Category.objects.filter(is_active=True).order_by("name")
+    return render(request, "web/console_tax_rule_form.html", ctx)
+
+
+@superadmin_required
+def console_tax_rule_edit_view(request, rule_id):
+    rule = get_object_or_404(TaxRule, id=rule_id)
+    if request.method == "POST":
+        saved = _save_tax_rule_from_form(request, rule=rule)
+        if saved is not None:
+            messages.success(request, f'Tax rule for "{saved.region}" was updated.')
+            return redirect("web-console-tax-rules")
+    ctx = _base_ctx("tax-rules")
+    ctx["rule"] = rule
+    ctx["categories"] = Category.objects.filter(is_active=True).order_by("name")
+    return render(request, "web/console_tax_rule_form.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_tax_rule_delete_view(request, rule_id):
+    rule = get_object_or_404(TaxRule, id=rule_id)
+    region = rule.region
+    rule.delete()
+    messages.success(request, f'Tax rule for "{region}" was deleted.')
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-tax-rules")))
+
+
+@superadmin_required
+def console_riders_view(request):
+    tab = request.GET.get("status", "")
+    query = request.GET.get("q", "").strip()
+
+    riders = (
+        RiderProfile.objects
+        .select_related("user")
+        .prefetch_related("vehicles")
+        .order_by("-created_at")
+    )
+    if query:
+        riders = riders.filter(
+            Q(user__full_name__icontains=query)
+            | Q(user__email__icontains=query)
+            | Q(user__phone__icontains=query)
+        )
+    if tab == "online":
+        riders = riders.filter(is_online=True)
+    elif tab == "verified":
+        riders = riders.filter(is_verified=True)
+    elif tab == "unverified":
+        riders = riders.filter(is_verified=False)
+
+    ctx = _base_ctx("riders")
+    ctx["riders"] = riders[:300]
+    ctx["active_tab"] = tab
+    ctx["query"] = query
+    ctx["online_count"] = RiderProfile.objects.filter(is_online=True).count()
+    ctx["verified_count"] = RiderProfile.objects.filter(is_verified=True).count()
+    return render(request, "web/console_riders.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_rider_toggle_verified_view(request, rider_id):
+    rider = get_object_or_404(RiderProfile, id=rider_id)
+    rider.is_verified = not rider.is_verified
+    rider.save(update_fields=["is_verified"])
+    verb = "verified" if rider.is_verified else "unverified"
+    messages.success(request, f"{rider.user.full_name or rider.user.email} marked as {verb}.")
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-riders")))
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_rider_set_min_trip_value_view(request, rider_id):
+    rider = get_object_or_404(RiderProfile, id=rider_id)
+    raw = request.POST.get("min_trip_value", "").strip()
+    if raw == "":
+        rider.min_trip_value = None
+    else:
+        try:
+            rider.min_trip_value = Decimal(raw)
+        except InvalidOperation:
+            messages.error(request, "Enter a valid minimum trip value.")
+            return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-riders")))
+    rider.save(update_fields=["min_trip_value"])
+    messages.success(request, f"Min trip value updated for {rider.user.full_name or rider.user.email}.")
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-riders")))
+
+
+@superadmin_required
+def console_subcategory_edit_view(request, category_id, subcategory_id):
+    category = get_object_or_404(Category, id=category_id)
+    subcategory = get_object_or_404(Subcategory, id=subcategory_id, category=category)
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        if not name:
+            messages.error(request, "Name is required.")
+        else:
+            # Check for name collision within the same category (ignore self)
+            if Subcategory.objects.filter(category=category, name__iexact=name).exclude(pk=subcategory.pk).exists():
+                messages.error(request, f'"{name}" already exists under {category.name}.')
+            else:
+                subcategory.name = name
+                try:
+                    subcategory.display_order = int(request.POST.get("display_order") or 0)
+                except ValueError:
+                    pass
+                subcategory.save(update_fields=["name", "display_order"])
+                messages.success(request, f'"{subcategory.name}" was updated.')
+                return redirect("web-console-category-edit", category_id=category_id)
+    ctx = _base_ctx("categories")
+    ctx["category"] = category
+    ctx["subcategory"] = subcategory
+    return render(request, "web/console_subcategory_form.html", ctx)
+
+
+@superadmin_required
+def console_support_tickets_view(request):
+    tab = request.GET.get("status", "open")
+    query = request.GET.get("q", "").strip()
+    tickets = SupportTicket.objects.select_related("user").order_by("-created_at")
+    if tab in ("open", "resolved"):
+        tickets = tickets.filter(status=tab)
+    if query:
+        tickets = tickets.filter(
+            Q(subject__icontains=query)
+            | Q(user__email__icontains=query)
+            | Q(user__full_name__icontains=query)
+        )
+    ctx = _base_ctx("support-tickets")
+    ctx["tickets"] = tickets[:300]
+    ctx["active_tab"] = tab
+    ctx["query"] = query
+    ctx["open_count"] = SupportTicket.objects.filter(status=SupportTicket.Status.OPEN).count()
+    return render(request, "web/console_support_tickets.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_support_ticket_resolve_view(request, ticket_id):
+    ticket = get_object_or_404(SupportTicket, id=ticket_id)
+    ticket.status = SupportTicket.Status.RESOLVED
+    ticket.save(update_fields=["status"])
+    messages.success(request, f'Ticket "{ticket.subject}" marked as resolved.')
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-support-tickets")))
+
+
+@superadmin_required
+def console_refund_requests_view(request):
+    tab = request.GET.get("status", "requested")
+    query = request.GET.get("q", "").strip()
+    refunds = (
+        RefundRequest.objects
+        .select_related("order_item__seller_order__order", "order_item__product", "requested_by")
+        .order_by("-requested_at")
+    )
+    valid_tabs = {s for s, _ in RefundRequest.Status.choices}
+    if tab in valid_tabs:
+        refunds = refunds.filter(status=tab)
+    if query:
+        refunds = refunds.filter(
+            Q(order_item__seller_order__order__order_number__icontains=query)
+            | Q(requested_by__email__icontains=query)
+            | Q(requested_by__full_name__icontains=query)
+        )
+    ctx = _base_ctx("refund-requests")
+    ctx["refunds"] = refunds[:300]
+    ctx["active_tab"] = tab
+    ctx["query"] = query
+    ctx["status_choices"] = RefundRequest.Status.choices
+    ctx["pending_count"] = RefundRequest.objects.filter(
+        status__in=[RefundRequest.Status.REQUESTED, RefundRequest.Status.UNDER_REVIEW]
+    ).count()
+    return render(request, "web/console_refund_requests.html", ctx)
+
+
+@superadmin_required
+@require_http_methods(["POST"])
+def console_refund_request_action_view(request, refund_id):
+    """Admin override — can force any status transition."""
+    refund = get_object_or_404(RefundRequest, id=refund_id)
+    new_status = request.POST.get("status", "").strip()
+    note = request.POST.get("note", "").strip()
+    valid_statuses = {s for s, _ in RefundRequest.Status.choices}
+    if new_status not in valid_statuses:
+        messages.error(request, "Invalid status.")
+        return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-refund-requests")))
+    refund.admin_override_to(new_status, actor=request.user, note=note or f"Updated by admin {request.user.email or request.user.phone}")
+    messages.success(request, f"Refund request status changed to {new_status}.")
+    return redirect(_safe_redirect_target(request, request.POST.get("next"), reverse("web-console-refund-requests")))
+
+
+@superadmin_required
+def console_payments_view(request):
+    query = request.GET.get("q", "").strip()
+    tab = request.GET.get("status", "")
+    payments = (
+        Payment.objects
+        .select_related("order__user")
+        .order_by("-created_at")
+    )
+    if query:
+        payments = payments.filter(
+            Q(gateway_reference__icontains=query)
+            | Q(order__order_number__icontains=query)
+            | Q(order__user__email__icontains=query)
+            | Q(order__user__phone__icontains=query)
+        )
+    if tab in {s for s, _ in Payment.Status.choices}:
+        payments = payments.filter(status=tab)
+    ctx = _base_ctx("payments")
+    ctx["payments"] = payments[:300]
+    ctx["query"] = query
+    ctx["active_tab"] = tab
+    ctx["status_choices"] = Payment.Status.choices
+    return render(request, "web/console_payments.html", ctx)

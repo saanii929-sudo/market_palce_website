@@ -1,0 +1,33 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Edit expense{% endblock %}
+{% block seller_subtitle %}Update this logged expense{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-expenses' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to expenses</a>
+{% endblock %}
+{% block seller_content %}
+<form method="post" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-md space-y-5">
+  {% csrf_token %}
+  <div>
+    <label class="block text-sm font-bold mb-2">Category</label>
+    <select name="category" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink bg-white">
+      {% for code, label in categories %}<option value="{{ code }}" {% if expense.category == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-sm font-bold mb-2">Amount (GH₵)</label>
+    <input type="number" step="0.01" min="0.01" name="amount" value="{{ expense.amount }}" required class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+  <div>
+    <label class="block text-sm font-bold mb-2">Date</label>
+    <input type="date" name="incurred_on" value="{{ expense.incurred_on|date:'Y-m-d' }}" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+  <div>
+    <label class="block text-sm font-bold mb-2">Description</label>
+    <input type="text" name="description" value="{{ expense.description }}" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink">
+  </div>
+  <div class="flex items-center gap-3 pt-2">
+    <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-6 py-3 transition-colors">Save changes</button>
+    <a href="{% url 'web-seller-expenses' %}" class="rounded-xl border border-gray-200 font-bold px-6 py-3 hover:border-ink transition-colors">Cancel</a>
+  </div>
+</form>
+{% endblock %}

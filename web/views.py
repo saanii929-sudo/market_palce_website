@@ -1317,6 +1317,12 @@ def _save_product_from_form(request, seller, product=None):
         product.return_window_days = max(0, int(request.POST.get("return_window_days") or 7))
     except ValueError:
         product.return_window_days = 7
+    delivery_size = request.POST.get("delivery_size", "").strip()
+    from catalog.models import Product as _Product
+    if delivery_size in dict(_Product.DeliverySize.choices):
+        product.delivery_size = delivery_size
+    else:
+        product.delivery_size = ""
     product.save()
 
     if images:
@@ -1981,9 +1987,9 @@ def seller_export_report_view(request, seller):
         writer.writerow([
             order.order_number,
             order.delivery_recipient_name,
-            order.placed_at.strftime("%Y-%m-%d"),
+            order.order.placed_at.strftime("%Y-%m-%d"),
             order.get_status_display(),
-            _seller_line_total(order, seller),
+            order.total,
         ])
     return response
 
@@ -1999,6 +2005,13 @@ def seller_settings_view(request, seller):
         seller.tagline = request.POST.get("tagline", "").strip()
         seller.has_warehouse = bool(request.POST.get("has_warehouse"))
         update_fields = ["business_name", "primary_category", "support_phone", "tagline", "has_warehouse"]
+
+        raw_threshold = request.POST.get("min_free_delivery_threshold", "").strip()
+        try:
+            seller.min_free_delivery_threshold = Decimal(raw_threshold) if raw_threshold else None
+            update_fields.append("min_free_delivery_threshold")
+        except InvalidOperation:
+            messages.error(request, "Enter a valid delivery threshold amount.")
 
         pickup_lat = request.POST.get("pickup_lat", "").strip()
         pickup_lng = request.POST.get("pickup_lng", "").strip()
@@ -2022,4 +2035,49 @@ def seller_settings_view(request, seller):
         "products_count": Product.objects.filter(seller=seller).count(),
         "orders_count": _seller_order_qs(seller).count(),
         "categories": Category.objects.filter(is_active=True),
+    })
+
+
+@seller_required
+def seller_order_detail_view(request, seller, suborder_number):
+    seller_order = get_object_or_404(
+        SellerOrder.objects.select_related("order__user", "delivery_method")
+        .prefetch_related("items__product__images", "items__variant", "status_history"),
+        suborder_number=suborder_number, seller=seller,
+    )
+    delivery = get_delivery_for(seller_order)
+    shipment = getattr(seller_order, "shipment", None)
+    return render(request, "web/seller_order_detail.html", {
+        "active_nav": "orders",
+        "seller": seller,
+        "products_count": Product.objects.filter(seller=seller).count(),
+        "orders_count": _seller_order_qs(seller).count(),
+        "seller_order": seller_order,
+        "delivery": delivery,
+        "tracking": build_tracking_payload(delivery) if delivery else None,
+        "shipment": shipment,
+    })
+
+
+@seller_required
+def seller_fulfillment_ratings_view(request, seller):
+    from sellers.models import SellerFulfillmentRating
+    from django.db.models import Avg, Count
+    ratings = (
+        SellerFulfillmentRating.objects
+        .filter(seller=seller)
+        .select_related("rider__user", "trip__delivery")
+        .order_by("-created_at")[:200]
+    )
+    stats = SellerFulfillmentRating.objects.filter(seller=seller).aggregate(
+        avg=Avg("stars"), total=Count("id")
+    )
+    return render(request, "web/seller_fulfillment_ratings.html", {
+        "active_nav": "fulfillment-ratings",
+        "seller": seller,
+        "products_count": Product.objects.filter(seller=seller).count(),
+        "orders_count": _seller_order_qs(seller).count(),
+        "ratings": ratings,
+        "avg_stars": stats["avg"],
+        "total_ratings": stats["total"],
     })

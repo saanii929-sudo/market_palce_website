@@ -1,0 +1,24 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Static pages{% endblock %}
+{% block console_subtitle %}About, Terms, Privacy, Shipping and Returns pages shown in the app footer{% endblock %}
+{% block console_actions %}{% endblock %}
+{% block console_content %}
+{% if messages %}{% for m in messages %}<div class="mb-4 rounded-xl px-5 py-3 text-sm font-semibold {% if m.tags == 'error' %}bg-red-50 text-red-700 border border-red-200{% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">{{ m }}</div>{% endfor %}{% endif %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <table class="w-full text-sm">
+    <thead><tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+      <th class="px-5 py-3">Page</th><th class="px-5 py-3">Title</th><th class="px-5 py-3">Last updated</th><th class="px-5 py-3"></th>
+    </tr></thead>
+    <tbody>
+      {% for page in pages %}
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="px-5 py-4"><span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">{{ page.slug }}</span></td>
+        <td class="px-5 py-4 font-semibold">{{ page.title }}</td>
+        <td class="px-5 py-4 text-gray-500">{{ page.updated_at|date:"M d, Y" }}</td>
+        <td class="px-5 py-4 text-right"><a href="{% url 'web-console-static-page-edit' page.slug %}" class="text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 hover:border-ink transition-colors">Edit</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

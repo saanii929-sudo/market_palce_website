@@ -102,6 +102,27 @@ def seller_supplier_toggle_view(request, seller, supplier_id):
 
 
 @subscription_required
+def seller_supplier_edit_view(request, seller, supplier_id):
+    supplier = get_object_or_404(Supplier, id=supplier_id, seller=seller)
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        if not name:
+            messages.error(request, "Supplier name is required.")
+        else:
+            supplier.name = name
+            supplier.contact_name = request.POST.get("contact_name", "").strip()
+            supplier.phone = request.POST.get("phone", "").strip()
+            supplier.email = request.POST.get("email", "").strip()
+            supplier.address = request.POST.get("address", "").strip()
+            supplier.save()
+            messages.success(request, f'"{supplier.name}" was updated.')
+            return redirect("web-seller-suppliers")
+    ctx = _base_ctx(seller, "suppliers")
+    ctx["supplier"] = supplier
+    return render(request, "web/seller_supplier_form.html", ctx)
+
+
+@subscription_required
 def seller_purchase_orders_view(request, seller):
     ctx = _base_ctx(seller, "purchase-orders")
     ctx["purchase_orders"] = seller.purchase_orders.select_related("supplier").prefetch_related("items")
@@ -568,3 +589,44 @@ def seller_discounts_export_view(request, seller):
         ["Name", "Code", "Type", "Value", "Status", "Times used", "Total discounted (GHS)"],
         rows,
     )
+
+
+@subscription_required
+def seller_expense_edit_view(request, seller, expense_id):
+    expense = get_object_or_404(Expense, id=expense_id, seller=seller)
+    if request.method == "POST":
+        try:
+            amount = Decimal(request.POST.get("amount") or "0")
+        except InvalidOperation:
+            amount = Decimal("0.00")
+        if amount <= 0:
+            messages.error(request, "Enter a valid expense amount.")
+        else:
+            expense.category = request.POST.get("category", expense.category)
+            expense.description = request.POST.get("description", "").strip()
+            expense.amount = amount
+            expense.incurred_on = _parse_date(request.POST.get("incurred_on"), expense.incurred_on)
+            expense.save()
+            messages.success(request, "Expense updated.")
+            return redirect("web-seller-expenses")
+    ctx = _base_ctx(seller, "expenses")
+    ctx["expense"] = expense
+    ctx["categories"] = Expense.Category.choices
+    return render(request, "web/seller_expense_form.html", ctx)
+
+
+@subscription_required
+@require_http_methods(["POST"])
+def seller_expense_delete_view(request, seller, expense_id):
+    expense = get_object_or_404(Expense, id=expense_id, seller=seller)
+    expense.delete()
+    messages.success(request, "Expense deleted.")
+    return redirect("web-seller-expenses")
+
+
+@subscription_required
+def seller_warehouse_transfers_view(request, seller):
+    from pos.models import WarehouseTransfer
+    ctx = _base_ctx(seller, "warehouse")
+    ctx["transfers"] = WarehouseTransfer.objects.filter(product__seller=seller).select_related("product", "performed_by").order_by("-created_at")[:200]
+    return render(request, "web/seller_warehouse_transfers.html", ctx)

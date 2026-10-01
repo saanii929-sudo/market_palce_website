@@ -107,6 +107,7 @@ urlpatterns = [
         views.seller_product_warehouse_import_view, name="web-seller-product-warehouse-import",
     ),
     path("seller/orders/", views.seller_orders_view, name="web-seller-orders"),
+    path("seller/orders/<str:suborder_number>/", views.seller_order_detail_view, name="web-seller-order-detail"),
     path("seller/orders/<str:suborder_number>/status/", views.seller_order_status_update_view, name="web-seller-order-status"),
     path("seller/orders/<str:suborder_number>/rider/", views.seller_order_rider_view, name="web-seller-order-rider"),
     path(
@@ -138,6 +139,7 @@ urlpatterns = [
     path("seller/subscription/", views.seller_subscription_view, name="web-seller-subscription"),
     path("seller/subscription/checkout/", views.seller_subscription_checkout_view, name="web-seller-subscription-checkout"),
     path("seller/subscription/return/", views.seller_subscription_return_view, name="web-seller-subscription-return"),
+    path("seller/fulfillment-ratings/", views.seller_fulfillment_ratings_view, name="web-seller-fulfillment-ratings"),
 
     path("seller/employees/", pos_views.seller_employees_view, name="web-seller-employees"),
     path("seller/employees/add/", pos_views.seller_employee_add_view, name="web-seller-employee-add"),
@@ -156,6 +158,7 @@ urlpatterns = [
 
     path("seller/suppliers/", store_ops_views.seller_suppliers_view, name="web-seller-suppliers"),
     path("seller/suppliers/add/", store_ops_views.seller_supplier_add_view, name="web-seller-supplier-add"),
+    path("seller/suppliers/<int:supplier_id>/edit/", store_ops_views.seller_supplier_edit_view, name="web-seller-supplier-edit"),
     path("seller/suppliers/<int:supplier_id>/toggle/", store_ops_views.seller_supplier_toggle_view, name="web-seller-supplier-toggle"),
 
     path("seller/purchase-orders/", store_ops_views.seller_purchase_orders_view, name="web-seller-purchase-orders"),
@@ -167,6 +170,7 @@ urlpatterns = [
     path("seller/inventory/export/", store_ops_views.seller_inventory_export_view, name="web-seller-inventory-export"),
     path("seller/inventory/batches/<int:batch_id>/write-off/", store_ops_views.seller_batch_write_off_view, name="web-seller-batch-write-off"),
     path("seller/warehouse/", store_ops_views.seller_warehouse_view, name="web-seller-warehouse"),
+    path("seller/warehouse/transfers/", store_ops_views.seller_warehouse_transfers_view, name="web-seller-warehouse-transfers"),
     path(
         "seller/warehouse/<int:product_id>/receive/",
         store_ops_views.seller_warehouse_receive_view, name="web-seller-warehouse-receive",
@@ -174,6 +178,8 @@ urlpatterns = [
 
     path("seller/expenses/", store_ops_views.seller_expenses_view, name="web-seller-expenses"),
     path("seller/expenses/add/", store_ops_views.seller_expense_add_view, name="web-seller-expense-add"),
+    path("seller/expenses/<int:expense_id>/edit/", store_ops_views.seller_expense_edit_view, name="web-seller-expense-edit"),
+    path("seller/expenses/<int:expense_id>/delete/", store_ops_views.seller_expense_delete_view, name="web-seller-expense-delete"),
 
     path("seller/payroll/", store_ops_views.seller_payroll_view, name="web-seller-payroll"),
     path("seller/payroll/run/", store_ops_views.seller_payroll_run_view, name="web-seller-payroll-run"),
@@ -302,6 +308,43 @@ urlpatterns = [
     path("console/package-size-pricing/<int:rule_id>/edit/", console_views.console_package_size_pricing_edit_view, name="web-console-package-size-pricing-edit"),
     path("console/package-size-pricing/<int:rule_id>/toggle/", console_views.console_package_size_pricing_toggle_view, name="web-console-package-size-pricing-toggle"),
     path("console/package-size-pricing/<int:rule_id>/delete/", console_views.console_package_size_pricing_delete_view, name="web-console-package-size-pricing-delete"),
+
+    path("console/faqs/", console_views.console_faqs_view, name="web-console-faqs"),
+    path("console/faqs/add/", console_views.console_faq_add_view, name="web-console-faq-add"),
+    path("console/faqs/<int:faq_id>/edit/", console_views.console_faq_edit_view, name="web-console-faq-edit"),
+    path("console/faqs/<int:faq_id>/toggle/", console_views.console_faq_toggle_view, name="web-console-faq-toggle"),
+    path("console/faqs/<int:faq_id>/delete/", console_views.console_faq_delete_view, name="web-console-faq-delete"),
+
+    path("console/static-pages/", console_views.console_static_pages_view, name="web-console-static-pages"),
+    path("console/static-pages/<slug:slug>/edit/", console_views.console_static_page_edit_view, name="web-console-static-page-edit"),
+
+    path("console/coupons/", console_views.console_coupons_view, name="web-console-coupons"),
+    path("console/coupons/add/", console_views.console_coupon_add_view, name="web-console-coupon-add"),
+    path("console/coupons/<int:coupon_id>/edit/", console_views.console_coupon_edit_view, name="web-console-coupon-edit"),
+    path("console/coupons/<int:coupon_id>/toggle/", console_views.console_coupon_toggle_view, name="web-console-coupon-toggle"),
+    path("console/coupons/<int:coupon_id>/delete/", console_views.console_coupon_delete_view, name="web-console-coupon-delete"),
+
+    path("console/tax-rules/", console_views.console_tax_rules_view, name="web-console-tax-rules"),
+    path("console/tax-rules/add/", console_views.console_tax_rule_add_view, name="web-console-tax-rule-add"),
+    path("console/tax-rules/<int:rule_id>/edit/", console_views.console_tax_rule_edit_view, name="web-console-tax-rule-edit"),
+    path("console/tax-rules/<int:rule_id>/delete/", console_views.console_tax_rule_delete_view, name="web-console-tax-rule-delete"),
+
+    path("console/riders/", console_views.console_riders_view, name="web-console-riders"),
+    path("console/riders/<int:rider_id>/toggle-verified/", console_views.console_rider_toggle_verified_view, name="web-console-rider-toggle-verified"),
+    path("console/riders/<int:rider_id>/min-trip-value/", console_views.console_rider_set_min_trip_value_view, name="web-console-rider-min-trip-value"),
+
+    path(
+        "console/categories/<int:category_id>/subcategories/<int:subcategory_id>/edit/",
+        console_views.console_subcategory_edit_view, name="web-console-subcategory-edit",
+    ),
+
+    path("console/support-tickets/", console_views.console_support_tickets_view, name="web-console-support-tickets"),
+    path("console/support-tickets/<int:ticket_id>/resolve/", console_views.console_support_ticket_resolve_view, name="web-console-support-ticket-resolve"),
+
+    path("console/refund-requests/", console_views.console_refund_requests_view, name="web-console-refund-requests"),
+    path("console/refund-requests/<int:refund_id>/action/", console_views.console_refund_request_action_view, name="web-console-refund-request-action"),
+
+    path("console/payments/", console_views.console_payments_view, name="web-console-payments"),
 
     path(
         "console/seller-rider-blocks/",

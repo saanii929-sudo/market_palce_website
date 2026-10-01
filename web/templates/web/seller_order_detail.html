@@ -1,0 +1,117 @@
+{% extends "web/seller_base.html" %}
+{% load web_extras %}
+{% block seller_title %}Order {{ seller_order.order_number }}{% endblock %}
+{% block seller_subtitle %}Placed {{ seller_order.order.placed_at|date:"M d, Y" }} &middot; {{ seller_order.get_status_display }}{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-orders' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to orders</a>
+{% endblock %}
+
+{% block seller_content %}
+{% if messages %}{% for m in messages %}<div class="mb-4 rounded-xl px-5 py-3 text-sm font-semibold {% if m.tags == 'error' %}bg-red-50 text-red-700 border border-red-200{% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">{{ m }}</div>{% endfor %}{% endif %}
+<div class="grid lg:grid-cols-3 gap-6">
+
+  <!-- Items -->
+  <div class="lg:col-span-2 space-y-6">
+    <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 font-bold">Items</div>
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+          <th class="px-5 py-3">Product</th><th class="px-5 py-3">Variant</th><th class="px-5 py-3">Qty</th><th class="px-5 py-3">Unit price</th><th class="px-5 py-3">Line total</th>
+        </tr></thead>
+        <tbody>
+          {% for item in seller_order.items.all %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-4 font-semibold">{{ item.product.name }}</td>
+            <td class="px-5 py-4 text-gray-500">{% if item.variant %}{{ item.variant }}{% else %}—{% endif %}</td>
+            <td class="px-5 py-4">{{ item.qty }}</td>
+            <td class="px-5 py-4">GH₵{{ item.unit_price }}</td>
+            <td class="px-5 py-4 font-bold">GH₵{{ item.line_total }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot class="border-t border-gray-100">
+          <tr><td colspan="4" class="px-5 py-3 text-right text-sm font-bold text-gray-400">Subtotal</td><td class="px-5 py-3 font-bold">GH₵{{ seller_order.subtotal }}</td></tr>
+          {% if seller_order.delivery_fee %}<tr><td colspan="4" class="px-5 py-1 text-right text-xs text-gray-400">Delivery</td><td class="px-5 py-1 text-sm">GH₵{{ seller_order.delivery_fee }}</td></tr>{% endif %}
+          {% if seller_order.discount_amount %}<tr><td colspan="4" class="px-5 py-1 text-right text-xs text-gray-400">Discount</td><td class="px-5 py-1 text-sm text-green-600">−GH₵{{ seller_order.discount_amount }}</td></tr>{% endif %}
+          <tr class="border-t border-gray-100"><td colspan="4" class="px-5 py-3 text-right font-bold">Total</td><td class="px-5 py-3 font-bold text-lg">GH₵{{ seller_order.total }}</td></tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- Status history -->
+    <div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 font-bold">Status history</div>
+      <table class="w-full text-sm">
+        <tbody>
+          {% for entry in seller_order.status_history.all %}
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-5 py-3 text-gray-500">{{ entry.created_at|date:"M d, Y H:i" }}</td>
+            <td class="px-5 py-3 font-semibold">{{ entry.get_status_display }}</td>
+            <td class="px-5 py-3 text-gray-400">{{ entry.note }}</td>
+          </tr>
+          {% empty %}<tr><td colspan="3" class="px-5 py-6 text-center text-gray-400">No history yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Shipment / tracking -->
+    {% if seller_order.status == 'shipped' or seller_order.status == 'out_for_delivery' %}
+    <div class="rounded-2xl bg-white border border-gray-200 p-5">
+      <p class="font-bold mb-4">Shipment tracking</p>
+      <form method="post" action="{% url 'web-seller-order-status' seller_order.order_number %}" class="space-y-3">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="{{ seller_order.status }}">
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div><label class="block text-xs font-bold text-gray-500 mb-1">Courier</label>
+            <input type="text" name="courier_name" value="{{ shipment.courier_name|default:'' }}" placeholder="e.g. DHL" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink"></div>
+          <div><label class="block text-xs font-bold text-gray-500 mb-1">Tracking number</label>
+            <input type="text" name="tracking_number" value="{{ shipment.tracking_number|default:'' }}" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink"></div>
+        </div>
+        <button type="submit" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold px-5 py-2.5 text-sm transition-colors">Save tracking</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Sidebar: customer + update status -->
+  <div class="space-y-6">
+    <div class="rounded-2xl bg-white border border-gray-200 p-5">
+      <p class="font-bold mb-3">Customer</p>
+      <p class="font-semibold">{{ seller_order.delivery_recipient_name }}</p>
+      <p class="text-sm text-gray-500">{{ seller_order.delivery_phone }}</p>
+      <p class="text-sm text-gray-500 mt-2">{{ seller_order.delivery_line1 }}{% if seller_order.delivery_line2 %}, {{ seller_order.delivery_line2 }}{% endif %}</p>
+      <p class="text-sm text-gray-500">{{ seller_order.delivery_city }}{% if seller_order.delivery_region %}, {{ seller_order.delivery_region }}{% endif %}</p>
+    </div>
+
+    <div class="rounded-2xl bg-white border border-gray-200 p-5">
+      <p class="font-bold mb-3">Update status</p>
+      <form method="post" action="{% url 'web-seller-order-status' seller_order.order_number %}">
+        {% csrf_token %}
+        <select name="status" class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-ink mb-3 {% if seller_order.status == 'delivered' or seller_order.status == 'cancelled' %}opacity-50 cursor-not-allowed{% endif %}" {% if seller_order.status == 'delivered' or seller_order.status == 'cancelled' %}disabled{% endif %}>
+          <option value="processing" {% if seller_order.status == 'processing' %}selected{% endif %}>Processing</option>
+          <option value="shipped" {% if seller_order.status == 'shipped' %}selected{% endif %}>Shipped</option>
+          <option value="out_for_delivery" {% if seller_order.status == 'out_for_delivery' %}selected{% endif %}>Out for delivery</option>
+          <option value="delivered" {% if seller_order.status == 'delivered' %}selected{% endif %}>Delivered</option>
+          <option value="cancelled" {% if seller_order.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+        </select>
+        {% if seller_order.status != 'delivered' and seller_order.status != 'cancelled' %}
+        <button type="submit" class="w-full rounded-xl bg-ink hover:bg-ink/90 text-white font-bold py-2.5 text-sm transition-colors">Update</button>
+        {% endif %}
+      </form>
+    </div>
+
+    {% if delivery and tracking %}
+    <div class="rounded-2xl bg-white border border-gray-200 p-5">
+      <p class="font-bold mb-3">Rider delivery</p>
+      <p class="text-sm"><span class="font-semibold">Status:</span> <span class="text-gray-600">{{ tracking.delivery_status }}</span></p>
+      {% if tracking.rider %}
+      <p class="text-sm mt-1"><span class="font-semibold">Rider:</span> <span class="text-gray-600">{{ tracking.rider.name }}</span></p>
+      <p class="text-sm"><span class="font-semibold">Phone:</span> <span class="text-gray-600">{{ tracking.rider.phone|default:"—" }}</span></p>
+      {% endif %}
+      <a href="{% url 'web-seller-order-rider' seller_order.order_number %}" class="mt-3 block text-xs font-bold text-brand hover:underline">Manage rider →</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

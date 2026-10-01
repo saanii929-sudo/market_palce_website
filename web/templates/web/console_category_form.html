@@ -6,6 +6,7 @@
 {% endblock %}
 
 {% block console_content %}
+<div class="grid grid-cols-2 gap-5">
 <form method="post" enctype="multipart/form-data" class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl space-y-5">
   {% csrf_token %}
 
@@ -54,7 +55,7 @@
 </form>
 
 {% if category %}
-<div class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl mt-6">
+<div class="rounded-2xl bg-white border border-gray-200 p-6 max-w-2xl">
   <h2 class="font-bold text-lg mb-4">Subcategories</h2>
 
   <div class="space-y-2 mb-5">
@@ -87,4 +88,6 @@
   </form>
 </div>
 {% endif %}
+</div>
+
 {% endblock %}

@@ -1,0 +1,27 @@
+{% extends "web/seller_base.html" %}
+{% block seller_title %}Warehouse transfer history{% endblock %}
+{% block seller_subtitle %}Units moved from warehouse to storefront stock{% endblock %}
+{% block seller_actions %}
+  <a href="{% url 'web-seller-warehouse' %}" class="rounded-xl border border-gray-200 font-bold text-sm px-5 py-2.5 hover:border-ink transition-colors">← Back to warehouse</a>
+{% endblock %}
+{% block seller_content %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <table class="w-full text-sm">
+    <thead><tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+      <th class="px-5 py-3">Product</th><th class="px-5 py-3">Qty transferred</th><th class="px-5 py-3">By</th><th class="px-5 py-3">Date</th>
+    </tr></thead>
+    <tbody>
+      {% for t in transfers %}
+      <tr class="border-b border-gray-50 last:border-0">
+        <td class="px-5 py-4 font-semibold">{{ t.product.name }}</td>
+        <td class="px-5 py-4 font-bold">{{ t.qty }} unit{{ t.qty|pluralize }}</td>
+        <td class="px-5 py-4 text-gray-500">{{ t.performed_by.full_name|default:t.performed_by.email|default:"—" }}</td>
+        <td class="px-5 py-4 text-gray-500">{{ t.created_at|date:"M d, Y H:i" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="px-5 py-12 text-center text-gray-400">No transfers yet. Use the warehouse page to import stock onto your storefront.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

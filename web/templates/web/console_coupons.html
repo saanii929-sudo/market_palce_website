@@ -1,0 +1,45 @@
+{% extends "web/console_base.html" %}
+{% block console_title %}Coupons{% endblock %}
+{% block console_subtitle %}Platform-wide discount codes customers can apply at checkout{% endblock %}
+{% block console_actions %}<a href="{% url 'web-console-coupon-add' %}" class="rounded-xl bg-brand hover:bg-brand-dark text-white font-bold text-sm px-5 py-2.5 transition-colors">+ Add coupon</a>{% endblock %}
+{% block console_content %}
+{% if messages %}{% for m in messages %}<div class="mb-4 rounded-xl px-5 py-3 text-sm font-semibold {% if m.tags == 'error' %}bg-red-50 text-red-700 border border-red-200{% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">{{ m }}</div>{% endfor %}{% endif %}
+<div class="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead><tr class="text-left text-xs font-bold text-gray-400 border-b border-gray-100">
+        <th class="px-5 py-3">Code</th><th class="px-5 py-3">Discount</th><th class="px-5 py-3">Min order</th><th class="px-5 py-3">Uses</th><th class="px-5 py-3">Validity</th><th class="px-5 py-3">Status</th><th class="px-5 py-3"></th>
+      </tr></thead>
+      <tbody>
+        {% for coupon in coupons %}
+        <tr class="border-b border-gray-50 last:border-0 {% if not coupon.is_active %}opacity-50{% endif %}">
+          <td class="px-5 py-4 font-mono font-bold">{{ coupon.code }}</td>
+          <td class="px-5 py-4 font-bold">{% if coupon.discount_type == 'percentage' %}{{ coupon.value }}%{% else %}GH₵{{ coupon.value }}{% endif %}</td>
+          <td class="px-5 py-4 text-gray-500">{% if coupon.min_order_amount %}GH₵{{ coupon.min_order_amount }}{% else %}—{% endif %}</td>
+          <td class="px-5 py-4 text-gray-500">{{ coupon.times_used }}{% if coupon.usage_limit %} / {{ coupon.usage_limit }}{% endif %}</td>
+          <td class="px-5 py-4 text-gray-500 text-xs">
+            {% if coupon.valid_from %}From {{ coupon.valid_from|date:"M d" }}{% endif %}
+            {% if coupon.valid_to %} — to {{ coupon.valid_to|date:"M d, Y" }}{% endif %}
+            {% if not coupon.valid_from and not coupon.valid_to %}No expiry{% endif %}
+          </td>
+          <td class="px-5 py-4">
+            {% if coupon.is_active %}<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Active</span>
+            {% else %}<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Inactive</span>{% endif %}
+          </td>
+          <td class="px-5 py-4"><div class="flex items-center gap-2 justify-end">
+            <a href="{% url 'web-console-coupon-edit' coupon.id %}" class="text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 hover:border-ink transition-colors">Edit</a>
+            <form method="post" action="{% url 'web-console-coupon-toggle' coupon.id %}">{% csrf_token %}<input type="hidden" name="next" value="{% url 'web-console-coupons' %}">
+              <button class="text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors {% if coupon.is_active %}border-amber-200 text-amber-700 hover:border-amber-400{% else %}border-green-200 text-green-700 hover:border-green-400{% endif %}">{% if coupon.is_active %}Deactivate{% else %}Activate{% endif %}</button>
+            </form>
+            <form method="post" action="{% url 'web-console-coupon-delete' coupon.id %}" onsubmit="return confirm('Delete coupon {{ coupon.code }}?')">{% csrf_token %}<input type="hidden" name="next" value="{% url 'web-console-coupons' %}">
+              <button class="text-xs font-bold px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:border-red-400 transition-colors">Delete</button>
+            </form>
+          </div></td>
+        </tr>
+        {% empty %}<tr><td colspan="7" class="px-5 py-10 text-center text-gray-400">No coupons yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
